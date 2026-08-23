@@ -21,7 +21,7 @@ import { getPaymentProvider } from '../providers/payment/index';
 import { transitionContract } from '../state/contractMachine';
 import { transitionJob } from '../state/deliveryJobMachine';
 import { queueBuyerNotification } from './buyerNotifications';
-import { getDriverById, getVehicleClass, listVehicleClasses } from './drivers';
+import { driverRouteRegions, getDriverById, getVehicleClass, listVehicleClasses } from './drivers';
 import { DomainError, notFound } from './errors';
 import { getFarmerById } from './farmers';
 import { generateJobCode } from './ids';
@@ -59,16 +59,24 @@ export function getJobForContract(contractId: string): DeliveryJob | undefined {
     .get();
 }
 
-/** Upfront quote (D-024): cheapest vehicle class that carries the load, rate-card priced. */
-export function quoteTransport(contractId: string): TransportQuote {
+/**
+ * Upfront quote (D-024), rate-card priced. Default = cheapest vehicle class
+ * that carries the load; pass a class code to price a specific (fitting) one.
+ */
+export function quoteTransport(contractId: string, vehicleClassCode?: string): TransportQuote {
   const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
   if (!contract) throw notFound('contract');
   const lot = db.select().from(lots).where(eq(lots.id, contract.lotId)).get()!;
   const demand = db.select().from(demands).where(eq(demands.id, contract.demandId)).get()!;
 
-  const vehicleClass = listVehicleClasses().find((v) => v.capacityKg >= contract.quantityKg);
+  const vehicleClass = vehicleClassCode
+    ? getVehicleClass(vehicleClassCode)
+    : listVehicleClasses().find((v) => v.capacityKg >= contract.quantityKg);
   if (!vehicleClass) {
     throw new DomainError('No vehicle class carries this load in one trip', 'NO_VEHICLE_CLASS', 409);
+  }
+  if (vehicleClass.capacityKg < contract.quantityKg) {
+    throw new DomainError(`A ${vehicleClass.code} cannot carry ${contract.quantityKg}kg`, 'OVER_CAPACITY', 409);
   }
   const pickup = resolvePoint(lot.gpsLat, lot.gpsLng, lot.regionCode);
   const dropoff = resolvePoint(demand.gpsLat, demand.gpsLng, demand.regionCode);
@@ -77,8 +85,17 @@ export function quoteTransport(contractId: string): TransportQuote {
   return { vehicleClass, distanceKm, quoteAmount, pickup, dropoff };
 }
 
+/** Instant quotes for EVERY vehicle class that fits the load — the buyer picks. */
+export function quoteTransportOptions(contractId: string): TransportQuote[] {
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) throw notFound('contract');
+  return listVehicleClasses()
+    .filter((v) => v.capacityKg >= contract.quantityKg)
+    .map((v) => quoteTransport(contractId, v.code));
+}
+
 /** Buyer requests a verified pickup for a funded contract. Quote freezes here. */
-export function requestTransport(contractId: string, buyerId: string): DeliveryJob {
+export function requestTransport(contractId: string, buyerId: string, vehicleClassCode?: string): DeliveryJob {
   const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
   if (!contract) throw notFound('contract');
   if (contract.buyerId !== buyerId) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
@@ -90,7 +107,7 @@ export function requestTransport(contractId: string, buyerId: string): DeliveryJ
     throw new DomainError('A transport job already exists for this contract', 'JOB_EXISTS', 409);
   }
 
-  const quote = quoteTransport(contractId);
+  const quote = quoteTransport(contractId, vehicleClassCode);
   const job = db.transaction((tx) => {
     let jobCode = generateJobCode();
     while (tx.select().from(deliveryJobs).where(eq(deliveryJobs.jobCode, jobCode)).get()) jobCode = generateJobCode();
@@ -175,6 +192,7 @@ export function dispatchJob(jobId: string): DeliveryJobOffer | null {
   );
   const busy = busyDriverIds();
   const pickup: GeoPoint = { lat: job.pickupLat, lng: job.pickupLng };
+  const pickupRegion = db.select().from(lots).where(eq(lots.id, job.lotId)).get()?.regionCode;
 
   const candidates = db
     .select()
@@ -182,6 +200,12 @@ export function dispatchJob(jobId: string): DeliveryJobOffer | null {
     .where(and(eq(drivers.vehicleClassCode, job.vehicleClassCode), eq(drivers.active, true)))
     .all()
     .filter((d) => !tried.has(d.id) && !busy.has(d.id))
+    // Regional routes: an empty list serves anywhere; otherwise the pickup
+    // region must be on the driver's route.
+    .filter((d) => {
+      const routes = driverRouteRegions(d);
+      return routes.length === 0 || (pickupRegion !== undefined && routes.includes(pickupRegion));
+    })
     .map((d) => ({ driver: d, km: haversineKm(resolvePoint(d.gpsLat, d.gpsLng, d.regionCode), pickup) }))
     .sort((a, b) => a.km - b.km);
 
@@ -254,6 +278,39 @@ export function listOffersForDriver(driverId: string): Array<DeliveryJobOffer & 
 
 export function listJobsForDriver(driverId: string): DeliveryJob[] {
   return db.select().from(deliveryJobs).where(eq(deliveryJobs.driverId, driverId)).orderBy(desc(deliveryJobs.createdAt)).all();
+}
+
+/**
+ * The Dispatch Board's read-only "queued" section: open pickup requests that
+ * match this driver's vehicle class and route, but aren't (yet) offered to
+ * them — dispatch stays sequential nearest-first (D-023), the board just shows
+ * the queue behind it.
+ */
+export function listOpenRequestsForDriver(driverId: string): DeliveryJob[] {
+  const driver = getDriverById(driverId);
+  if (!driver) return [];
+  const routes = driverRouteRegions(driver);
+  const offeredToMe = new Set(
+    db
+      .select({ jobId: deliveryJobOffers.jobId })
+      .from(deliveryJobOffers)
+      .where(and(eq(deliveryJobOffers.driverId, driverId), eq(deliveryJobOffers.status, 'offered')))
+      .all()
+      .map((r) => r.jobId),
+  );
+  return db
+    .select()
+    .from(deliveryJobs)
+    .where(eq(deliveryJobs.state, 'REQUESTED'))
+    .orderBy(desc(deliveryJobs.createdAt))
+    .all()
+    .filter((j) => j.vehicleClassCode === driver.vehicleClassCode && !offeredToMe.has(j.id))
+    .filter((j) => {
+      if (routes.length === 0) return true;
+      const region = db.select().from(lots).where(eq(lots.id, j.lotId)).get()?.regionCode;
+      return region !== undefined && routes.includes(region);
+    })
+    .slice(0, 10);
 }
 
 export async function acceptJob(jobId: string, driverId: string): Promise<DeliveryJob> {

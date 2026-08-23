@@ -4,19 +4,30 @@ import {
   confirmJobPickup,
   declineJob,
   DomainError,
+  driverRouteRegions,
   getContract,
   getDriverById,
   getJobForContract,
   jobSummary,
   listJobsForDriver,
   listOffersForDriver,
-  quoteTransport,
+  listOpenRequestsForDriver,
+  quoteTransportOptions,
   requestTransport,
   retryDispatch,
   t,
+  updateDriverProfile,
   type DeliveryJob,
 } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+
+const requestTransportSchema = z.object({ vehicleClassCode: z.string().optional() }).default({});
+const profileSchema = z.object({
+  vehicleClassCode: z.string().optional(),
+  active: z.boolean().optional(),
+  routeRegions: z.array(z.string()).max(16).optional(),
+});
 
 function jobView(job: DeliveryJob) {
   const driver = job.driverId ? getDriverById(job.driverId) : undefined;
@@ -44,13 +55,13 @@ function jobView(job: DeliveryJob) {
 
 export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
   // ---- Buyer side ----
+  // Instant quotes for every vehicle class that fits the load — the buyer picks.
   app.get('/contracts/:id/transport-quote', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
     const contract = getContract(id);
     if (contract.buyerId !== req.user.sub) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
-    const quote = quoteTransport(id);
     return {
-      quote: {
+      quotes: quoteTransportOptions(id).map((quote) => ({
         vehicleClassCode: quote.vehicleClass.code,
         vehicleClassName: t('en', quote.vehicleClass.nameKey),
         capacityKg: quote.vehicleClass.capacityKg,
@@ -58,13 +69,14 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
         perKmRate: quote.vehicleClass.perKmRate,
         distanceKm: quote.distanceKm,
         quoteAmount: quote.quoteAmount,
-      },
+      })),
     };
   });
 
   app.post('/contracts/:id/transport', { preHandler: [app.authBuyer] }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const job = requestTransport(id, req.user.sub);
+    const { vehicleClassCode } = requestTransportSchema.parse(req.body ?? {});
+    const job = requestTransport(id, req.user.sub, vehicleClassCode);
     return reply.code(201).send({ job: jobView(job) });
   });
 
@@ -96,7 +108,40 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
         expiresAt: o.expiresAt,
         ...jobView(o.job),
       })),
+      // Read-only queue behind the sequential dispatcher (D-023) — the board's
+      // "open requests" section.
+      openRequests: listOpenRequestsForDriver(driverId).map(jobView),
       jobs: listJobsForDriver(driverId).map(jobView),
+    };
+  });
+
+  app.get('/driver/profile', { preHandler: [app.authDriver] }, async (req) => {
+    const driver = getDriverById(req.user.sub);
+    if (!driver) throw new DomainError('Driver not found', 'NOT_FOUND', 404);
+    return {
+      profile: {
+        name: driver.name,
+        phone: driver.phone,
+        regionCode: driver.regionCode,
+        vehicleClassCode: driver.vehicleClassCode,
+        active: driver.active,
+        routeRegions: driverRouteRegions(driver),
+      },
+    };
+  });
+
+  app.put('/driver/profile', { preHandler: [app.authDriver] }, async (req) => {
+    const input = profileSchema.parse(req.body ?? {});
+    const driver = updateDriverProfile(req.user.sub, input);
+    return {
+      profile: {
+        name: driver.name,
+        phone: driver.phone,
+        regionCode: driver.regionCode,
+        vehicleClassCode: driver.vehicleClassCode,
+        active: driver.active,
+        routeRegions: driverRouteRegions(driver),
+      },
     };
   });
 

@@ -1,4 +1,4 @@
-import { listAllMarketPrices, listCommodities, listRegions, t } from '@ftm/core';
+import { listAllMarketPrices, listCommodities, listRegions, listVehicleClasses, t } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 
 export async function registryRoutes(app: FastifyInstance): Promise<void> {
@@ -36,6 +36,13 @@ export async function registryRoutes(app: FastifyInstance): Promise<void> {
         })),
       })),
       regions: listRegions().map((r) => ({ code: r.code, name: t('en', r.nameKey), lat: r.lat, lng: r.lng })),
+      vehicleClasses: listVehicleClasses().map((v) => ({
+        code: v.code,
+        name: t('en', v.nameKey),
+        capacityKg: v.capacityKg,
+        baseFee: v.baseFee,
+        perKmRate: v.perKmRate,
+      })),
     };
   });
 }

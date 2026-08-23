@@ -207,9 +207,9 @@
   "ussd.paystatus.successful": "Paid",
   "ussd.paystatus.failed": "Failed",
 
-  "vehicle.tricycle": "Motor tricycle",
-  "vehicle.van": "Van",
-  "vehicle.light_truck": "Light truck",
+  "vehicle.tricycle": "Motor Tricycle",
+  "vehicle.van": "1.5T Truck",
+  "vehicle.light_truck": "5T Truck",
 
   "sms.jobOffer": "Farm to Market: Delivery job {code} - {kg}kg over {km}km, pays {fee}. Dial {ussd} and choose Job offers.",
   "sms.jobAssigned": "Farm to Market: {driver} ({vehicle}, {phone}) will collect your produce. Job {code}.",

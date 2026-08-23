@@ -6,7 +6,7 @@ import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/in
 import { verifyBuyerLogin } from './buyers';
 import { getContract, listContractsForFarmer } from './contracts';
 import { createDemand } from './demands';
-import { registerDriver, verifyDriverLogin } from './drivers';
+import { driverRouteRegions, getDriverById, registerDriver, updateDriverProfile, verifyDriverLogin } from './drivers';
 import { registerFarmer } from './farmers';
 import { accountBalance, ACCOUNTS, allJournalsBalanced, jobEscrowBalance } from './ledger';
 import {
@@ -19,7 +19,9 @@ import {
   expireJobOffers,
   getJob,
   getJobForContract,
+  listOpenRequestsForDriver,
   quoteTransport,
+  quoteTransportOptions,
   requestTransport,
   retryDispatch,
 } from './logistics';
@@ -227,6 +229,59 @@ describe('logistics (M13)', () => {
     expect(() =>
       registerDriver({ phone: farmerPhone, name: 'X', regionCode: 'BONO', vehicleClassCode: 'van', pin: '1111' }),
     ).toThrow(/already registered as a farmer/);
+  });
+
+  it('quotes every fitting vehicle class and honors an explicit choice (M18)', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('BONO_EAST');
+
+    // 500kg fits the 1.5T and 5T trucks but not the 400kg tricycle.
+    const options = quoteTransportOptions(contractId);
+    expect(options.map((o) => o.vehicleClass.code)).toEqual(['van', 'light_truck']);
+    expect(options[1]!.quoteAmount).toBeGreaterThan(options[0]!.quoteAmount);
+
+    expect(() => quoteTransport(contractId, 'tricycle')).toThrow(/cannot carry/);
+
+    // The buyer picks the bigger truck explicitly — the job freezes that class.
+    const job = requestTransport(contractId, buyer.id, 'light_truck');
+    expect(job.vehicleClassCode).toBe('light_truck');
+    expect(job.quoteAmount).toBe(options[1]!.quoteAmount);
+  });
+
+  it('driver profile: availability toggle, vehicle change, and route-filtered dispatch (M18)', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('ASHANTI'); // pickup region ASHANTI
+
+    // A van driver whose routes exclude Ashanti must not be dispatched...
+    const northOnly = vanDriver('NORTHERN', 'North Routes');
+    updateDriverProfile(northOnly.id, { routeRegions: ['NORTHERN', 'SAVANNAH'] });
+    expect(driverRouteRegions(getDriverById(northOnly.id)!)).toEqual(['NORTHERN', 'SAVANNAH']);
+
+    // ...an OFFLINE driver must not be dispatched either...
+    const offline = vanDriver('ASHANTI', 'Offline Driver');
+    updateDriverProfile(offline.id, { active: false });
+    expect(verifyDriverLogin(offline.phone, '1234').id).toBe(offline.id); // offline can still log in
+
+    // ...but an online driver serving Ashanti (or anywhere) gets the offer.
+    const onRoute = vanDriver('NORTHERN', 'Ashanti Route');
+    updateDriverProfile(onRoute.id, { routeRegions: ['ASHANTI'] });
+
+    const job = requestTransport(contractId, buyer.id);
+    const live = db
+      .select()
+      .from(deliveryJobOffers)
+      .where(and(eq(deliveryJobOffers.jobId, job.id), eq(deliveryJobOffers.status, 'offered')))
+      .get();
+    expect(live!.driverId).toBe(onRoute.id);
+
+    // The dispatch board's queue: the job is offered to onRoute, so it appears
+    // as an open request only for eligible drivers WITHOUT the live offer.
+    expect(listOpenRequestsForDriver(onRoute.id).map((j) => j.id)).not.toContain(job.id);
+    expect(listOpenRequestsForDriver(northOnly.id).map((j) => j.id)).not.toContain(job.id); // off-route
+    const anywhere = vanDriver('VOLTA', 'Anywhere Driver');
+    expect(listOpenRequestsForDriver(anywhere.id).map((j) => j.id)).toContain(job.id);
+
+    expect(() => updateDriverProfile(onRoute.id, { routeRegions: ['NOT_A_REGION'] })).toThrow();
   });
 
   it('collects the fee at accept, not at request (D-024)', async () => {

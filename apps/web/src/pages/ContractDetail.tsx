@@ -283,13 +283,14 @@ function TransportSection({
   const canRequest = contractState === 'FUNDS_HELD' && (!job || ['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state));
   const { data: quoteData } = useQuery({
     queryKey: ['transport-quote', contractId],
-    queryFn: () => api<{ quote: TransportQuoteView }>(`/api/contracts/${contractId}/transport-quote`),
+    queryFn: () => api<{ quotes: TransportQuoteView[] }>(`/api/contracts/${contractId}/transport-quote`),
     enabled: canRequest,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['transport', contractId] });
   const request = useMutation({
-    mutationFn: () => api(`/api/contracts/${contractId}/transport`, { method: 'POST' }),
+    mutationFn: (vehicleClassCode?: string) =>
+      api(`/api/contracts/${contractId}/transport`, { method: 'POST', body: JSON.stringify({ vehicleClassCode }) }),
     onSuccess: invalidate,
     onError,
   });
@@ -305,16 +306,7 @@ function TransportSection({
   });
 
   return (
-    <Card
-      title="Transport — the middle-mile bridge"
-      actions={
-        canRequest ? (
-          <button className={btnCls} onClick={() => request.mutate()} disabled={request.isPending || !quoteData}>
-            {request.isPending ? 'Requesting…' : 'Request transport'}
-          </button>
-        ) : undefined
-      }
-    >
+    <Card title="Transport — the middle-mile bridge">
       {job && !['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state) ? (
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <span className="text-base font-semibold">{job.jobCode}</span>
@@ -342,12 +334,49 @@ function TransportSection({
           {job.state === 'PAID' && <span className="font-medium text-green-700">Driver paid ✓</span>}
         </div>
       ) : canRequest && quoteData ? (
-        <p className="text-sm text-stone-600">
-          Quote: <span className="font-semibold">{quoteData.quote.vehicleClassName}</span> ({quoteData.quote.capacityKg}kg
-          cap) · {quoteData.quote.distanceKm}km · base {ghs(quoteData.quote.baseFee)} + {ghs(quoteData.quote.perKmRate)}
-          /km = <span className="font-semibold">{ghs(quoteData.quote.quoteAmount)}</span> — held in escrow when a driver
-          accepts, released on your delivery confirmation.
-        </p>
+        <div>
+          <p className="mb-2 text-sm text-stone-600">
+            Instant quotes for every vehicle that fits the load. The fee is held in escrow when a driver accepts and
+            released on your delivery confirmation.
+          </p>
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs uppercase text-stone-400">
+              <tr>
+                <th className="py-1.5">Vehicle</th>
+                <th>Capacity</th>
+                <th>Distance</th>
+                <th>Rate</th>
+                <th>Quote</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {quoteData.quotes.map((q, i) => (
+                <tr key={q.vehicleClassCode}>
+                  <td className="py-2 font-medium">
+                    {q.vehicleClassName}
+                    {i === 0 && <span className="ml-1.5 rounded-full bg-green-100 px-1.5 text-xs text-green-800">cheapest</span>}
+                  </td>
+                  <td>{q.capacityKg}kg</td>
+                  <td>{q.distanceKm}km</td>
+                  <td className="text-xs">
+                    {ghs(q.baseFee)} + {ghs(q.perKmRate)}/km
+                  </td>
+                  <td className="font-semibold">{ghs(q.quoteAmount)}</td>
+                  <td className="py-1.5 text-right">
+                    <button
+                      className={btnCls}
+                      onClick={() => request.mutate(q.vehicleClassCode)}
+                      disabled={request.isPending}
+                    >
+                      {request.isPending ? 'Requesting…' : 'Request Driver'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <p className="text-sm text-stone-500">
           {job ? 'Previous transport was cancelled.' : 'No transport requested for this contract.'}

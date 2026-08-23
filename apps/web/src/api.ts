@@ -18,6 +18,7 @@ export interface Registries {
     units: Array<{ id: string; code: string; name: string; kgPerUnit: number; isInformal: boolean }>;
   }>;
   regions: Array<{ code: string; name: string }>;
+  vehicleClasses: Array<{ code: string; name: string; capacityKg: number; baseFee: number; perKmRate: number }>;
 }
 
 export interface Demand {

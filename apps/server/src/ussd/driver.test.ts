@@ -86,9 +86,9 @@ describe('driver surfaces (M14)', () => {
     expect(responses[0]).toContain('2. Register as a driver');
     expect(responses[2]).toContain('Select your home region');
     expect(responses[3]).toContain('What do you drive?');
-    expect(responses[3]).toContain('2. Van');
+    expect(responses[3]).toContain('2. 1.5T Truck');
     expect(responses[4]).toContain('4-digit PIN');
-    expect(responses[5]).toContain('Register Kwesi Transport, Van, Ashanti?');
+    expect(responses[5]).toContain('Register Kwesi Transport, 1.5T Truck, Ashanti?');
     expect(responses[6]).toMatch(/^END Welcome, Kwesi Transport/);
 
     const driver = getDriverByPhone(DRIVER_PHONE);

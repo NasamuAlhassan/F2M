@@ -72,9 +72,43 @@ export function getDriverById(id: string): Driver | undefined {
 }
 
 export function verifyDriverLogin(rawPhone: string, pin: string): Driver {
+  // `active` is the availability toggle, NOT an account lock — an offline
+  // driver can still log in (e.g. to flip themselves back online).
   const driver = getDriverByPhone(rawPhone);
-  if (!driver || !driver.active || !bcrypt.compareSync(pin, driver.pinHash)) {
+  if (!driver || !bcrypt.compareSync(pin, driver.pinHash)) {
     throw new DomainError('Invalid phone or PIN', 'INVALID_CREDENTIALS', 401);
   }
   return driver;
+}
+
+export function driverRouteRegions(driver: Driver): string[] {
+  try {
+    const parsed = JSON.parse(driver.routeRegions) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((r): r is string => typeof r === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface UpdateDriverProfileInput {
+  vehicleClassCode?: string;
+  active?: boolean; // online/offline
+  routeRegions?: string[]; // region codes; empty array = serve anywhere
+}
+
+export function updateDriverProfile(driverId: string, input: UpdateDriverProfileInput): Driver {
+  const driver = getDriverById(driverId);
+  if (!driver) throw notFound('driver');
+  const updates: Partial<typeof drivers.$inferInsert> = {};
+  if (input.vehicleClassCode !== undefined) {
+    getVehicleClass(input.vehicleClassCode); // throws on unknown
+    updates.vehicleClassCode = input.vehicleClassCode;
+  }
+  if (input.active !== undefined) updates.active = input.active;
+  if (input.routeRegions !== undefined) {
+    for (const code of input.routeRegions) getRegion(code); // throws on unknown
+    updates.routeRegions = JSON.stringify([...new Set(input.routeRegions)]);
+  }
+  if (Object.keys(updates).length === 0) return driver;
+  return db.update(drivers).set(updates).where(eq(drivers.id, driverId)).returning().get()!;
 }

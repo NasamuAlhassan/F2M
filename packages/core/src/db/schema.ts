@@ -440,7 +440,8 @@ export const drivers = sqliteTable(
       .notNull()
       .references(() => vehicleClasses.code),
     pinHash: text('pin_hash').notNull(), // 4-digit PIN set at USSD registration — web login uses it too (D-021)
-    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    active: integer('active', { mode: 'boolean' }).notNull().default(true), // the ONLINE/OFFLINE availability toggle
+    routeRegions: text('route_regions').notNull().default('[]'), // JSON region codes served; empty = anywhere
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('drivers_phone_idx').on(t.phone)],
