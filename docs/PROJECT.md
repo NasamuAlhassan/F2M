@@ -67,7 +67,7 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | Milestone | State |
 |---|---|
 | M0 — scaffold, docs, schema, seed | **done** |
-| M1 — core services + REST API | not started |
+| M1 — core services + REST API | **done** |
 | M2 — USSD machine + tester | not started |
 | M3 — matching + contracts | not started |
 | M4 — payments + ledger | not started |

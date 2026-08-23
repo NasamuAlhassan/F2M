@@ -1,0 +1,21 @@
+import { verifyBuyerLogin } from '@ftm/core';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+
+const loginSchema = z.object({ email: z.string(), password: z.string() });
+
+export async function authRoutes(app: FastifyInstance): Promise<void> {
+  app.post('/auth/login', async (req) => {
+    const { email, password } = loginSchema.parse(req.body);
+    const buyer = verifyBuyerLogin(email, password);
+    const token = app.jwt.sign({ sub: buyer.id, kind: 'buyer' });
+    return {
+      token,
+      buyer: { id: buyer.id, name: buyer.name, email: buyer.email, company: buyer.company },
+    };
+  });
+
+  app.get('/auth/me', { preHandler: [app.authBuyer] }, async (req) => {
+    return { buyerId: req.user.sub };
+  });
+}

@@ -26,5 +26,12 @@ export {
 } from './db/schema';
 export * from './domain/types';
 export { generateLotCode } from './domain/ids';
+export { DomainError, notFound } from './domain/errors';
+export { appendLotEvent, getTrace, type DbLike, type LotEventInput, type TraceEvent } from './domain/trace';
+export * from './domain/registries';
+export * from './domain/farmers';
+export * from './domain/lots';
+export * from './domain/demands';
+export * from './domain/buyers';
 export { t, resolveText, hasKey, type I18nText } from './i18n';
 export { seed, DEMO_BUYER } from './db/seed';
