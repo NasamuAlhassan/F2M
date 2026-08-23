@@ -78,6 +78,12 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M9 — commodity expansion (rice, groundnut, pepper, onion, plantain) | **done** |
 | M10 — market price information (USSD + portal, no registration gate) | **done** |
 | M11 — SMS notification outbox (mock + Africa's Talking ready) | **done** |
+| M12 — brutalist "paper terminal" redesign (sunlight-first) | **done** |
+| M13 — logistics core (drivers, dispatch, job machine, transport escrow) | **done** |
+| M14 — driver surfaces at feature parity (USSD + web) | **done** |
+| M15 — buyer notification center (autonomous-engine alerts) | **done** |
+| M16 — voice/IVR layer (hear the offer, press 1; AT Voice ready) | **done** |
+| M17 — expanded demo (voice accept + transport leg, exits 0 offline) | **done** |
 
 **MVP:** criteria 1 and 3 met (offline scripted demo to SETTLED; two-tab manual demo verified live in a browser). Criterion 2 — the same demo on real HF grading + MoMo sandbox — is code-complete and waits only on external accounts (HF token, MoMo sandbox subscriptions, Africa's Talking sandbox + ngrok).
 

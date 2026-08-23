@@ -1,17 +1,20 @@
 /**
- * The one-lot demo: drives the ENTIRE transaction spine through the real HTTP
- * surfaces (USSD webhook + REST API via fastify.inject — zero network, no port
- * clash with a running dev server) and prints the trace + balanced ledger.
+ * The one-lot demo: drives the ENTIRE spine — now including the voice-call
+ * accept and the middle-mile transport leg — through the real HTTP surfaces
+ * (USSD webhook, IVR voice wire, REST API) via fastify.inject. Zero network.
  *
- *   npm run demo                  # offline: mock grading + mock payments
+ *   npm run demo                  # offline: mock grading/payments/voice
  *   GRADING_PROVIDER=hf ...       # same script against real providers
  *
- * Exits 0 only if the lot reaches SETTLED with a balanced ledger.
+ * Exits 0 only if the contract reaches SETTLED **and** the delivery job
+ * reaches PAID with balanced books and both escrows at zero.
  */
 import crypto from 'node:crypto';
 import { inArray, and, eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import {
+  accountBalance,
+  ACCOUNTS,
   addPhoto,
   allJournalsBalanced,
   config,
@@ -21,11 +24,16 @@ import {
   formatGhs,
   getCommodityByCode,
   getContract,
+  getDriverByPhone,
   getFarmerByPhone,
+  getJob,
   getTrace,
+  jobEscrowBalance,
   listContractsForFarmer,
   listLotsByFarmer,
   listNotificationsForPhone,
+  listVoiceCallsForPhone,
+  placePendingVoiceCalls,
   pollPaymentsOnce,
   runMigrations,
   schema,
@@ -45,7 +53,6 @@ function fail(message: string): never {
   console.error(`\n\x1b[31m✖ ${message}\x1b[0m`);
   process.exit(1);
 }
-
 async function sleep(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
 }
@@ -53,7 +60,7 @@ async function sleep(ms: number): Promise<void> {
 runMigrations();
 const app = await buildServer({ logger: false });
 
-// ---- USSD driver: speaks the Africa's Talking wire format at POST /ussd ----
+// ---- USSD wire: the Africa's Talking webhook format at POST /ussd ----
 function ussdSession(phone: string) {
   const sessionId = `demo-${crypto.randomUUID().slice(0, 8)}`;
   const history: string[] = [];
@@ -67,6 +74,22 @@ function ussdSession(phone: string) {
     });
     return res.body;
   };
+}
+
+// ---- Voice wire: the AT Voice callback format at POST /voice/answer ----
+async function voiceLeg(callId: string, phone: string, sessionId: string, dtmfDigits?: string): Promise<string> {
+  const body = new URLSearchParams({ sessionId, isActive: '1', callerNumber: phone });
+  if (dtmfDigits !== undefined) body.set('dtmfDigits', dtmfDigits);
+  const res = await app.inject({
+    method: 'POST',
+    url: `/voice/answer?callId=${callId}`,
+    payload: body.toString(),
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  });
+  return res.body;
+}
+function spoken(xml: string): string {
+  return /<Say[^>]*>([\s\S]*?)<\/Say>/.exec(xml)?.[1] ?? xml;
 }
 
 async function apiJson<T>(method: 'GET' | 'POST', url: string, body?: unknown, token?: string): Promise<T> {
@@ -106,7 +129,7 @@ function lotKeypress(farmerId: string, lotId: string): string {
   return String(idx + 1);
 }
 
-async function waitFor(label: string, predicate: () => boolean, timeoutMs = 30_000): Promise<void> {
+async function waitFor(label: string, predicate: () => boolean, timeoutMs = 60_000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     await pollPaymentsOnce();
@@ -116,44 +139,46 @@ async function waitFor(label: string, predicate: () => boolean, timeoutMs = 30_0
   fail(`Timed out waiting for: ${label}`);
 }
 
-console.log('\x1b[1mFarm to Market — one lot, end to end\x1b[0m');
-detail(`grading provider: ${config.GRADING_PROVIDER} · payment provider: ${config.PAYMENT_PROVIDER}`);
+console.log('\x1b[1mFarm to Market — one lot, end to end (voice + transport edition)\x1b[0m');
+detail(
+  `grading: ${config.GRADING_PROVIDER} · payments: ${config.PAYMENT_PROVIDER} · voice: ${config.VOICE_PROVIDER} · sms: ${config.NOTIFY_PROVIDER}`,
+);
 
-// Fresh farmer per run; avoid the mock provider's magic ...0000/...0001 endings.
+// Fresh actors per run; avoid the mock provider's magic ...0000/...0001 endings.
 let suffix = String(Math.floor(Math.random() * 900_000) + 100_000);
 if (suffix.endsWith('0000') || suffix.endsWith('0001')) suffix = suffix.slice(0, -1) + '7';
 const phone = `+23320${suffix}9`;
+const driverPhone = `+23354${suffix}9`;
 
 for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
-  // Janitor: lingering open maize demands (earlier runs, or a refunded attempt
-  // reviving its demand) would grab the new lot at registration.
+  // Dev-DB janitor: lingering open maize demands / restored lots / busy drivers
+  // from earlier runs (or a REJECT retry) would divert matching and dispatch.
   const maize = getCommodityByCode('MAIZE');
-  const stale = db
-    .update(schema.demands)
+  db.update(schema.demands)
     .set({ status: 'cancelled' })
     .where(and(eq(schema.demands.commodityId, maize.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
     .run();
-  // Also park leftover registered maize lots (a refunded attempt restores its
-  // lot) — identical lots tie in scoring and the offer could land on the old one.
-  const parked = db
-    .update(schema.lots)
+  db.update(schema.lots)
     .set({ status: 'withdrawn' })
     .where(and(eq(schema.lots.commodityId, maize.id), eq(schema.lots.status, 'registered')))
     .run();
-  if (stale.changes + parked.changes > 0) {
-    detail(`(cleaned up ${stale.changes} open maize demand(s), parked ${parked.changes} leftover lot(s))`);
-  }
+  db.update(schema.drivers).set({ active: false }).where(eq(schema.drivers.active, true)).run();
+  // Orphaned jobs from a REJECT retry (goods rejected mid-flow) — parked crudely; dev DB only.
+  db.update(schema.deliveryJobs)
+    .set({ state: 'CANCELLED' })
+    .where(inArray(schema.deliveryJobs.state, ['REQUESTED', 'NO_DRIVER', 'ASSIGNED', 'FUNDS_HELD', 'PICKED_UP', 'DELIVERED']))
+    .run();
 
-  // ---- 1. REGISTER (USSD) ----
+  // ---- 1. REGISTER FARMER (USSD) ----
   step(`Register — farmer dials in on a basic phone (${phone})`);
   if (!getFarmerByPhone(phone)) {
     const dial = ussdSession(phone);
     await dial();
-    await dial('1'); // Register
+    await dial('1'); // Register as a farmer
     await dial('Adwoa Demo');
     await dial('2'); // ASHANTI (page 1, item 2)
     await dial('Ejura');
-    const done = await dial('1'); // confirm
+    const done = await dial('1');
     if (!done.startsWith('END Welcome')) fail(`registration failed: ${done}`);
     detail(done.replace('END ', ''));
   } else {
@@ -161,22 +186,41 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   }
   const farmer = getFarmerByPhone(phone)!;
 
-  // ---- 2. LIST A LOT (USSD) ----
+  // ---- 2. REGISTER DRIVER (USSD) ----
+  step(`Register — a tricycle-to-truck driver dials the same code (${driverPhone})`);
+  if (!getDriverByPhone(driverPhone)) {
+    const dial = ussdSession(driverPhone);
+    await dial();
+    await dial('2'); // Register as a driver
+    await dial('Kwame Wheels');
+    await dial('2'); // ASHANTI — near the pickup
+    await dial('2'); // Van (1500kg — carries the 500kg lot)
+    await dial('4321'); // PIN for jobs + web login
+    const done = await dial('1');
+    if (!done.startsWith('END Welcome')) fail(`driver registration failed: ${done}`);
+    detail(done.replace('END ', ''));
+  } else {
+    detail('driver already registered from a previous attempt');
+  }
+  const driver = getDriverByPhone(driverPhone)!;
+  db.update(schema.drivers).set({ active: true }).where(eq(schema.drivers.id, driver.id)).run();
+
+  // ---- 3. LIST A LOT (USSD) ----
   step('List — 10 bags of maize, sold in the unit she actually uses');
   const sell = ussdSession(phone);
   await sell();
   await sell('1'); // Sell produce
   await sell('1'); // Maize
-  await sell('2'); // 50kg bag (units listed alphabetically: BAG_100KG, BAG_50KG, OLONKA)
+  await sell('2'); // 50kg bag
   await sell('10'); // 10 bags = 500kg canonical
   await sell('2'); // Grade B self-assessment
   await sell('1'); // ready now
-  const listed = await sell('1'); // confirm
+  const listed = await sell('1');
   if (!listed.startsWith('END Lot FTM-')) fail(`lot listing failed: ${listed}`);
   detail(listed.replace('END ', ''));
 
-  // ---- 3. DEMAND + MATCH (web API) ----
-  step('Match — buyer posts demand; matching runs the moment it lands');
+  // ---- 4. DEMAND + AUTO-MATCH (web API) ----
+  step('Match — buyer posts demand; the autonomous engine matches and reserves the lot');
   const { token } = await apiJson<{ token: string }>('POST', '/api/auth/login', {
     email: 'buyer@demo.ftm',
     password: 'demo-buyer-2026',
@@ -189,7 +233,7 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
       commodityCode: 'MAIZE',
       quantityKg: 500,
       minBand: 'B',
-      basePricePerKg: 400, // GHS 4.00/kg for band B → A 4.55, C 3.18
+      basePricePerKg: 400,
       windowStart: now,
       windowEnd: now + 5 * 24 * 60 * 60 * 1000,
       regionCode: 'GREATER_ACCRA',
@@ -197,36 +241,57 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
     token,
   );
   detail(`demand ${demand.id.slice(0, 8)} status=${demand.status} remaining=${demand.remainingKg}kg`);
-  const offered = listContractsForFarmer(farmer.id, ['OFFERED']);
-  if (offered.length === 0) fail('matching produced no offer for the demo farmer');
+  const offered = listContractsForFarmer(farmer.id, ['OFFERED'])[0] ?? fail('matching produced no offer');
 
-  // ---- 4. CONTRACT (USSD accept, price-per-grade on screen) ----
-  step('Contract — the offer she accepts is a full price schedule, not one number');
-  const offers = ussdSession(phone);
-  await offers();
-  await offers('2'); // My offers
-  const detailScreen = await offers('1');
-  for (const line of detailScreen.replace('CON ', '').split('\n').slice(0, 4)) detail(line);
-  const accepted = await offers('1'); // Accept
-  if (!accepted.startsWith('END Accepted')) fail(`accept failed: ${accepted}`);
-  detail(accepted.replace('END ', ''));
-  const contract = listContractsForFarmer(farmer.id, ['ACCEPTED'])[0] ?? fail('no accepted contract found');
+  // ---- 5. CONTRACT — ACCEPTED BY VOICE CALL ----
+  step('Contract — her phone RINGS; she hears the terms and presses 1');
+  await placePendingVoiceCalls();
+  const call = listVoiceCallsForPhone(farmer.phone).find((c) => c.flow === 'offer' && c.status === 'placing');
+  if (!call) fail('no voice call was placed for the offer');
+  const callSession = `demo-call-${attempt}`;
+  const prompt = await voiceLeg(call.id, farmer.phone, callSession);
+  detail(`🔊 "${spoken(prompt)}"`);
+  const acceptedXml = await voiceLeg(call.id, farmer.phone, callSession, '1');
+  detail(`🔊 "${spoken(acceptedXml)}"`);
+  const contract = listContractsForFarmer(farmer.id, ['ACCEPTED'])[0] ?? fail('voice accept did not land');
 
-  // ---- 5. PAY: hold ----
+  // ---- 6. PAY: hold ----
   step('Pay (hold) — buyer funds held in escrow before pickup');
-  await waitFor('FUNDS_HELD', () => getContract(contract.id).state === 'FUNDS_HELD', 60_000);
-  detail(`escrow balance: ${formatGhs(contractEscrowBalance(contract.id))} (hold ${formatGhs(contract.holdAmount)})`);
+  await waitFor('FUNDS_HELD', () => getContract(contract.id).state === 'FUNDS_HELD');
+  detail(`escrow: ${formatGhs(contractEscrowBalance(contract.id))} (hold ${formatGhs(contract.holdAmount)})`);
 
-  // ---- 6. GRADE ----
+  // ---- 7. TRANSPORT — the middle-mile bridge ----
+  step('Transport — buyer requests a verified pickup; the nearest van driver gets the job');
+  const { job } = await apiJson<{ job: { id: string; jobCode: string; quoteAmount: number; distanceKm: number } }>(
+    'POST',
+    `/api/contracts/${contract.id}/transport`,
+    {},
+    token,
+  );
+  detail(`job ${job.jobCode}: ${job.distanceKm}km, fee ${formatGhs(job.quoteAmount)} (rate card, frozen upfront)`);
+
+  const drive = ussdSession(driverPhone);
+  await drive();
+  await drive('1'); // Job offers
+  await drive('1'); // this job
+  const jobAccepted = await drive('1'); // Accept
+  if (!jobAccepted.startsWith('END Job DLV-')) fail(`driver accept failed: ${jobAccepted}`);
+  detail(jobAccepted.replace('END ', ''));
+  await waitFor('job fee escrowed', () => getJob(job.id).state === 'FUNDS_HELD');
+  detail(`transport escrow: ${formatGhs(jobEscrowBalance(job.id))}`);
+
+  const loaded = ussdSession(driverPhone);
+  await loaded();
+  await loaded('2'); // My job
+  const pickupDone = await loaded('1'); // Confirm goods loaded
+  if (!pickupDone.startsWith('END Job DLV-')) fail(`driver pickup failed: ${pickupDone}`);
+  detail(`${pickupDone.replace('END ', '')} (produce contract pickup auto-confirmed)`);
+  if (getContract(contract.id).state !== 'PICKUP_CONFIRMED') fail('driver pickup did not confirm the contract');
+
+  // ---- 8. GRADE ----
   step(`Grade — photo at pickup, scored against the maize rubric (${config.GRADING_PROVIDER})`);
   await addPhoto({ contractId: contract.id, buffer: await pickupPhoto(), actor: { type: 'buyer', id: contract.buyerId } });
-  const pickup = ussdSession(phone);
-  await pickup();
-  await pickup('3'); // My lots
-  await pickup(lotKeypress(farmer.id, contract.lotId)); // the contracted lot
-  const confirmed = await pickup('1'); // Confirm pickup done
-  if (!confirmed.startsWith('END Thank you')) fail(`pickup confirm failed: ${confirmed}`);
-  const graded = await apiJson<{ grading: { gradeBand: string; confidence: number }; contract: { state: string } }>(
+  const graded = await apiJson<{ grading: { gradeBand: string; confidence: number } }>(
     'POST',
     `/api/contracts/${contract.id}/grade`,
     {},
@@ -241,45 +306,54 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
     continue;
   }
 
-  // ---- 7. PAY: release (farmer agrees on USSD instead of waiting out the window) ----
-  step('Pay (release) — she sees the grade AND the reason, and agrees');
+  // ---- 9. RELEASE — farmer agrees on USSD; buyer confirms delivery ----
+  step('Pay (release) — she sees the grade AND the reason, and agrees; buyer confirms delivery');
   const agree = ussdSession(phone);
   await agree();
   await agree('3');
   const gradeScreen = await agree(lotKeypress(farmer.id, contract.lotId));
   for (const line of gradeScreen.replace('CON ', '').split('\n').slice(1, 3)) detail(line);
-  const agreed = await agree('1'); // Agree — get paid now
+  const agreed = await agree('1');
   if (!agreed.startsWith('END Thank you')) fail(`agree failed: ${agreed}`);
-  await waitFor('SETTLED', () => getContract(contract.id).state === 'SETTLED', 60_000);
 
-  // ---- 8. TRACE + LEDGER ----
+  await apiJson('POST', `/api/jobs/${job.id}/deliver`, {}, token);
+  await waitFor('contract SETTLED', () => getContract(contract.id).state === 'SETTLED');
+  await waitFor('driver PAID', () => getJob(job.id).state === 'PAID');
+
+  // ---- 10. TRACE + SMS + LEDGER ----
   const final = getContract(contract.id);
-  step('Trace — the record the lot carries from farm to buyer');
+  step('Trace — one append-only record: produce, voice call, transport, money');
   for (const e of getTrace(final.lotId)) {
-    console.log(`  #${String(e.seq).padStart(2)} ${e.type.padEnd(18)} ${e.actorType}`);
+    console.log(`  #${String(e.seq).padStart(2)} ${e.type.padEnd(20)} ${e.actorType}`);
   }
 
-  step('SMS — every step reached her phone');
+  step('SMS — farmer and driver each got the whole story');
   await sendPendingNotifications();
-  for (const n of listNotificationsForPhone(phone, 6).reverse()) {
-    console.log(`  [${n.status}] ${n.message}`);
-  }
+  for (const n of listNotificationsForPhone(farmer.phone, 6).reverse()) console.log(`  [farmer] ${n.message}`);
+  for (const n of listNotificationsForPhone(driverPhone, 4).reverse()) console.log(`  [driver] ${n.message}`);
 
-  step('Ledger — every journal sums to zero');
+  step('Ledger — produce and transport money in one book, every journal zero-sum');
   for (const l of contractLedger(final.id)) {
     const side = l.debit ? `DR ${formatGhs(l.debit)}` : `CR ${formatGhs(l.credit)}`;
     console.log(`  ${l.account.padEnd(52)} ${side.padStart(15)}  ${l.memoKey ?? ''}`);
   }
   const balanced = allJournalsBalanced();
   const escrow = contractEscrowBalance(final.id);
-  detail(`journals balanced: ${balanced} · escrow at terminal state: ${formatGhs(escrow)}`);
-  if (!balanced || escrow !== 0) fail('ledger invariant violated');
+  const jobEscrow = jobEscrowBalance(job.id);
+  const driverPayable = accountBalance(ACCOUNTS.driverPayable(driver.id));
+  detail(
+    `journals balanced: ${balanced} · contract escrow: ${formatGhs(escrow)} · job escrow: ${formatGhs(jobEscrow)} · driver payable: ${formatGhs(driverPayable)}`,
+  );
+  if (!balanced || escrow !== 0 || jobEscrow !== 0 || driverPayable !== job.quoteAmount) {
+    fail('ledger invariant violated');
+  }
 
   console.log(
-    `\n\x1b[1m\x1b[32m✔ SETTLED\x1b[0m — ${final.quantityKg}kg maize, graded ${final.finalGrade}, ` +
-      `farmer paid ${formatGhs(final.finalAmount ?? 0)}, buyer refunded ${formatGhs(final.holdAmount - (final.finalAmount ?? 0))} of the hold.`,
+    `\n\x1b[1m\x1b[32m✔ SETTLED + DELIVERED\x1b[0m — ${final.quantityKg}kg maize graded ${final.finalGrade}: ` +
+      `farmer paid ${formatGhs(final.finalAmount ?? 0)}, driver paid ${formatGhs(job.quoteAmount)}, ` +
+      `buyer refunded ${formatGhs(final.holdAmount - (final.finalAmount ?? 0))} of the produce hold.`,
   );
-  console.log('Register → match → contract → grade → pay → trace: all six steps, one basic phone, one browser.\n');
+  console.log('Register → match → contract (by VOICE) → transport → grade → pay → trace. One basic phone each.\n');
   await app.close();
   process.exit(0);
 }
