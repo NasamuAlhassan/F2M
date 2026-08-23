@@ -1,11 +1,12 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/client';
-import { buyers, contracts, farmers, payments, type Contract, type Payment } from '../db/schema';
+import { buyers, contracts, demands, farmers, payments, type Contract, type Payment } from '../db/schema';
 import { getPaymentProvider } from '../providers/payment/index';
 import { transitionContract } from '../state/contractMachine';
 import { DomainError, notFound } from './errors';
 import { ACCOUNTS, postJournal } from './ledger';
 import { acceptOffer } from './matching';
+import { appendLotEvent } from './trace';
 import { config } from '../config';
 
 const MAX_FUNDING_ATTEMPTS = 2;
@@ -108,6 +109,14 @@ export async function initiateRelease(contractId: string): Promise<Payment> {
     })
     .returning()
     .get();
+
+  // Distinct from SETTLED: the payout is on its way the moment it's initiated.
+  appendLotEvent(db, {
+    lotId: contract.lotId,
+    type: 'PAYMENT_RELEASED',
+    actorType: 'system',
+    payload: { paymentId: payment.id, amount: contract.finalAmount },
+  });
 
   try {
     const result = await provider.disburse({
@@ -258,6 +267,26 @@ export async function acceptOfferAndHold(contractId: string, farmerId: string): 
   const contract = acceptOffer(contractId, farmerId);
   await initiateHold(contractId);
   return contract;
+}
+
+const PICKUP_GRACE_MS = 24 * 60 * 60 * 1000; // one day beyond the delivery window
+
+/**
+ * Refund funded contracts whose pickup never happened — the delivery window
+ * plus a day of grace has passed with no pickup confirmation. Sweep-driven.
+ * Lands CANCELLED_REFUNDED, which also counts against the farmer's history.
+ */
+export function refundMissedPickups(now = Date.now()): number {
+  const held = db.select().from(contracts).where(eq(contracts.state, 'FUNDS_HELD')).all();
+  let refunded = 0;
+  for (const contract of held) {
+    const demand = db.select().from(demands).where(eq(demands.id, contract.demandId)).get();
+    if (demand && now > demand.windowEnd + PICKUP_GRACE_MS) {
+      refundHold(contract.id, { reason: 'pickup_window_missed' });
+      refunded += 1;
+    }
+  }
+  return refunded;
 }
 
 /**

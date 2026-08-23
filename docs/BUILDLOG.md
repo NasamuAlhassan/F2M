@@ -79,3 +79,10 @@ Chronological record of what was built, changed, or edited, and why. One section
 - Fixed while building: `listUnits` had no ORDER BY — SQLite's index scan returned units alphabetically by code, so USSD menu numbering depended on query-plan luck. Now explicitly ordered (deterministic menus; maize lists BAG_100KG, BAG_50KG, OLONKA).
 - Suite: 46 tests green + demo green after the change.
 - **MVP status:** criteria 1 (offline demo to SETTLED) and 3 (two-tab manual demo) are met. Criterion 2 (same demo on real HF + MoMo sandbox) is code-complete but needs the user's accounts: HF token, MoMo sandbox subscriptions + `npm run momo:provision`, AT sandbox + ngrok for the USSD leg.
+
+## 2026-08-23 · M8 complete — lifecycle sweeps finished, trace polish
+
+- Two real gaps in the clock story closed: `expireDemands` (delivery window closed → status expired; the state-machine side effects were already guarded against resurrecting expired demands) and `refundMissedPickups` (FUNDS_HELD with no pickup confirmation by window end + 24h grace → full refund via the existing CANCELLED_REFUNDED path, produce back on the market, and it counts against the farmer's matching history — the same Laplace stats the scorer already reads).
+- Both wired into the 60s sweep; `POST /api/dev/sweep {now}` reports the new counts for deterministic tests.
+- Trace polish: `PAYMENT_RELEASED` now fires when a payout is initiated (distinct from SETTLED — "your money is on the way" vs "done"), and `DISPUTE_RESOLVED` fires when a re-grade closes a dispute. Both event types existed in the enum and the web timeline's styling since M0/M6; they just never fired.
+- Verified: 49 tests green — demand expiry, missed-pickup refund honoring the grace period with balanced books, and a full dispute→re-grade→settle run asserting the complete event sequence ends DISPUTE_OPENED → DISPUTE_RESOLVED → PAYMENT_RELEASED → SETTLED.

@@ -221,6 +221,19 @@ function matchDemand(demand: Demand, onlyLotId?: string): OfferResult[] {
   return results;
 }
 
+/** Expire demands whose delivery window has closed. Sweep-driven. */
+export function expireDemands(now = Date.now()): number {
+  const stale = db
+    .select()
+    .from(demands)
+    .where(and(inArray(demands.status, ['open', 'partially_matched']), lt(demands.windowEnd, now)))
+    .all();
+  for (const demand of stale) {
+    db.update(demands).set({ status: 'expired' }).where(eq(demands.id, demand.id)).run();
+  }
+  return stale.length;
+}
+
 /** Expire offers past their clock TTL, release reservations, and rematch. Sweep-driven. */
 export function expireOffers(now = Date.now()): number {
   const expired = db

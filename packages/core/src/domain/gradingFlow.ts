@@ -9,6 +9,7 @@ import { DomainError } from './errors';
 import { initiateRelease, refundHold } from './paymentFlow';
 import { listPhotosForContract, photoAsGradingImage } from './photos';
 import { getActiveRubric, getCommodityById, getRubricById } from './registries';
+import { appendLotEvent } from './trace';
 import { rubricDocSchema, type GradeBand } from './types';
 
 const MAX_GRADING_ATTEMPTS = 2; // initial + one re-grade after a dispute — the re-grade is final
@@ -106,6 +107,12 @@ export async function runGrading(contractId: string): Promise<Grading> {
   if (previous.length > 0) {
     // The disputed first attempt is now resolved by this final re-grade.
     db.update(gradings).set({ status: 'resolved' }).where(eq(gradings.id, previous[previous.length - 1]!.id)).run();
+    appendLotEvent(db, {
+      lotId: contract.lotId,
+      type: 'DISPUTE_RESOLVED',
+      actorType: 'system',
+      payload: { attempt, finalGrade: result.gradeBand },
+    });
   }
 
   if (result.gradeBand === 'REJECT') {

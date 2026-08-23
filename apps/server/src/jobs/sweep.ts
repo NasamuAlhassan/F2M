@@ -1,19 +1,30 @@
-import { expireOffers, pollPaymentsOnce, releaseDuePayments, runMatching } from '@ftm/core';
+import {
+  expireDemands,
+  expireOffers,
+  pollPaymentsOnce,
+  refundMissedPickups,
+  releaseDuePayments,
+  runMatching,
+} from '@ftm/core';
 import type { FastifyBaseLogger } from 'fastify';
 
 export interface SweepResult {
   expiredOffers: number;
+  expiredDemands: number;
+  missedPickupsRefunded: number;
   releasesStarted: number;
   paymentsResolved: number;
 }
 
-/** One full sweep pass: expiry → rematch → due releases → payment polling. */
+/** One full sweep pass: expiries → missed-pickup refunds → rematch → due releases → payment polling. */
 export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
   const expiredOffers = expireOffers(now);
+  const expiredDemands = expireDemands(now);
+  const missedPickupsRefunded = refundMissedPickups(now);
   runMatching(); // catch demand/lot pairs that appeared between event-driven runs
   const releasesStarted = await releaseDuePayments(now);
   const { resolved: paymentsResolved } = await pollPaymentsOnce(now);
-  return { expiredOffers, releasesStarted, paymentsResolved };
+  return { expiredOffers, expiredDemands, missedPickupsRefunded, releasesStarted, paymentsResolved };
 }
 
 export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
@@ -21,7 +32,7 @@ export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
   const slow = setInterval(() => {
     sweepOnce().then(
       (r) => {
-        if (r.expiredOffers > 0 || r.releasesStarted > 0) log.info(r, 'sweep');
+        if (r.expiredOffers + r.expiredDemands + r.missedPickupsRefunded + r.releasesStarted > 0) log.info(r, 'sweep');
       },
       (err) => log.error(err, 'sweep failed'),
     );
