@@ -14,6 +14,7 @@ import {
   listGradingsForContract,
   listPaymentsForContract,
   listPhotosForContract,
+  queueVoiceCall,
   runGrading,
   t,
   type Contract,
@@ -79,6 +80,17 @@ export async function contractRoutes(app: FastifyInstance): Promise<void> {
     ownedContract(req, id);
     const contract = confirmPickup(id, { type: 'buyer', id: req.user.sub });
     return { contract: { id: contract.id, state: contract.state } };
+  });
+
+  // Call-bridge stub (W4): queue a voice call to the farmer. Masking/translation
+  // arrive with Khaya + AT Voice — the queue and provider plumbing are live now.
+  app.post('/contracts/:id/call-farmer', { preHandler: [app.authBuyer] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const contract = ownedContract(req, id);
+    const farmer = getFarmerById(contract.farmerId);
+    if (!farmer) throw new DomainError('Farmer not found', 'NOT_FOUND', 404);
+    const call = queueVoiceCall({ phone: farmer.phone, locale: farmer.locale, flow: 'bridge', contractId: id });
+    return reply.code(201).send({ call: { id: call.id, status: call.status, flow: call.flow } });
   });
 
   app.post('/contracts/:id/grade', { preHandler: [app.authBuyer] }, async (req) => {

@@ -42,6 +42,10 @@ const envSchema = z
     NOTIFY_PROVIDER: z.enum(['mock', 'at']).default('mock'),
     USSD_SHORTCODE: z.string().default('*384*7247#'),
     DISPATCH_OFFER_TTL_MINUTES: z.coerce.number().default(10),
+
+    VOICE_PROVIDER: z.enum(['mock', 'at']).default('mock'),
+    AT_VOICE_NUMBER: z.string().optional(),
+    VOICE_ANSWER_TIMEOUT_MS: z.coerce.number().default(120_000),
   })
   .superRefine((env, ctx) => {
     // Fail at boot with the exact missing keys for the providers actually selected.
@@ -50,6 +54,9 @@ const envSchema = z
     }
     if (env.NOTIFY_PROVIDER === 'at' && !env.AT_API_KEY) {
       ctx.addIssue({ code: 'custom', message: 'NOTIFY_PROVIDER=at requires AT_API_KEY' });
+    }
+    if (env.VOICE_PROVIDER === 'at' && (!env.AT_API_KEY || !env.AT_VOICE_NUMBER)) {
+      ctx.addIssue({ code: 'custom', message: 'VOICE_PROVIDER=at requires AT_API_KEY and AT_VOICE_NUMBER' });
     }
     if (env.PAYMENT_PROVIDER === 'momo') {
       for (const key of ['MOMO_SUB_KEY_COLLECTIONS', 'MOMO_SUB_KEY_DISBURSEMENTS', 'MOMO_API_USER', 'MOMO_API_KEY'] as const) {

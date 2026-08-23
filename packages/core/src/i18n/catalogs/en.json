@@ -232,5 +232,18 @@
   "notif.driverAssigned": "{driver} ({vehicle}) took delivery job {jobCode}.",
   "notif.inTransit": "Job {jobCode} picked up - goods are in transit.",
   "notif.noDriver": "No driver available for job {jobCode}. Retry dispatch from the contract page.",
-  "notif.driverPaid": "Job {jobCode}: {fee} released to {driver}."
+  "notif.driverPaid": "Job {jobCode}: {fee} released to {driver}.",
+
+  "voice.common.goodbye": "Thank you for using Farm to Market. Goodbye.",
+  "voice.common.gone": "This item is no longer waiting for you. Thank you. Goodbye.",
+  "voice.offer.intro": "Hello, this is Farm to Market. You have a new offer. {kg} kilos of your {commodity} for {buyer}, paying up to {amount} depending on the grade.",
+  "voice.offer.menu": "Press 1 to accept this offer. Press 2 to decline.",
+  "voice.offer.accepted": "Thank you. You accepted. Up to {amount} is being held for you and pays to your mobile money after pickup and grading. Goodbye.",
+  "voice.offer.declined": "You declined the offer. Your produce stays listed for other buyers. Goodbye.",
+  "voice.offer.gone": "Sorry, this offer is no longer available. Your produce stays listed. Goodbye.",
+  "voice.grade.intro": "Hello, this is Farm to Market. Your {commodity} was graded {band}, paying {amount}. The reason given: {reason}.",
+  "voice.grade.menu": "Press 1 to agree and get paid now. Press 2 to dispute the grade.",
+  "voice.grade.agreed": "Thank you. {amount} is on its way to your mobile money. Goodbye.",
+  "voice.grade.disputed": "Your dispute is recorded. The produce will be re-graded from new photos, and the re-grade is final. Goodbye.",
+  "voice.bridge.stub": "This is Farm to Market. Call bridging with translation is coming soon. For now, please use S M S or dial the short code. Goodbye."
 }

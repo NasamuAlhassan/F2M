@@ -3,6 +3,8 @@ import {
   expireDemands,
   expireJobOffers,
   expireOffers,
+  expireStaleVoiceCalls,
+  placePendingVoiceCalls,
   pollPaymentsOnce,
   refundMissedPickups,
   releaseDuePayments,
@@ -33,6 +35,8 @@ export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
   const releasesStarted = await releaseDuePayments(now);
   const { resolved: paymentsResolved } = await pollPaymentsOnce(now);
   const smsDelivered = await sendPendingNotifications();
+  await placePendingVoiceCalls();
+  expireStaleVoiceCalls(now);
   return {
     expiredOffers,
     expiredDemands,
@@ -62,6 +66,7 @@ export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
   const fast = setInterval(() => {
     pollPaymentsOnce()
       .then(() => sendPendingNotifications())
+      .then(() => placePendingVoiceCalls())
       .catch((err) => log.error(err, 'fast sweep failed'));
   }, 5_000);
   slow.unref();

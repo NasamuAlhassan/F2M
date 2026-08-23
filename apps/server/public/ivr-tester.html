@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IVR Tester — Farm to Market</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; gap: 24px;
+    font-family: system-ui, sans-serif; background: #ffffff; color: #0a0a0a; flex-wrap: wrap; padding: 24px 16px;
+  }
+  .phone { width: 320px; border: 2px solid #0a0a0a; background: #ffffff; }
+  .brand {
+    border-bottom: 2px solid #0a0a0a; padding: 8px 12px; font-size: 11px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .body { padding: 12px; }
+  .screen {
+    background: #ffffff; min-height: 190px; padding: 10px; border: 2px solid #0a0a0a;
+    font-family: Consolas, "Courier New", monospace; font-size: 13px; white-space: pre-wrap; word-break: break-word;
+  }
+  .hint { color: #52524e; font-size: 11px; }
+  .ring { animation: ring .8s infinite; font-weight: 700; }
+  @keyframes ring { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+  button {
+    border: 2px solid #0a0a0a; background: #ffffff; color: #0a0a0a; padding: 10px 12px; font-weight: 700;
+    cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; min-height: 44px;
+  }
+  button:hover { background: #0a0a0a; color: #ffffff; }
+  button:disabled { opacity: .35; pointer-events: none; }
+  #answer { border-color: #15803d; background: #15803d; color: #ffffff; }
+  #answer:hover { background: #ffffff; color: #15803d; }
+  #reject { border-color: #b91c1c; color: #b91c1c; }
+  #reject:hover { background: #b91c1c; color: #ffffff; }
+  .callrow { display: flex; gap: 8px; margin-top: 10px; }
+  .callrow button { flex: 1; }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+  .keypad button { font-family: Consolas, monospace; font-size: 16px; }
+  .meta { margin-top: 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+  .meta input {
+    width: 100%; background: #ffffff; border: 1px solid #0a0a0a; color: #0a0a0a; padding: 8px; margin-top: 4px;
+    font-family: Consolas, monospace; font-size: 13px;
+  }
+  .panel { max-width: 360px; font-size: 13px; line-height: 1.5; }
+  .panel h1 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 2px; border-bottom: 2px solid #0a0a0a;
+    padding-bottom: 6px; margin: 0 0 10px;
+  }
+  .panel code { border: 1px solid #0a0a0a; padding: 0 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="brand">Farm to Market · Voice call</div>
+    <div class="body">
+      <div class="screen" id="screen"><span class="hint">Waiting for a call for this phone…</span></div>
+      <div class="callrow">
+        <button id="answer" disabled>Answer</button>
+        <button id="reject" disabled>Reject</button>
+      </div>
+      <div class="keypad" id="keypad" style="display:none"></div>
+      <div class="meta">
+        Phone number (the callee)
+        <input id="phone" value="+233201234567">
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <h1>Local IVR tester</h1>
+    <p>The platform queues outbound calls (new offer, grade result); the sweep places them via the
+    voice provider. This page plays the handset: it polls for a placed call, and Answer speaks the
+    exact Africa's Talking Voice callback format to <code>POST /voice/answer</code> — the reply is
+    the same <code>&lt;Say&gt;</code>/<code>&lt;GetDigits&gt;</code> XML a real call would hear.</p>
+    <p>Try it: register a farmer + lot in the USSD tester, post a matching demand in the portal,
+    then watch this phone ring. Press <code>1</code> to accept the offer by voice.</p>
+  </div>
+<script>
+  const screen = document.getElementById('screen');
+  const answer = document.getElementById('answer');
+  const reject = document.getElementById('reject');
+  const keypad = document.getElementById('keypad');
+  const phoneInput = document.getElementById('phone');
+
+  let currentCall = null;   // { id, flow }
+  let sessionId = null;
+  let inCall = false;
+
+  for (const digit of ['1','2','3','4','5','6','7','8','9','*','0','#']) {
+    const b = document.createElement('button');
+    b.textContent = digit;
+    b.addEventListener('click', () => sendDigits(digit));
+    keypad.appendChild(b);
+  }
+
+  async function poll() {
+    if (inCall) return;
+    try {
+      const phone = encodeURIComponent(phoneInput.value.trim());
+      const res = await fetch('/api/dev/voice-calls?phone=' + phone);
+      const { calls } = await res.json();
+      const placed = calls.find(c => c.status === 'placing' || c.status === 'in_progress');
+      if (placed && (!currentCall || currentCall.id !== placed.id)) {
+        currentCall = placed;
+        screen.innerHTML = '<span class="ring">INCOMING CALL — Farm to Market (' + placed.flow + ')</span>';
+        answer.disabled = false; reject.disabled = false;
+      } else if (!placed && !inCall) {
+        currentCall = null;
+        screen.innerHTML = '<span class="hint">Waiting for a call for this phone…</span>';
+        answer.disabled = true; reject.disabled = true;
+      }
+    } catch { /* server not up */ }
+  }
+  setInterval(poll, 2000);
+  poll();
+
+  async function postAnswer(digits) {
+    const body = new URLSearchParams({
+      sessionId,
+      isActive: '1',
+      callerNumber: phoneInput.value.trim(),
+    });
+    if (digits !== undefined) body.set('dtmfDigits', digits);
+    const res = await fetch('/voice/answer?callId=' + currentCall.id, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const xml = await res.text();
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const say = doc.querySelector('Say');
+    const gather = doc.querySelector('GetDigits');
+    screen.textContent = '🔊 ' + (say ? say.textContent : '…');
+    if (gather) {
+      keypad.style.display = 'grid';
+    } else {
+      keypad.style.display = 'none';
+      screen.textContent += '\n\n— call ended —';
+      inCall = false; currentCall = null;
+      answer.disabled = true; reject.disabled = true;
+    }
+  }
+
+  answer.addEventListener('click', () => {
+    if (!currentCall) return;
+    inCall = true;
+    sessionId = 'ivr-' + Math.random().toString(36).slice(2, 10);
+    answer.disabled = true; reject.disabled = true;
+    postAnswer(undefined);
+  });
+
+  function sendDigits(d) {
+    if (!currentCall) return;
+    postAnswer(d);
+  }
+
+  reject.addEventListener('click', async () => {
+    if (!currentCall) return;
+    await fetch('/voice/events?callId=' + currentCall.id, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ status: 'NoAnswer' }),
+    });
+    screen.innerHTML = '<span class="hint">Call rejected. (An SMS with the same content already went out.)</span>';
+    currentCall = null; inCall = false;
+    answer.disabled = true; reject.disabled = true;
+  });
+</script>
+</body>
+</html>

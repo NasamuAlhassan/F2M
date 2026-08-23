@@ -544,6 +544,34 @@ export const notifications = sqliteTable(
   (t) => [index('notifications_phone_idx').on(t.phone), index('notifications_status_idx').on(t.status)],
 );
 
+// Outbound IVR calls — the deep-accessibility layer. One call = one flow bound
+// to one contract; per-call node cursor, no session table needed (D-027).
+export const VOICE_CALL_STATUSES = ['pending', 'placing', 'in_progress', 'completed', 'failed', 'no_answer'] as const;
+export type VoiceCallStatus = (typeof VOICE_CALL_STATUSES)[number];
+
+export const voiceCalls = sqliteTable(
+  'voice_calls',
+  {
+    id: id(),
+    phone: text('phone').notNull(),
+    locale: text('locale').notNull().default('en'),
+    flow: text('flow', { enum: ['offer', 'grade', 'bridge'] }).notNull(),
+    contractId: text('contract_id').references(() => contracts.id),
+    currentNode: text('current_node'),
+    status: text('status', { enum: VOICE_CALL_STATUSES }).notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    providerRef: text('provider_ref'),
+    sessionRef: text('session_ref'), // the gateway's call session id
+    outcome: text('outcome'), // JSON: { digits?, result? }
+    lastAttemptAt: integer('last_attempt_at'),
+    createdAt: createdAt(),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .$defaultFn(() => Date.now()),
+  },
+  (t) => [index('voice_calls_status_idx').on(t.status), index('voice_calls_phone_idx').on(t.phone)],
+);
+
 // Buyer in-app notification center — read/unread semantics, distinct from the
 // SMS delivery outbox (D-026). Message resolved at queue time, same archival
 // principle as SMS.
@@ -596,6 +624,7 @@ export type MarketPrice = typeof marketPrices.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type VehicleClass = typeof vehicleClasses.$inferSelect;
 export type BuyerNotification = typeof buyerNotifications.$inferSelect;
+export type VoiceCall = typeof voiceCalls.$inferSelect;
 export type Driver = typeof drivers.$inferSelect;
 export type DeliveryJob = typeof deliveryJobs.$inferSelect;
 export type DeliveryJobOffer = typeof deliveryJobOffers.$inferSelect;

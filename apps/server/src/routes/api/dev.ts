@@ -1,4 +1,4 @@
-import { listNotificationsForPhone, normalizePhone } from '@ftm/core';
+import { listNotificationsForPhone, listVoiceCallsForPhone, normalizePhone } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { sweepOnce } from '../../jobs/sweep';
@@ -10,6 +10,26 @@ export async function devRoutes(app: FastifyInstance): Promise<void> {
   app.post('/dev/sweep', async (req) => {
     const { now } = sweepSchema.parse(req.body ?? {});
     return sweepOnce(now ?? Date.now());
+  });
+
+  // Powers the incoming-call panel in ivr-tester.html.
+  app.get('/dev/voice-calls', async (req) => {
+    const { phone } = req.query as { phone?: string };
+    if (!phone) return { calls: [] };
+    let normalized: string;
+    try {
+      normalized = normalizePhone(phone);
+    } catch {
+      return { calls: [] };
+    }
+    return {
+      calls: listVoiceCallsForPhone(normalized).map((c) => ({
+        id: c.id,
+        flow: c.flow,
+        status: c.status,
+        createdAt: c.createdAt,
+      })),
+    };
   });
 
   // Powers the SMS inbox panel in ussd-tester.html.

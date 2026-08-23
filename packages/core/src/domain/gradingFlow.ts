@@ -14,6 +14,7 @@ import { listPhotosForContract, photoAsGradingImage } from './photos';
 import { getActiveRubric, getCommodityById, getRubricById } from './registries';
 import { appendLotEvent } from './trace';
 import { formatGhs, rubricDocSchema, type GradeBand } from './types';
+import { queueVoiceCall } from './voiceCalls';
 import { t } from '../i18n';
 
 const MAX_GRADING_ATTEMPTS = 2; // initial + one re-grade after a dispute — the re-grade is final
@@ -165,6 +166,10 @@ export async function runGrading(contractId: string): Promise<Grading> {
             lotId: contract.lotId,
           },
     );
+    if (result.gradeBand !== 'REJECT') {
+      // She can hear the grade and press 1 to agree / 2 to dispute.
+      queueVoiceCall({ phone: farmer.phone, locale: farmer.locale, flow: 'grade', contractId });
+    }
   }
   return completed;
 }

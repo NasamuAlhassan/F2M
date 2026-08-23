@@ -11,6 +11,7 @@ export {
   type DeliveryJobState,
   type Driver,
   type VehicleClass,
+  type VoiceCall,
   type Buyer,
   type Commodity,
   type Contract,
@@ -51,6 +52,8 @@ export * from './domain/gradingFlow';
 export * from './domain/marketPrices';
 export * from './domain/notifications';
 export * from './domain/buyerNotifications';
+export * from './domain/voiceCalls';
+export * from './providers/voice/index';
 export * from './domain/drivers';
 export * from './domain/logistics';
 export { transitionJob, type JobActor, type JobTransitionExtra } from './state/deliveryJobMachine';

@@ -37,6 +37,10 @@ export function ContractDetailPage() {
     onSuccess: invalidate,
     onError,
   });
+  const callFarmer = useMutation({
+    mutationFn: () => api(`/api/contracts/${id}/call-farmer`, { method: 'POST' }),
+    onError,
+  });
 
   if (!data) return <p className="text-sm text-ink-soft">Loading…</p>;
   const { contract, lot, farmer, commodity, payments, ledger, photos, gradings, match } = data;
@@ -69,6 +73,13 @@ export function ContractDetailPage() {
               {farmer?.phone} · {farmer?.regionCode}
               {farmer?.district ? ` · ${farmer.district}` : ''}
             </p>
+            <button
+              className="mt-1 border border-ink px-2 py-0.5 text-[10px] font-bold uppercase hover:bg-ink hover:text-paper"
+              onClick={() => callFarmer.mutate()}
+              disabled={callFarmer.isPending}
+            >
+              {callFarmer.isSuccess ? 'Call queued' : 'Request call'}
+            </button>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-ink-soft">Lot</p>

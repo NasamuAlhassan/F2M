@@ -22,6 +22,7 @@ import { queueSms } from './notifications';
 import { getCommodityById } from './registries';
 import { appendLotEvent } from './trace';
 import { bestBand, formatGhs, priceTermsSchema, type ClockConfig, type GradeBand, type ScoreBreakdown } from './types';
+import { queueVoiceCall } from './voiceCalls';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BAND_RANK: Record<string, number> = { A: 3, B: 2, C: 1 };
@@ -239,6 +240,9 @@ function matchDemand(demand: Demand, onlyLotId?: string): OfferResult[] {
         contractId: offer.contract.id,
         lotId: lot.id,
       });
+      // The accessibility layer: she can also HEAR the offer and press 1 —
+      // no literacy required. SMS above is the unconditional fallback.
+      queueVoiceCall({ phone: farmer.phone, locale: farmer.locale, flow: 'offer', contractId: offer.contract.id });
     }
   }
   return results;

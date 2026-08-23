@@ -43,6 +43,13 @@
       "when": 1787524082840,
       "tag": "0005_low_blonde_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787524541110,
+      "tag": "0006_foamy_reptil",
+      "breakpoints": true
     }
   ]
 }

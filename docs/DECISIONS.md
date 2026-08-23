@@ -205,3 +205,11 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** The two tables answer different questions — "was this delivered to a phone?" vs "has this buyer seen this?". Forcing them into one schema muddles both.
 
 **Rejected:** A `channel` column on the outbox (read-tracking and delivery-status semantics collide); real Web Push (service workers + VAPID for marginal gain — the portal already polls).
+
+## D-027 · 2026-08-23 · Dedicated IVR module, not USSD-machine reuse — same i18n law
+
+**Decision:** Voice flows live in their own small engine (`apps/server/src/ivr/`): `IvrNode {guard?, say, onDigits}` bound to one outbound call and one contract, speaking Africa's Talking Voice XML (`<Say>`/`<GetDigits>` + `dtmfDigits` callbacks), with a per-call node cursor on `voice_calls` (no session table). The D-012 principle carries over verbatim: nodes return `I18nText[]`; the XML serializer is the only place `t()` runs. Calls queue in `voice_calls`, are placed by the sweep via a `VoiceProvider` (mock offline, AT Voice implemented), retry once, and record outcomes as `VOICE_CALL` trace events. SMS remains the unconditional fallback — an unanswered call costs the farmer nothing. Khaya TTS in Ghanaian languages later swaps the provider, not the flows.
+
+**Why:** The USSD machine assumes inbound dials, role-dependent entry screens, and CON/END text; outbound calls are 2–3 nodes with a bound context. A generic engine buys nothing at this size, and the `guard` hook (say-and-hang-up when the flow is moot) fell out naturally under test.
+
+**Rejected:** Reusing the USSD screen machine with a voice transport (impedance everywhere: entry logic, session keying, pagination idioms); full IVR parity with all USSD menus (the offer/grade calls are the killer feature; menus can come with Khaya).

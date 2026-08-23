@@ -19,6 +19,7 @@ import { notificationRoutes } from './routes/api/notifications';
 import { registryRoutes } from './routes/api/registries';
 import { momoCallbackRoutes } from './routes/momoCallbacks';
 import { ussdRoutes } from './routes/ussd';
+import { voiceRoutes } from './routes/voice';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -68,6 +69,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   app.get('/health', async () => ({ ok: true }));
 
   await app.register(ussdRoutes);
+  await app.register(voiceRoutes);
   await app.register(momoCallbackRoutes);
   await app.register(authRoutes, { prefix: '/api' });
   await app.register(registryRoutes, { prefix: '/api' });
