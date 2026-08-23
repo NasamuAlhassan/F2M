@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, dateTime, ghs, type ContractDetail } from '../api';
+import { api, dateTime, ghs, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
 import { btnCls, btnGhostCls, Card, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
 export function ContractDetailPage() {
@@ -197,6 +197,10 @@ export function ContractDetailPage() {
         </Card>
       )}
 
+      {['FUNDS_HELD', 'PICKUP_CONFIRMED', 'GRADED', 'DISPUTED', 'SETTLED'].includes(contract.state) && (
+        <TransportSection contractId={contract.id} contractState={contract.state} onError={onError} />
+      )}
+
       <Card title="Payments & ledger">
         {payments.length === 0 ? (
           <p className="text-sm text-ink-soft">No payments yet — the hold fires when the farmer accepts.</p>
@@ -233,7 +237,7 @@ export function ContractDetailPage() {
         {ledger.length > 0 && (
           <>
             <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-ink-soft">
-              Ledger (every journal sums to zero)
+              Ledger — produce and transport money in one book (every journal sums to zero)
             </p>
             <div className="overflow-x-auto">
               <table className={tableCls}>
@@ -253,5 +257,98 @@ export function ContractDetailPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+/** The middle-mile bridge: quote → request → live job status → confirm delivery. */
+function TransportSection({
+  contractId,
+  contractState,
+  onError,
+}: {
+  contractId: string;
+  contractState: string;
+  onError: (err: unknown) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { data: jobData } = useQuery({
+    queryKey: ['transport', contractId],
+    queryFn: () => api<{ job: JobView | null }>(`/api/contracts/${contractId}/transport`),
+    refetchInterval: 4000,
+  });
+  const job = jobData?.job ?? null;
+  const canRequest = contractState === 'FUNDS_HELD' && (!job || ['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state));
+  const { data: quoteData } = useQuery({
+    queryKey: ['transport-quote', contractId],
+    queryFn: () => api<{ quote: TransportQuoteView }>(`/api/contracts/${contractId}/transport-quote`),
+    enabled: canRequest,
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['transport', contractId] });
+  const request = useMutation({
+    mutationFn: () => api(`/api/contracts/${contractId}/transport`, { method: 'POST' }),
+    onSuccess: invalidate,
+    onError,
+  });
+  const retry = useMutation({
+    mutationFn: (jobId: string) => api(`/api/jobs/${jobId}/retry-dispatch`, { method: 'POST' }),
+    onSuccess: invalidate,
+    onError,
+  });
+  const deliver = useMutation({
+    mutationFn: (jobId: string) => api(`/api/jobs/${jobId}/deliver`, { method: 'POST' }),
+    onSuccess: invalidate,
+    onError,
+  });
+
+  return (
+    <Card
+      title="Transport — the middle-mile bridge"
+      actions={
+        canRequest ? (
+          <button className={btnCls} onClick={() => request.mutate()} disabled={request.isPending || !quoteData}>
+            {request.isPending ? 'Requesting…' : 'Request transport'}
+          </button>
+        ) : undefined
+      }
+    >
+      {job && !['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state) ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <span className={`${numCls} text-lg font-bold`}>{job.jobCode}</span>
+          <StateBadge state={job.state} />
+          <span className={numCls}>
+            {job.vehicleClassName} · {job.distanceKm}km · fee {ghs(job.quoteAmount)}
+          </span>
+          {job.driver && (
+            <span>
+              Driver: <b>{job.driver.name}</b> <span className={`${numCls} text-xs`}>{job.driver.phone}</span>
+            </span>
+          )}
+          {job.state === 'NO_DRIVER' && (
+            <button className={btnGhostCls} onClick={() => retry.mutate(job.id)} disabled={retry.isPending}>
+              Retry dispatch
+            </button>
+          )}
+          {job.state === 'PICKED_UP' && (
+            <button className={btnCls} onClick={() => deliver.mutate(job.id)} disabled={deliver.isPending}>
+              Confirm delivery received
+            </button>
+          )}
+          {job.state === 'DELIVERED' && <span className="text-sm font-bold uppercase">Driver payout on the way</span>}
+          {job.state === 'PAID' && <span className="text-sm font-bold uppercase">Driver paid</span>}
+        </div>
+      ) : canRequest && quoteData ? (
+        <p className={`text-sm ${numCls}`}>
+          Quote: <b>{quoteData.quote.vehicleClassName}</b> ({quoteData.quote.capacityKg}kg cap) ·{' '}
+          {quoteData.quote.distanceKm}km · base {ghs(quoteData.quote.baseFee)} + {ghs(quoteData.quote.perKmRate)}/km ={' '}
+          <b>{ghs(quoteData.quote.quoteAmount)}</b> — held in escrow when a driver accepts, released on your delivery
+          confirmation.
+        </p>
+      ) : (
+        <p className="text-sm text-ink-soft">
+          {job ? 'Previous transport was cancelled.' : 'No transport requested for this contract.'}
+        </p>
+      )}
+    </Card>
   );
 }

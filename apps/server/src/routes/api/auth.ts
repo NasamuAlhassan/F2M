@@ -1,8 +1,9 @@
-import { verifyBuyerLogin } from '@ftm/core';
+import { verifyBuyerLogin, verifyDriverLogin } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 const loginSchema = z.object({ email: z.string(), password: z.string() });
+const driverLoginSchema = z.object({ phone: z.string(), pin: z.string() });
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/auth/login', async (req) => {
@@ -17,5 +18,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/auth/me', { preHandler: [app.authBuyer] }, async (req) => {
     return { buyerId: req.user.sub };
+  });
+
+  // Drivers sign in with the phone + PIN they set during USSD registration (D-021).
+  app.post('/auth/driver-login', async (req) => {
+    const { phone, pin } = driverLoginSchema.parse(req.body);
+    const driver = verifyDriverLogin(phone, pin);
+    const token = app.jwt.sign({ sub: driver.id, kind: 'driver' });
+    return {
+      token,
+      driver: { id: driver.id, name: driver.name, phone: driver.phone, vehicleClassCode: driver.vehicleClassCode },
+    };
   });
 }

@@ -1,4 +1,4 @@
-import { db, getFarmerByPhone, resolveText, schema, type Farmer, type I18nText } from '@ftm/core';
+import { db, getDriverByPhone, getFarmerByPhone, resolveText, schema, type Driver, type Farmer, type I18nText } from '@ftm/core';
 import { eq } from 'drizzle-orm';
 
 const SESSION_TTL_MS = 5 * 60 * 1000; // a stale session restarts at home on re-dial
@@ -6,6 +6,7 @@ const SESSION_TTL_MS = 5 * 60 * 1000; // a stale session restarts at home on re-
 export interface UssdCtx {
   phone: string; // normalized E.164 where possible
   farmer: Farmer | null;
+  driver: Driver | null; // one role per phone (D-021) — at most one is set
   locale: string;
   data: Record<string, unknown>; // persisted in ussd_sessions.ctx between requests
 }
@@ -38,17 +39,21 @@ export interface UssdRequest {
   text: string; // Africa's Talking sends the full '*'-joined input history
 }
 
-/** Entry screen depends on whether the phone is registered. */
+/** Entry screen depends on which role the phone holds. */
 function entryScreen(ctx: UssdCtx): string {
-  return ctx.farmer ? 'home' : 'welcome';
+  if (ctx.farmer) return 'home';
+  if (ctx.driver) return 'driver_home';
+  return 'welcome';
 }
 
 export async function handleUssdRequest(req: UssdRequest): Promise<string> {
   const farmer = getFarmerByPhone(req.phoneNumber) ?? null;
+  const driver = farmer ? null : (getDriverByPhone(req.phoneNumber) ?? null);
   const ctx: UssdCtx = {
     phone: req.phoneNumber,
     farmer,
-    locale: farmer?.locale ?? 'en',
+    driver,
+    locale: farmer?.locale ?? driver?.locale ?? 'en',
     data: {},
   };
 
@@ -99,8 +104,9 @@ export async function handleUssdRequest(req: UssdRequest): Promise<string> {
 
   const nextScreen = registry.get(result.next);
   if (!nextScreen) throw new Error(`USSD screen missing: ${result.next}`);
-  // Refresh farmer — registration may have just completed inside handleInput.
+  // Refresh roles — registration may have just completed inside handleInput.
   ctx.farmer = getFarmerByPhone(req.phoneNumber) ?? null;
+  ctx.driver = ctx.farmer ? null : (getDriverByPhone(req.phoneNumber) ?? null);
   const lines = nextScreen.render(ctx);
   saveSession(req.sessionId, ctx, nextScreen.key);
   return serialize('CON', lines, ctx.locale);

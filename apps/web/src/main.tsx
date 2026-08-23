@@ -8,6 +8,8 @@ import './index.css';
 import { ContractDetailPage } from './pages/ContractDetail';
 import { DemandDetailPage } from './pages/DemandDetail';
 import { DemandsPage } from './pages/Demands';
+import { DriverJobsPage } from './pages/DriverJobs';
+import { DriverLoginPage } from './pages/DriverLogin';
 import { LoginPage } from './pages/Login';
 import { PricesPage } from './pages/Prices';
 import { TracePage } from './pages/Trace';
@@ -22,6 +24,7 @@ function RequireAuth() {
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/driver/login', element: <DriverLoginPage /> },
   {
     element: <RequireAuth />,
     children: [
@@ -31,6 +34,7 @@ const router = createBrowserRouter([
           { path: '/', element: <Navigate to="/demands" replace /> },
           { path: '/demands', element: <DemandsPage /> },
           { path: '/prices', element: <PricesPage /> },
+          { path: '/driver/jobs', element: <DriverJobsPage /> },
           { path: '/demands/:id', element: <DemandDetailPage /> },
           { path: '/contracts/:id', element: <ContractDetailPage /> },
           { path: '/lots/:id/trace', element: <TracePage /> },

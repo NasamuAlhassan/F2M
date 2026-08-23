@@ -4,10 +4,16 @@ import { invalid, listLines, paginate, parseSelection } from './common';
 
 export const welcome: UssdScreen = {
   key: 'welcome',
-  render: () => [{ key: 'ussd.welcome.title' }, { key: 'ussd.welcome.register' }, { key: 'ussd.welcome.prices' }],
+  render: () => [
+    { key: 'ussd.welcome.title' },
+    { key: 'ussd.welcome.register' },
+    { key: 'ussd.welcome.registerDriver' },
+    { key: 'ussd.welcome.prices' },
+  ],
   handleInput: (input, ctx) => {
     if (input === '1') return { next: 'reg_name' };
-    if (input === '2') {
+    if (input === '2') return { next: 'driver_reg_name' };
+    if (input === '3') {
       // Prices are open to everyone — no registration gate on information.
       ctx.data.pricesPage = 0;
       return { next: 'prices_commodity' };

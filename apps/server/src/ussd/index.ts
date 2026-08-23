@@ -1,4 +1,16 @@
 import { registerScreens } from './machine';
+import {
+  driverActive,
+  driverHome,
+  driverOfferDetail,
+  driverOffers,
+  driverPayments,
+  driverRegConfirm,
+  driverRegName,
+  driverRegPin,
+  driverRegRegion,
+  driverRegVehicle,
+} from './screens/driver';
 import { home } from './screens/home';
 import { lotDetail, lotsList } from './screens/lots';
 import { offerDetail, offersList } from './screens/offers';
@@ -27,6 +39,16 @@ registerScreens(
   paymentsScreen,
   pricesCommodity,
   pricesShow,
+  driverRegName,
+  driverRegRegion,
+  driverRegVehicle,
+  driverRegPin,
+  driverRegConfirm,
+  driverHome,
+  driverOffers,
+  driverOfferDetail,
+  driverActive,
+  driverPayments,
 );
 
 export { handleUssdRequest } from './machine';

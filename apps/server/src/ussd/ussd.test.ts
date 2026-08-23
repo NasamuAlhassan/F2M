@@ -105,8 +105,8 @@ describe('USSD flows (M2)', () => {
   });
 
   it('lets an UNREGISTERED phone browse market prices (M10)', async () => {
-    const [welcome, commodityList, prices] = await dial('+233559990001', ['2', '1']);
-    expect(welcome).toContain('2. Market prices'); // no registration gate on information
+    const [welcome, commodityList, prices] = await dial('+233559990001', ['3', '1']);
+    expect(welcome).toContain('3. Market prices'); // no registration gate on information
     expect(commodityList).toContain('Prices for which crop?');
     expect(prices).toContain('Latest Maize prices:');
     expect(prices).toContain('Techiman: GHS 3.80/kg');

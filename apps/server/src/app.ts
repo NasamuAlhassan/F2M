@@ -14,6 +14,7 @@ import { farmerRoutes } from './routes/api/farmers';
 import { lotRoutes } from './routes/api/lots';
 import { contractRoutes } from './routes/api/contracts';
 import { devRoutes } from './routes/api/dev';
+import { logisticsRoutes } from './routes/api/logistics';
 import { registryRoutes } from './routes/api/registries';
 import { momoCallbackRoutes } from './routes/momoCallbacks';
 import { ussdRoutes } from './routes/ussd';
@@ -34,11 +35,21 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     decorateReply: false,
   });
 
+  // Role-checked guards — a valid JWT of the WRONG kind must not pass (D-021).
   app.decorate('authBuyer', async (req, reply) => {
     try {
       await req.jwtVerify();
+      if (req.user.kind !== 'buyer') throw new Error('wrong role');
     } catch {
-      await reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Login required' } });
+      await reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Buyer login required' } });
+    }
+  });
+  app.decorate('authDriver', async (req, reply) => {
+    try {
+      await req.jwtVerify();
+      if (req.user.kind !== 'driver') throw new Error('wrong role');
+    } catch {
+      await reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Driver login required' } });
     }
   });
 
@@ -63,6 +74,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   await app.register(lotRoutes, { prefix: '/api' });
   await app.register(demandRoutes, { prefix: '/api' });
   await app.register(contractRoutes, { prefix: '/api' });
+  await app.register(logisticsRoutes, { prefix: '/api' });
   await app.register(devRoutes, { prefix: '/api' });
 
   return app;

@@ -19,7 +19,7 @@ export const pricesCommodity: UssdScreen = {
     ];
   },
   handleInput: (input, ctx) => {
-    if (input === '0') return { next: ctx.farmer ? 'home' : 'welcome' };
+    if (input === '0') return { next: ctx.farmer ? 'home' : ctx.driver ? 'driver_home' : 'welcome' };
     const page = (ctx.data.pricesPage as number) ?? 0;
     const all = listCommodities();
     const { pageItems, hasMore, start } = paginate(all, page);
