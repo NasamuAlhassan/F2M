@@ -1,26 +1,36 @@
-import { expireOffers, runMatching } from '@ftm/core';
+import { expireOffers, pollPaymentsOnce, releaseDuePayments, runMatching } from '@ftm/core';
 import type { FastifyBaseLogger } from 'fastify';
 
 export interface SweepResult {
   expiredOffers: number;
+  releasesStarted: number;
+  paymentsResolved: number;
 }
 
-/** One sweep pass: expire stale offers (which rematches), then re-run open demands. */
-export function sweepOnce(now = Date.now()): SweepResult {
+/** One full sweep pass: expiry → rematch → due releases → payment polling. */
+export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
   const expiredOffers = expireOffers(now);
   runMatching(); // catch demand/lot pairs that appeared between event-driven runs
-  return { expiredOffers };
+  const releasesStarted = await releaseDuePayments(now);
+  const { resolved: paymentsResolved } = await pollPaymentsOnce(now);
+  return { expiredOffers, releasesStarted, paymentsResolved };
 }
 
-export function startSweepJob(log: FastifyBaseLogger, intervalMs = 60_000): NodeJS.Timeout {
-  const timer = setInterval(() => {
-    try {
-      const result = sweepOnce();
-      if (result.expiredOffers > 0) log.info(result, 'sweep');
-    } catch (err) {
-      log.error(err, 'sweep failed');
-    }
-  }, intervalMs);
-  timer.unref();
-  return timer;
+export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
+  // Slow lane: offer expiry + rematch + due releases, every 60s.
+  const slow = setInterval(() => {
+    sweepOnce().then(
+      (r) => {
+        if (r.expiredOffers > 0 || r.releasesStarted > 0) log.info(r, 'sweep');
+      },
+      (err) => log.error(err, 'sweep failed'),
+    );
+  }, 60_000);
+  // Fast lane: payment status polling every 5s — sandbox callbacks are unreliable (D-009).
+  const fast = setInterval(() => {
+    pollPaymentsOnce().catch((err) => log.error(err, 'payment poll failed'));
+  }, 5_000);
+  slow.unref();
+  fast.unref();
+  return [slow, fast];
 }

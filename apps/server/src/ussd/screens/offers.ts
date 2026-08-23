@@ -1,5 +1,5 @@
 import {
-  acceptOffer,
+  acceptOfferAndHold,
   contractPriceTerms,
   declineOffer,
   DomainError,
@@ -96,13 +96,14 @@ export const offerDetail: UssdScreen = {
     ];
     return lines;
   },
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '0') return { next: 'offers_list' };
     if (!ctx.farmer) return invalid();
     const contractId = String(ctx.data.offerId);
     if (input === '1') {
       try {
-        const contract = acceptOffer(contractId, ctx.farmer.id);
+        // Accept + start the buyer-side hold — the same call any surface makes.
+        const contract = await acceptOfferAndHold(contractId, ctx.farmer.id);
         return {
           end: [{ key: 'ussd.offer.accepted', params: { amount: formatGhs(contract.holdAmount) } }],
         };

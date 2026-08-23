@@ -26,6 +26,8 @@ const envSchema = z
     GRADING_MODEL: z.string().default('Qwen/Qwen2.5-VL-7B-Instruct'),
 
     PAYMENT_PROVIDER: z.enum(['mock', 'momo']).default('mock'),
+    MOCK_PAYMENT_DELAY_MS: z.coerce.number().default(2000),
+    PAYMENT_TIMEOUT_MS: z.coerce.number().default(120_000),
     MOMO_BASE_URL: z.string().default('https://sandbox.momodeveloper.mtn.com'),
     MOMO_SUB_KEY_COLLECTIONS: z.string().optional(),
     MOMO_SUB_KEY_DISBURSEMENTS: z.string().optional(),

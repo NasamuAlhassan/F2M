@@ -59,6 +59,8 @@ export interface TransitionExtra {
   declineReasonKey?: string;
   disputeNote?: string;
   payload?: Record<string, unknown>;
+  /** Extra work (e.g. ledger postings) that must commit atomically with the transition. */
+  also?: (tx: DbLike, contract: Contract) => void;
 }
 
 /**
@@ -111,6 +113,7 @@ export function transitionContract(
     const updated = tx.update(contracts).set(updates).where(eq(contracts.id, contractId)).returning().get()!;
 
     applySideEffects(tx, updated, to);
+    extra.also?.(tx, updated);
 
     const eventType = EVENT_FOR_STATE[to];
     if (eventType) {

@@ -17,7 +17,7 @@ export async function ussdRoutes(app: FastifyInstance): Promise<void> {
     const body = ussdBodySchema.parse(req.body);
     let response: string;
     try {
-      response = handleUssdRequest(body);
+      response = await handleUssdRequest(body);
     } catch (err) {
       req.log.error(err, 'ussd handler failed');
       response = 'END Sorry, the service is unavailable. Please try again.';

@@ -13,6 +13,7 @@ import { lotRoutes } from './routes/api/lots';
 import { contractRoutes } from './routes/api/contracts';
 import { devRoutes } from './routes/api/dev';
 import { registryRoutes } from './routes/api/registries';
+import { momoCallbackRoutes } from './routes/momoCallbacks';
 import { ussdRoutes } from './routes/ussd';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,6 +47,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   app.get('/health', async () => ({ ok: true }));
 
   await app.register(ussdRoutes);
+  await app.register(momoCallbackRoutes);
   await app.register(authRoutes, { prefix: '/api' });
   await app.register(registryRoutes, { prefix: '/api' });
   await app.register(farmerRoutes, { prefix: '/api' });

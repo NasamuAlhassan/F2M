@@ -23,7 +23,7 @@ export type ScreenResult =
 export interface UssdScreen {
   key: string;
   render(ctx: UssdCtx): I18nText[];
-  handleInput(input: string, ctx: UssdCtx): ScreenResult;
+  handleInput(input: string, ctx: UssdCtx): ScreenResult | Promise<ScreenResult>;
 }
 
 const registry = new Map<string, UssdScreen>();
@@ -43,7 +43,7 @@ function entryScreen(ctx: UssdCtx): string {
   return ctx.farmer ? 'home' : 'welcome';
 }
 
-export function handleUssdRequest(req: UssdRequest): string {
+export async function handleUssdRequest(req: UssdRequest): Promise<string> {
   const farmer = getFarmerByPhone(req.phoneNumber) ?? null;
   const ctx: UssdCtx = {
     phone: req.phoneNumber,
@@ -79,7 +79,7 @@ export function handleUssdRequest(req: UssdRequest): string {
 
   let result: ScreenResult;
   try {
-    result = screen.handleInput(input, ctx);
+    result = await screen.handleInput(input, ctx);
   } catch (err) {
     // A domain error mid-flow becomes a terse error line, not a dead session.
     const message = err instanceof Error ? err.message : 'error';
