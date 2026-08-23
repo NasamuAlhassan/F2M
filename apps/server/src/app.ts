@@ -1,7 +1,9 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import formbody from '@fastify/formbody';
 import jwt from '@fastify/jwt';
+import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { config, DomainError } from '@ftm/core';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -22,8 +24,15 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   const app = Fastify({ logger: opts.logger ?? true });
 
   await app.register(formbody); // Africa's Talking posts form-encoded USSD payloads
+  await app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024, files: 5 } });
   await app.register(jwt, { secret: config.JWT_SECRET });
   await app.register(fastifyStatic, { root: path.join(SERVER_ROOT, 'public') });
+  fs.mkdirSync(path.join(config.storageDir, 'photos'), { recursive: true });
+  await app.register(fastifyStatic, {
+    root: path.join(config.storageDir, 'photos'),
+    prefix: '/photos/',
+    decorateReply: false,
+  });
 
   app.decorate('authBuyer', async (req, reply) => {
     try {

@@ -1,14 +1,30 @@
 ﻿import {
+  addPhoto,
   createDemand,
+  getContract,
   getFarmerByPhone,
   listContractsForFarmer,
   listLotsByFarmer,
+  MockPaymentProvider,
+  pollPaymentsOnce,
+  runGrading,
+  setGradingProvider,
+  setPaymentProvider,
   verifyBuyerLogin,
 } from '@ftm/core';
-import { describe, expect, it } from 'vitest';
+import sharp from 'sharp';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { handleUssdRequest } from './index';
 
 const PHONE = '+233209998877';
+
+beforeAll(() => {
+  setPaymentProvider(new MockPaymentProvider(0));
+});
+afterAll(() => {
+  setPaymentProvider(null);
+  setGradingProvider(null);
+});
 
 /** Drive a full USSD session the way the gateway would: cumulative '*'-joined text. */
 async function dial(phone: string, inputs: string[]): Promise<string[]> {
@@ -118,5 +134,49 @@ describe('USSD flows (M2)', () => {
     const accepted = listContractsForFarmer(farmer.id, ['ACCEPTED']);
     expect(accepted).toHaveLength(1);
     expect(accepted[0]!.holdAmount).toBe(500 * 500);
+  });
+
+  it('confirms pickup, sees the grade with its reason, and agrees — all on USSD (M5)', async () => {
+    const farmer = getFarmerByPhone(PHONE)!;
+    await pollPaymentsOnce(); // resolve the hold from the accept above
+    const contract = listContractsForFarmer(farmer.id, ['FUNDS_HELD'])[0]!;
+
+    // Lot detail now offers pickup confirmation.
+    const [, , pickupScreen] = await dial(PHONE, ['3', '1']);
+    expect(pickupScreen).toContain('1. Confirm pickup done');
+    const [, , , done] = await dial(PHONE, ['3', '1', '1']);
+    expect(done).toMatch(/^END Thank you. Pickup confirmed/);
+    expect(getContract(contract.id).state).toBe('PICKUP_CONFIRMED');
+
+    // Buyer-side photo + grading (the same domain calls the web portal makes).
+    const buffer = await sharp({ create: { width: 800, height: 600, channels: 3, background: { r: 220, g: 190, b: 90 } } })
+      .jpeg()
+      .toBuffer();
+    await addPhoto({ contractId: contract.id, buffer, actor: { type: 'buyer', id: contract.buyerId } });
+    setGradingProvider({
+      name: 'mock',
+      grade: async () => ({
+        gradeBand: 'B',
+        confidence: 0.88,
+        reasons: [{ criterion: 'moisture', observation: 'kernels dry and free-flowing', bandForCriterion: 'B' }],
+        provider: 'mock',
+      }),
+    });
+    await runGrading(contract.id);
+
+    // The farmer sees the grade, the payout, and the reason — and agrees.
+    const [, , gradeScreen] = await dial(PHONE, ['3', '1']);
+    expect(gradeScreen).toContain('Graded Grade B. Pays GHS 2200.00.');
+    expect(gradeScreen).toContain('Reason: kernels dry and free-flowing');
+    expect(gradeScreen).toContain('1. Agree - get paid now');
+    const [, , , agreed] = await dial(PHONE, ['3', '1', '1']);
+    expect(agreed).toContain('GHS 2200.00 is on its way to your MoMo');
+
+    await pollPaymentsOnce();
+    expect(getContract(contract.id).state).toBe('SETTLED');
+
+    // And the payments screen now shows it.
+    const [, payScreen] = await dial(PHONE, ['4']);
+    expect(payScreen).toContain('GHS 2200.00 - Paid');
   });
 });

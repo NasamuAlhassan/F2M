@@ -1,4 +1,18 @@
-import { formatGhs, getCommodityById, getLot, listLotsByFarmer, t, type I18nText } from '@ftm/core';
+import {
+  agreeGrading,
+  confirmPickup,
+  disputeGrading,
+  formatGhs,
+  getCommodityById,
+  getContract,
+  getLot,
+  listContractsForLot,
+  listGradingsForContract,
+  listLotsByFarmer,
+  t,
+  type Contract,
+  type I18nText,
+} from '@ftm/core';
 import type { UssdScreen } from '../machine';
 import { invalid, listLines, parseSelection } from './common';
 
@@ -37,6 +51,11 @@ export const lotsList: UssdScreen = {
   },
 };
 
+/** The lot's action-relevant contract: awaiting pickup confirmation or graded. */
+function activeContract(lotId: string): Contract | undefined {
+  return listContractsForLot(lotId).find((c) => c.state === 'FUNDS_HELD' || c.state === 'GRADED');
+}
+
 export const lotDetail: UssdScreen = {
   key: 'lot_detail',
   render: (ctx) => {
@@ -54,11 +73,51 @@ export const lotDetail: UssdScreen = {
         },
       },
     ];
-    if (lot.askingPricePerKg) {
+
+    const contract = activeContract(lot.id);
+    ctx.data.lotContractId = contract?.id ?? null;
+    if (contract?.state === 'FUNDS_HELD') {
+      lines.push({ key: 'ussd.lot.pickup' });
+    } else if (contract?.state === 'GRADED' && contract.finalGrade) {
+      // The grade is a number she can argue with: band, payout, and the reason.
+      lines.push({
+        key: 'ussd.grade.line',
+        params: {
+          band: t(ctx.locale, `band.${contract.finalGrade}`),
+          amount: formatGhs(contract.finalAmount ?? 0),
+        },
+      });
+      const grading = listGradingsForContract(contract.id)[0];
+      const reasons = grading?.reasons ? (JSON.parse(grading.reasons) as Array<{ observation: string }>) : [];
+      if (reasons[0]) lines.push({ key: 'ussd.grade.reason', params: { observation: reasons[0].observation } });
+      lines.push({ key: 'ussd.grade.agree' }, { key: 'ussd.grade.dispute' });
+    } else if (lot.askingPricePerKg) {
       lines.push({ key: 'ussd.lot.asking', params: { price: formatGhs(lot.askingPricePerKg) } });
     }
     lines.push({ key: 'ussd.common.back' });
     return lines;
   },
-  handleInput: (input) => (input === '0' ? { next: 'lots_list' } : invalid()),
+  handleInput: async (input, ctx) => {
+    if (input === '0') return { next: 'lots_list' };
+    if (!ctx.farmer) return invalid();
+    const contractId = ctx.data.lotContractId as string | null;
+    if (!contractId) return invalid();
+    const contract = getContract(contractId);
+
+    if (contract.state === 'FUNDS_HELD' && input === '1') {
+      confirmPickup(contractId, { type: 'farmer', id: ctx.farmer.id });
+      return { end: [{ key: 'ussd.pickup.done' }] };
+    }
+    if (contract.state === 'GRADED') {
+      if (input === '1') {
+        await agreeGrading(contractId, ctx.farmer.id);
+        return { end: [{ key: 'ussd.grade.agreeDone', params: { amount: formatGhs(contract.finalAmount ?? 0) } }] };
+      }
+      if (input === '2') {
+        disputeGrading(contractId, ctx.farmer.id);
+        return { end: [{ key: 'ussd.grade.disputeDone' }] };
+      }
+    }
+    return invalid();
+  },
 };

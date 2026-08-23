@@ -71,7 +71,7 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M2 — USSD machine + tester | **done** (AT sandbox session pending account setup) |
 | M3 — matching + contracts | **done** |
 | M4 — payments + ledger | **done** (MoMo sandbox round-trip pending account setup) |
-| M5 — photos + grading | not started |
+| M5 — photos + grading | **done** (live HF verdict pending HF token) |
 | M6 — buyer portal | not started |
 | M7 — settlement + scripted demo | not started |
 
