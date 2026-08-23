@@ -14,6 +14,7 @@ import { farmerRoutes } from './routes/api/farmers';
 import { lotRoutes } from './routes/api/lots';
 import { contractRoutes } from './routes/api/contracts';
 import { devRoutes } from './routes/api/dev';
+import { engineRoutes } from './routes/api/engine';
 import { logisticsRoutes } from './routes/api/logistics';
 import { notificationRoutes } from './routes/api/notifications';
 import { registryRoutes } from './routes/api/registries';
@@ -79,6 +80,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   await app.register(contractRoutes, { prefix: '/api' });
   await app.register(logisticsRoutes, { prefix: '/api' });
   await app.register(notificationRoutes, { prefix: '/api' });
+  await app.register(engineRoutes, { prefix: '/api' });
   await app.register(devRoutes, { prefix: '/api' });
 
   return app;

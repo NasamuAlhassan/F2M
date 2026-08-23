@@ -1,0 +1,23 @@
+{
+  "_note": "Ewe — MACHINE-DRAFTED for the simulation drawer. Requires native-speaker review before any farmer-facing use. Missing keys fall back to English.",
+
+  "commodity.MAIZE": "Bli",
+  "commodity.TOMATO": "Timati",
+  "commodity.YAM": "Te",
+  "commodity.RICE": "Mɔlu",
+  "commodity.GROUNDNUT": "Azĩ",
+  "commodity.PEPPER": "Atadi",
+  "commodity.ONION": "Sabala",
+  "commodity.PLANTAIN": "Abladzo",
+
+  "band.A": "Ɖoƒe A",
+  "band.B": "Ɖoƒe B",
+  "band.C": "Ɖoƒe C",
+
+  "sms.newOffer": "Farm to Market: Asitsatsa yeye - wò {commodity} kilo {kg}, axe va se ɖe {price}/kg. Yɔ {code} eye nàtia My offers.",
+
+  "voice.offer.intro": "Ndi, Farm to Market le fu ɖem wò. Asitsatsa yeye le asiwò: wò {commodity} kilo {kg} na {buyer}, axe va se ɖe {amount} le ɖoƒe la nu.",
+  "voice.offer.menu": "Zi 1 ne èlɔ̃. Zi 2 ne mèlɔ̃ o.",
+  "voice.offer.accepted": "Akpe. Èlɔ̃ ɖe edzi. Wodzra {amount} ɖo na wò; àxɔ wò ga le mobile money dzi le pickup kple grading megbe. Hede nyuie.",
+  "voice.offer.declined": "Mèlɔ̃ ɖe asitsatsa la dzi o. Wò nukuwo gale asi na asitsala bubuwo. Hede nyuie."
+}

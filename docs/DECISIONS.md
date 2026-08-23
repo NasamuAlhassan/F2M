@@ -221,3 +221,11 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** The owner's call on their own product's look. D-020's one enduring lesson carries forward regardless of skin: component APIs stay frozen through any restyle, which is exactly what made this reversal a skin swap rather than a rebuild.
 
 **How:** Pre-redesign files restored verbatim from git (index.css, Login, Demands, DemandDetail, Prices, ussd-tester); files that gained features after the redesign (Layout, ContractDetail, Trace, ui.tsx) were merged by hand; born-after files (DriverLogin, DriverJobs, ivr-tester) restyled.
+
+## D-029 · 2026-08-23 · Simulation-grade multilingual catalogs and demo-gated acceptance
+
+**Decision:** Twi, Ewe, and Dagbani catalogs exist as MACHINE-DRAFTED subsets (commodities, bands, the offer SMS, the offer IVR script) powering the Engine page's Voice & SMS Simulation Drawer only. Each carries a `_note` in the file and a visible review banner in the UI; no farmer's `locale` is ever set to them until native-speaker review (the Khaya AI integration path). Missing keys fall back to English. Separately, the Engine page's "Accept Contract" demo button calls `/api/engine/simulate-accept`, which is **hard-gated to mock payment mode** — in any real deployment only the farmer accepts, via USSD or IVR.
+
+**Why:** The user asked to SHOW what a Twi/Ewe/Dagbani farmer receives when an auto-match fires — a simulation display, which is exactly the boundary the earlier language decision drew (D-012: unreviewed machine translation must never be farmer-facing). The demo-accept gate keeps the consent model intact: a buyer can never accept on a farmer's behalf where money is real.
+
+**Rejected:** Full catalog translation now (huge unreviewed surface); ungated simulate-accept (breaks the consent model the whole spine is built on).

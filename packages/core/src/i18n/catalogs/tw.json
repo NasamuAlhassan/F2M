@@ -1,0 +1,23 @@
+{
+  "_note": "Twi (Akan) — MACHINE-DRAFTED for the simulation drawer. Requires native-speaker review before any farmer-facing use. Missing keys fall back to English.",
+
+  "commodity.MAIZE": "Aburo",
+  "commodity.TOMATO": "Ntoosi",
+  "commodity.YAM": "Bayerɛ",
+  "commodity.RICE": "Ɛmo",
+  "commodity.GROUNDNUT": "Nkatiɛ",
+  "commodity.PEPPER": "Mako",
+  "commodity.ONION": "Gyeene",
+  "commodity.PLANTAIN": "Borɔdeɛ",
+
+  "band.A": "Gyinapɛn A",
+  "band.B": "Gyinapɛn B",
+  "band.C": "Gyinapɛn C",
+
+  "sms.newOffer": "Farm to Market: Adetɔ foforɔ - wo {commodity} kilo {kg}, ɛbɛtumi atua kɔsi {price}/kg. Frɛ {code} na paw My offers.",
+
+  "voice.offer.intro": "Maakye, Farm to Market na ɛrefrɛ wo. Wowɔ adetɔ foforɔ: wo {commodity} kilo {kg} ma {buyer}, ɛtua kɔsi {amount} sɛnea gyinapɛn no teɛ.",
+  "voice.offer.menu": "Mia 1 sɛ wopene so. Mia 2 sɛ wompene so.",
+  "voice.offer.accepted": "Meda wo ase. Woapene so. Yɛde {amount} asie ama wo; wubenya wo sika wɔ mobile money so wɔ pickup ne grading akyi. Nante yie.",
+  "voice.offer.declined": "Woampene adetɔ no so. Wo nnɔbaeɛ da so wɔ hɔ ma atɔfoɔ foforɔ. Nante yie."
+}

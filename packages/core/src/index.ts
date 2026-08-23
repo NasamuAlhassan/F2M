@@ -61,5 +61,5 @@ export * from './providers/notify/index';
 export * from './providers/payment/index';
 export * from './providers/grading/index';
 export { transitionContract, type Actor, type TransitionExtra } from './state/contractMachine';
-export { t, resolveText, hasKey, type I18nText } from './i18n';
+export { t, resolveText, hasKey, AVAILABLE_LOCALES, type I18nText } from './i18n';
 export { seed, DEMO_BUYER } from './db/seed';

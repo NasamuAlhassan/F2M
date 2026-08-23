@@ -10,6 +10,7 @@ import { DemandDetailPage } from './pages/DemandDetail';
 import { DemandsPage } from './pages/Demands';
 import { DriverJobsPage } from './pages/DriverJobs';
 import { DriverLoginPage } from './pages/DriverLogin';
+import { EnginePage } from './pages/Engine';
 import { LoginPage } from './pages/Login';
 import { PricesPage } from './pages/Prices';
 import { TracePage } from './pages/Trace';
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
         children: [
           { path: '/', element: <Navigate to="/demands" replace /> },
           { path: '/demands', element: <DemandsPage /> },
+          { path: '/engine', element: <EnginePage /> },
           { path: '/prices', element: <PricesPage /> },
           { path: '/driver/jobs', element: <DriverJobsPage /> },
           { path: '/demands/:id', element: <DemandDetailPage /> },

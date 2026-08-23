@@ -102,6 +102,9 @@ export function Layout() {
                 <Link to="/demands" className="hover:text-green-200">
                   Demands
                 </Link>
+                <Link to="/engine" className="hover:text-green-200">
+                  Engine
+                </Link>
                 <Link to="/prices" className="hover:text-green-200">
                   Market prices
                 </Link>
