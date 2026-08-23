@@ -1,9 +1,13 @@
 import {
   createDemand,
   demandPriceTerms,
+  getContractByMatchId,
   getDemand,
+  getFarmerById,
+  getLot,
   gradeBandSchema,
   listDemandsByBuyer,
+  listMatchesForDemand,
   priceTermsSchema,
 } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
@@ -39,6 +43,26 @@ export async function demandRoutes(app: FastifyInstance): Promise<void> {
   app.get('/demands/:id', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
     const demand = getDemand(id);
-    return { demand: { ...demand, priceTerms: demandPriceTerms(demand) } };
+    const matches = listMatchesForDemand(id).map((m) => {
+      const contract = getContractByMatchId(m.id);
+      const lot = getLot(m.lotId);
+      const farmer = getFarmerById(lot.farmerId);
+      return {
+        id: m.id,
+        lotId: m.lotId,
+        lotCode: lot.lotCode,
+        farmerName: farmer?.name ?? null,
+        farmerRegion: farmer?.regionCode ?? null,
+        allocatedKg: m.allocatedKg,
+        score: m.score,
+        breakdown: m.breakdown,
+        status: m.status,
+        offeredAt: m.offeredAt,
+        expiresAt: m.expiresAt,
+        contractId: contract?.id ?? null,
+        contractState: contract?.state ?? null,
+      };
+    });
+    return { demand: { ...demand, priceTerms: demandPriceTerms(demand) }, matches };
   });
 }

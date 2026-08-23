@@ -35,5 +35,8 @@ export * from './domain/demands';
 export * from './domain/buyers';
 export * from './domain/contracts';
 export * from './domain/payments';
+export * from './domain/matching';
+export * from './domain/geo';
+export { transitionContract, type Actor, type TransitionExtra } from './state/contractMachine';
 export { t, resolveText, hasKey, type I18nText } from './i18n';
 export { seed, DEMO_BUYER } from './db/seed';

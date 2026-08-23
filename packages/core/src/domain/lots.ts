@@ -4,6 +4,7 @@ import { lots, type Lot } from '../db/schema';
 import { DomainError, notFound } from './errors';
 import { getFarmerById } from './farmers';
 import { generateLotCode } from './ids';
+import { runMatching } from './matching';
 import { convertToKg, getCommodityByCode, getUnit } from './registries';
 import { appendLotEvent } from './trace';
 import { gradeBandSchema, type GradeBand } from './types';
@@ -49,7 +50,7 @@ export function registerLot(input: RegisterLotInput): Lot {
 
   const quantityKg = convertToKg(unit, input.unitQty);
 
-  return db.transaction((tx) => {
+  const lot = db.transaction((tx) => {
     let lotCode = generateLotCode();
     // lot_code is unique — retry the 1-in-a-million collision instead of failing a farmer.
     while (tx.select().from(lots).where(eq(lots.lotCode, lotCode)).get()) lotCode = generateLotCode();
@@ -90,6 +91,10 @@ export function registerLot(input: RegisterLotInput): Lot {
     });
     return lot;
   });
+
+  // A fresh lot may satisfy demand posted last night — match immediately.
+  runMatching({ lotId: lot.id });
+  return getLot(lot.id);
 }
 
 export function getLot(id: string): Lot {

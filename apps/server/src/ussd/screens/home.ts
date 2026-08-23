@@ -1,4 +1,4 @@
-import { listContractsForFarmer } from '@ftm/core';
+import { listContractsForFarmer, type I18nText } from '@ftm/core';
 import type { UssdScreen } from '../machine';
 import { invalid } from './common';
 
@@ -6,7 +6,7 @@ export const home: UssdScreen = {
   key: 'home',
   render: (ctx) => {
     const openOffers = ctx.farmer ? listContractsForFarmer(ctx.farmer.id, ['OFFERED']).length : 0;
-    return [
+    const lines: I18nText[] = [
       { key: 'ussd.home.title' },
       { key: 'ussd.home.hello', params: { name: ctx.farmer?.name ?? '' } },
       { key: 'ussd.home.sell' },
@@ -15,6 +15,7 @@ export const home: UssdScreen = {
       { key: 'ussd.home.payments' },
       { key: 'ussd.home.help' },
     ];
+    return lines;
   },
   handleInput: (input, ctx) => {
     switch (input) {

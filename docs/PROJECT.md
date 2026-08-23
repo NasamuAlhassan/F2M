@@ -69,7 +69,7 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M0 — scaffold, docs, schema, seed | **done** |
 | M1 — core services + REST API | **done** |
 | M2 — USSD machine + tester | **done** (AT sandbox session pending account setup) |
-| M3 — matching + contracts | not started |
+| M3 — matching + contracts | **done** |
 | M4 — payments + ledger | not started |
 | M5 — photos + grading | not started |
 | M6 — buyer portal | not started |

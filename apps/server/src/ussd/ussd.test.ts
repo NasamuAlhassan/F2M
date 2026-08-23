@@ -1,4 +1,10 @@
-import { getFarmerByPhone, listLotsByFarmer } from '@ftm/core';
+import {
+  createDemand,
+  getFarmerByPhone,
+  listContractsForFarmer,
+  listLotsByFarmer,
+  verifyBuyerLogin,
+} from '@ftm/core';
 import { describe, expect, it } from 'vitest';
 import { handleUssdRequest } from './index';
 
@@ -80,5 +86,37 @@ describe('USSD flows (M2)', () => {
     const [, bad] = dial(PHONE, ['7']);
     expect(bad).toContain('Invalid choice');
     expect(bad).toContain('1. Sell produce'); // same screen re-rendered
+  });
+
+  it('shows an offer with the price-per-grade table and accepts it (M3)', () => {
+    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const now = Date.now();
+    // Demand more than every maize lot combined so Ama's 500kg lot is offered
+    // regardless of which other fixture lots exist when this file runs.
+    createDemand({
+      buyerId: buyer.id,
+      commodityCode: 'MAIZE',
+      quantityKg: 5000,
+      minBand: 'B',
+      basePricePerKg: 440, // pesewas/kg → B GHS 4.40, A GHS 5.00
+      windowStart: now,
+      windowEnd: now + 7 * 24 * 60 * 60 * 1000,
+      regionCode: 'GREATER_ACCRA',
+    });
+
+    // Home now shows the badge; open offers → detail → accept.
+    const [home, list, detail, done] = dial(PHONE, ['2', '1', '1']);
+    expect(home).toContain('2. My offers (1)');
+    expect(list).toContain('500kg Maize');
+    expect(detail).toContain('Offer: 500kg Maize for Accra Fresh Markets Ltd');
+    expect(detail).toContain('Price/kg: A GHS 5.00, B GHS 4.40, C GHS 3.50');
+    expect(detail).toContain('1. Accept');
+    expect(done).toMatch(/^END Accepted/);
+    expect(done).toContain('GHS 2500.00'); // 500kg × GHS 5.00 best-band hold
+
+    const farmer = getFarmerByPhone(PHONE)!;
+    const accepted = listContractsForFarmer(farmer.id, ['ACCEPTED']);
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]!.holdAmount).toBe(500 * 500);
   });
 });

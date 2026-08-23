@@ -12,6 +12,10 @@ export function getContract(id: string): Contract {
   return contract;
 }
 
+export function getContractByMatchId(matchId: string): Contract | undefined {
+  return db.select().from(contracts).where(eq(contracts.matchId, matchId)).get();
+}
+
 export function listContractsForFarmer(farmerId: string, states?: ContractState[]): Contract[] {
   const where = states
     ? and(eq(contracts.farmerId, farmerId), inArray(contracts.state, states))

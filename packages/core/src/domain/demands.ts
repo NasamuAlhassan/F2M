@@ -2,6 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { buyers, demands, type Demand } from '../db/schema';
 import { DomainError, notFound } from './errors';
+import { runMatching } from './matching';
 import { convertToKg, getCommodityByCode, getRegion, getUnit } from './registries';
 import {
   expandPriceTerms,
@@ -73,7 +74,7 @@ export function createDemand(input: CreateDemandInput): Demand {
     throw new DomainError('Provide basePricePerKg or priceTerms', 'INVALID_PRICE_TERMS');
   }
 
-  return db
+  const demand = db
     .insert(demands)
     .values({
       buyerId: buyer.id,
@@ -90,6 +91,10 @@ export function createDemand(input: CreateDemandInput): Demand {
     })
     .returning()
     .get();
+
+  // Matching runs the moment demand lands (and again on lot registration + sweep).
+  runMatching({ demandId: demand.id });
+  return getDemand(demand.id); // re-read: matching may have moved it to partially_matched/fulfilled
 }
 
 export function getDemand(id: string): Demand {

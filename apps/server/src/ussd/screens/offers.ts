@@ -1,9 +1,21 @@
-import { getCommodityById, listContractsForFarmer, t } from '@ftm/core';
+import {
+  acceptOffer,
+  contractPriceTerms,
+  declineOffer,
+  DomainError,
+  formatGhs,
+  getBuyerById,
+  getCommodityById,
+  getContract,
+  getDemand,
+  getMatch,
+  listContractsForFarmer,
+  t,
+  type I18nText,
+} from '@ftm/core';
 import type { UssdScreen } from '../machine';
 import { invalid, listLines, parseSelection } from './common';
 
-// M2: list open offers (empty until matching lands in M3, which also adds
-// offer_detail with the price-per-grade table and accept/decline).
 export const offersList: UssdScreen = {
   key: 'offers_list',
   render: (ctx) => {
@@ -32,5 +44,79 @@ export const offersList: UssdScreen = {
     if (idx === null) return invalid();
     ctx.data.offerId = offerIds[idx];
     return { next: 'offer_detail' };
+  },
+};
+
+function shortDate(ms: number): string {
+  return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/**
+ * The offer the farmer accepts is a full price-per-grade schedule, not a single
+ * number grading can silently undercut (D-015).
+ */
+export const offerDetail: UssdScreen = {
+  key: 'offer_detail',
+  render: (ctx) => {
+    const contract = getContract(String(ctx.data.offerId));
+    const commodity = getCommodityById(contract.commodityId);
+    const buyer = getBuyerById(contract.buyerId);
+    const demand = getDemand(contract.demandId);
+    const terms = contractPriceTerms(contract);
+    const match = getMatch(contract.matchId);
+    const expiresIn = match.expiresAt ? Math.max(0, match.expiresAt - Date.now()) : null;
+    const expiresLabel =
+      expiresIn === null
+        ? ''
+        : expiresIn >= 90 * 60 * 1000
+          ? t(ctx.locale, 'ussd.offer.expiresHours', { n: Math.round(expiresIn / 3_600_000) })
+          : t(ctx.locale, 'ussd.offer.expiresMins', { n: Math.max(1, Math.round(expiresIn / 60_000)) });
+    const lines: I18nText[] = [
+      {
+        key: 'ussd.offer.detail',
+        params: {
+          kg: contract.quantityKg,
+          commodity: t(ctx.locale, commodity.nameKey),
+          buyer: buyer?.company ?? buyer?.name ?? '',
+        },
+      },
+      {
+        key: 'ussd.offer.prices',
+        params: {
+          a: formatGhs(terms.A ?? 0),
+          b: formatGhs(terms.B ?? 0),
+          c: formatGhs(terms.C ?? 0),
+        },
+      },
+      { key: 'ussd.offer.window', params: { start: shortDate(demand.windowStart), end: shortDate(demand.windowEnd) } },
+      ...(expiresLabel ? [{ key: 'ussd.offer.expires', params: { when: expiresLabel } }] : []),
+      { key: 'ussd.offer.accept' },
+      { key: 'ussd.offer.decline' },
+      { key: 'ussd.common.back' },
+    ];
+    return lines;
+  },
+  handleInput: (input, ctx) => {
+    if (input === '0') return { next: 'offers_list' };
+    if (!ctx.farmer) return invalid();
+    const contractId = String(ctx.data.offerId);
+    if (input === '1') {
+      try {
+        const contract = acceptOffer(contractId, ctx.farmer.id);
+        return {
+          end: [{ key: 'ussd.offer.accepted', params: { amount: formatGhs(contract.holdAmount) } }],
+        };
+      } catch (err) {
+        if (err instanceof DomainError && err.code === 'OFFER_EXPIRED') {
+          return { end: [{ key: 'ussd.offer.expired' }] };
+        }
+        throw err;
+      }
+    }
+    if (input === '2') {
+      declineOffer(contractId, ctx.farmer.id);
+      return { end: [{ key: 'ussd.offer.declined' }] };
+    }
+    return invalid();
   },
 };

@@ -121,7 +121,20 @@ describe('API spine (M1)', () => {
     const demand = res.json().demand;
     expect(demand.priceTerms.B).toBe(400);
     expect(demand.priceTerms.REJECT).toBe(0);
-    expect(demand.remainingKg).toBe(400);
+    // Matching ran on creation: the 500kg lot registered above covers all 400kg.
+    expect(demand.remainingKg).toBe(0);
+    expect(demand.status).toBe('fulfilled');
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/demands/${demand.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const { matches } = detail.json();
+    expect(matches).toHaveLength(1);
+    expect(matches[0].allocatedKg).toBe(400);
+    expect(matches[0].contractState).toBe('OFFERED');
+    expect(matches[0].breakdown.weights.farmerHistory).toBe(0.3); // storable weights
   });
 
   it('rejects a tomato demand window beyond the perishable clock', async () => {

@@ -34,3 +34,14 @@ Chronological record of what was built, changed, or edited, and why. One section
 - Verified: 23 tests green, including scripted keypress walks (registration with region paging, olonka lot listing checked in the DB at 500kg canonical, perishable ready-choice gating, invalid-input re-render). Live `POST /ussd` + tester page smoke-tested.
 - **Deferred to account setup:** one Africa's Talking sandbox simulator session over ngrok (needs the user's AT account; the wire format is already exercised by the tester and tests).
 - Fixed while testing: SQLite ASC text sort puts `NORTHERN` before `NORTH_EAST` (underscore > letters) — harmless for users, mattered to the test's keypress script.
+
+## 2026-08-23 · M3 complete — matching engine, offers, contract state machine, sweep
+
+- `state/contractMachine.ts`: the full guarded transition table (OFFERED→…→SETTLED with decline/expiry/funding-failure/dispute/refund paths). Every transition is atomic with its trace event and its lot/demand side effects (reservation release, status moves) in one SQLite transaction. Actor guards: farmers/buyers can only act on their own contracts.
+- `domain/matching.ts`: pure scorer (unit-testable) + orchestrator. Weighted score per clock type — perishables weigh distance 0.35 vs storables 0.15; distance via haversine with region-centroid fallback; farmer history Laplace-smoothed from settled vs refunded contracts. Hard filters: commodity, remaining kg, clock compatibility (storables accept pre-harvest forwards, perishables only ±1 day around the window). Greedy allocation with partial lots; quantities reserved at offer time on both sides.
+- Matching runs at all three trigger points: demand creation, lot registration, and the 60s sweep (offer expiry per commodity TTL + rematch). `POST /api/dev/sweep {now}` gives tests a deterministic clock.
+- Offers ARE contracts in state OFFERED, with the demand's price schedule frozen on (D-015) and hold sized at best band.
+- USSD `offer_detail`: buyer, quantity, **price-per-grade table**, pickup window, expiry countdown, accept/decline — accept and decline call the same domain functions any surface would.
+- API: demand detail now returns ranked matches with score breakdowns and contract states; `GET /api/contracts/:id` (buyer-guarded) returns contract + lot + farmer + payments + full trace.
+- **Design decision while building (extends D-*)**: one shot per (lot, demand) — a declined or expired offer never re-offers the same lot to the same demand; freed quantity flows to other lots. Prevents an offer→expire→identical-offer loop.
+- Verified: 31 tests green — scorer fixtures (perishable decay, band scoring, Laplace history, clock hard filter incl. pre-harvest forward), offer lifecycle (reserve→accept / decline-restores / expiry-restores-without-relooping), wrong-farmer guard, USSD end-to-end offer accept with the price table rendered on-screen and the hold amount checked in the DB.
