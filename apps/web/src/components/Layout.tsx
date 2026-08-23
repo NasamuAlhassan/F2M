@@ -1,13 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { api, dateTime, getRole, setToken } from '../api';
-
-function navCls({ isActive }: { isActive: boolean }): string {
-  return `border-2 border-ink px-3 py-1.5 text-[12px] font-bold uppercase tracking-wide ${
-    isActive ? 'bg-ink text-paper' : 'bg-paper text-ink hover:bg-ink hover:text-paper'
-  }`;
-}
 
 interface NotificationRow {
   id: string;
@@ -35,20 +29,21 @@ function NotificationBell() {
   return (
     <div className="relative">
       <button
-        className={`border-2 border-ink px-3 py-1.5 text-[12px] font-bold uppercase tracking-wide ${
-          open ? 'bg-ink text-paper' : 'bg-paper hover:bg-ink hover:text-paper'
-        }`}
+        className={`rounded px-3 py-1 hover:bg-green-700 ${open ? 'bg-green-700' : 'bg-green-800'}`}
         onClick={() => setOpen((v) => !v)}
       >
-        Alerts{unread > 0 ? ` [${unread}]` : ''}
+        Alerts
+        {unread > 0 && (
+          <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-xs font-bold text-green-950">{unread}</span>
+        )}
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-96 border-2 border-ink bg-paper">
-          <div className="flex items-center justify-between border-b-2 border-ink px-3 py-2">
-            <span className="text-[11px] font-bold uppercase tracking-widest">Notifications</span>
+        <div className="absolute right-0 z-20 mt-2 w-96 rounded-lg border border-stone-200 bg-white text-stone-900 shadow-xl">
+          <div className="flex items-center justify-between border-b border-stone-100 px-3 py-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Notifications</span>
             {unread > 0 && (
               <button
-                className="border border-ink px-2 py-0.5 text-[10px] font-bold uppercase hover:bg-ink hover:text-paper"
+                className="rounded border border-stone-300 px-2 py-0.5 text-xs font-medium hover:bg-stone-100"
                 onClick={() => markRead.mutate()}
               >
                 Mark all read
@@ -57,16 +52,23 @@ function NotificationBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {!data?.notifications.length ? (
-              <p className="px-3 py-2 text-sm text-ink-soft">Nothing yet — alerts appear as the engine works.</p>
+              <p className="px-3 py-2 text-sm text-stone-500">Nothing yet — alerts appear as the engine works.</p>
             ) : (
               data.notifications.map((n) => (
-                <div key={n.id} className={`border-b border-ink px-3 py-2 text-sm last:border-b-0 ${n.readAt ? 'text-ink-soft' : ''}`}>
+                <div
+                  key={n.id}
+                  className={`border-b border-stone-100 px-3 py-2 text-sm last:border-b-0 ${n.readAt ? 'text-stone-400' : ''}`}
+                >
                   <p>{n.message}</p>
-                  <p className="mt-0.5 flex items-baseline justify-between font-mono text-[10px] uppercase text-ink-soft">
+                  <p className="mt-0.5 flex items-baseline justify-between text-xs text-stone-400">
                     <span>{dateTime(n.createdAt)}</span>
                     {n.contractId && (
-                      <Link to={`/contracts/${n.contractId}`} className="underline" onClick={() => setOpen(false)}>
-                        Contract
+                      <Link
+                        to={`/contracts/${n.contractId}`}
+                        className="text-green-700 hover:underline"
+                        onClick={() => setOpen(false)}
+                      >
+                        Contract →
                       </Link>
                     )}
                   </p>
@@ -84,30 +86,30 @@ export function Layout() {
   const navigate = useNavigate();
   const role = getRole() ?? 'buyer';
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="border-b-2 border-ink bg-paper">
+    <div className="min-h-screen">
+      <header className="bg-green-900 text-white">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <NavLink to={role === 'driver' ? '/driver/jobs' : '/demands'} className="text-base font-bold uppercase tracking-widest">
-            Farm to Market <span className="font-normal text-ink-soft">/ {role === 'driver' ? 'Driver' : 'Buyer'}</span>
-          </NavLink>
-          <nav className="flex items-center gap-2">
+          <Link to={role === 'driver' ? '/driver/jobs' : '/demands'} className="text-lg font-semibold tracking-tight">
+            Farm to Market <span className="font-normal text-green-300">· {role === 'driver' ? 'Driver' : 'Buyer'}</span>
+          </Link>
+          <nav className="flex items-center gap-4 text-sm">
             {role === 'driver' ? (
-              <NavLink to="/driver/jobs" className={navCls}>
+              <Link to="/driver/jobs" className="hover:text-green-200">
                 Jobs
-              </NavLink>
+              </Link>
             ) : (
               <>
-                <NavLink to="/demands" className={navCls}>
+                <Link to="/demands" className="hover:text-green-200">
                   Demands
-                </NavLink>
-                <NavLink to="/prices" className={navCls}>
-                  Prices
-                </NavLink>
+                </Link>
+                <Link to="/prices" className="hover:text-green-200">
+                  Market prices
+                </Link>
                 <NotificationBell />
               </>
             )}
             <button
-              className="border-2 border-ink bg-paper px-3 py-1.5 text-[12px] font-bold uppercase tracking-wide hover:bg-ink hover:text-paper"
+              className="rounded bg-green-800 px-3 py-1 hover:bg-green-700"
               onClick={() => {
                 setToken(null);
                 navigate(role === 'driver' ? '/driver/login' : '/login');
@@ -118,7 +120,7 @@ export function Layout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-5">
+      <main className="mx-auto max-w-5xl px-4 py-6">
         <Outlet />
       </main>
     </div>

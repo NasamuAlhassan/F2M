@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+﻿import { useQuery } from '@tanstack/react-query';
 import { api, ghs, shortDate } from '../api';
-import { Card, numCls, tableCls, tdCls, thCls } from '../components/ui';
+import { Card } from '../components/ui';
 
 interface PriceRow {
   commodityCode: string;
@@ -16,7 +16,7 @@ export function PricesPage() {
     queryKey: ['market-prices'],
     queryFn: () => api<{ prices: PriceRow[] }>('/api/market-prices'),
   });
-  if (!data) return <p className="text-sm text-ink-soft">Loading…</p>;
+  if (!data) return <p className="text-sm text-stone-500">Loading…</p>;
 
   const markets = [...new Set(data.prices.map((p) => p.market))];
   const commodities = [...new Map(data.prices.map((p) => [p.commodityCode, p.commodityName]))];
@@ -25,32 +25,32 @@ export function PricesPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-lg font-bold uppercase tracking-widest">Market prices</h1>
-      <p className="mb-4 text-sm text-ink-soft">
+      <h1 className="mb-1 text-xl font-bold">Market prices</h1>
+      <p className="mb-4 text-sm text-stone-500">
         Published reference prices per kg — the same numbers farmers see on USSD before agreeing to a farm-gate offer.
         Last updated {shortDate(latest)}.
       </p>
       <Card>
         <div className="overflow-x-auto">
-          <table className={tableCls}>
-            <thead>
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs uppercase text-stone-400">
               <tr>
-                <th className={thCls}>Commodity</th>
+                <th className="py-2">Commodity</th>
                 {markets.map((m) => (
-                  <th key={m} className={thCls}>
+                  <th key={m} className="py-2">
                     {m}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {commodities.map(([code, name], i) => (
-                <tr key={code} className={i % 2 ? 'bg-paper-dim' : ''}>
-                  <td className={`${tdCls} font-bold`}>{name}</td>
+            <tbody className="divide-y divide-stone-100">
+              {commodities.map(([code, name]) => (
+                <tr key={code}>
+                  <td className="py-2 font-medium">{name}</td>
                   {markets.map((m) => {
                     const p = lookup.get(`${code}|${m}`);
                     return (
-                      <td key={m} className={`${tdCls} ${numCls}`}>
+                      <td key={m} className="py-2 tabular-nums">
                         {p ? ghs(p.pricePerKg) : '—'}
                       </td>
                     );

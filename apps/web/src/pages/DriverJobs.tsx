@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, dateTime, ghs, type JobView } from '../api';
-import { btnCls, btnGhostCls, Card, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, StateBadge } from '../components/ui';
 
 interface OfferView extends JobView {
   jobId: string;
@@ -35,72 +35,70 @@ export function DriverJobsPage() {
     onError,
   });
 
-  if (!data) return <p className="text-sm text-ink-soft">Loading…</p>;
+  if (!data) return <p className="text-sm text-stone-500">Loading…</p>;
   const active = data.jobs.filter((j) => ['ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'DELIVERED'].includes(j.state));
   const history = data.jobs.filter((j) => !active.some((a) => a.id === j.id));
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-bold uppercase tracking-widest">Driver jobs</h1>
+      <h1 className="mb-4 text-xl font-bold">Driver jobs</h1>
       {error && (
-        <p className="mb-3 border-2 border-err px-3 py-2 text-sm font-bold text-err" onClick={() => setError(null)}>
+        <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-800" onClick={() => setError(null)}>
           {error}
         </p>
       )}
 
       <Card title={`Job offers (${data.offers.length})`}>
         {data.offers.length === 0 ? (
-          <p className="text-sm text-ink-soft">No offers right now. Offers arrive by SMS and appear here.</p>
+          <p className="text-sm text-stone-500">No offers right now. Offers arrive by SMS and appear here.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className={tableCls}>
-              <thead>
-                <tr>
-                  <th className={thCls}>Job</th>
-                  <th className={thCls}>Load</th>
-                  <th className={thCls}>Distance</th>
-                  <th className={thCls}>Fee</th>
-                  <th className={thCls}>Expires</th>
-                  <th className={thCls} />
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs uppercase text-stone-400">
+              <tr>
+                <th className="py-2">Job</th>
+                <th>Load</th>
+                <th>Distance</th>
+                <th>Fee</th>
+                <th>Expires</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {data.offers.map((o) => (
+                <tr key={o.jobId}>
+                  <td className="py-2 font-medium">{o.jobCode}</td>
+                  <td>
+                    {o.quantityKg}kg {o.commodityCode}
+                  </td>
+                  <td>{o.distanceKm}km</td>
+                  <td className="font-medium">{ghs(o.quoteAmount)}</td>
+                  <td className="text-xs">{dateTime(o.expiresAt)}</td>
+                  <td className="py-1.5 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button className={btnCls} onClick={() => accept.mutate(o.jobId)} disabled={accept.isPending}>
+                        Accept
+                      </button>
+                      <button className={btnGhostCls} onClick={() => decline.mutate(o.jobId)} disabled={decline.isPending}>
+                        Decline
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {data.offers.map((o) => (
-                  <tr key={o.jobId}>
-                    <td className={`${tdCls} ${numCls} font-bold`}>{o.jobCode}</td>
-                    <td className={`${tdCls} ${numCls}`}>
-                      {o.quantityKg}kg {o.commodityCode}
-                    </td>
-                    <td className={`${tdCls} ${numCls}`}>{o.distanceKm}km</td>
-                    <td className={`${tdCls} ${numCls} font-bold`}>{ghs(o.quoteAmount)}</td>
-                    <td className={`${tdCls} ${numCls} text-xs`}>{dateTime(o.expiresAt)}</td>
-                    <td className={`${tdCls}`}>
-                      <div className="flex gap-2">
-                        <button className={btnCls} onClick={() => accept.mutate(o.jobId)} disabled={accept.isPending}>
-                          Accept
-                        </button>
-                        <button className={btnGhostCls} onClick={() => decline.mutate(o.jobId)} disabled={decline.isPending}>
-                          Decline
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
 
       <Card title="Active job">
         {active.length === 0 ? (
-          <p className="text-sm text-ink-soft">No active job.</p>
+          <p className="text-sm text-stone-500">No active job.</p>
         ) : (
           active.map((j) => (
-            <div key={j.id} className="flex flex-wrap items-center gap-4">
-              <span className={`${numCls} text-lg font-bold`}>{j.jobCode}</span>
+            <div key={j.id} className="flex flex-wrap items-center gap-4 text-sm">
+              <span className="text-base font-semibold">{j.jobCode}</span>
               <StateBadge state={j.state} />
-              <span className={numCls}>
+              <span className="text-stone-600">
                 {j.quantityKg}kg {j.commodityCode} · {j.distanceKm}km · {ghs(j.quoteAmount)}
               </span>
               {j.state === 'FUNDS_HELD' && (
@@ -109,9 +107,9 @@ export function DriverJobsPage() {
                 </button>
               )}
               {j.state === 'PICKED_UP' && (
-                <span className="text-sm font-bold uppercase text-warn">Awaiting buyer delivery confirmation</span>
+                <span className="font-medium text-amber-700">Awaiting buyer delivery confirmation…</span>
               )}
-              {j.state === 'DELIVERED' && <span className="text-sm font-bold uppercase">Payout on the way</span>}
+              {j.state === 'DELIVERED' && <span className="font-medium text-stone-500">Payout on the way…</span>}
             </div>
           ))
         )}
@@ -119,36 +117,34 @@ export function DriverJobsPage() {
 
       <Card title="History">
         {history.length === 0 ? (
-          <p className="text-sm text-ink-soft">No completed jobs yet.</p>
+          <p className="text-sm text-stone-500">No completed jobs yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className={tableCls}>
-              <thead>
-                <tr>
-                  <th className={thCls}>Job</th>
-                  <th className={thCls}>Load</th>
-                  <th className={thCls}>Fee</th>
-                  <th className={thCls}>Status</th>
-                  <th className={thCls}>Paid</th>
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs uppercase text-stone-400">
+              <tr>
+                <th className="py-2">Job</th>
+                <th>Load</th>
+                <th>Fee</th>
+                <th>Status</th>
+                <th>Paid</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {history.map((j) => (
+                <tr key={j.id}>
+                  <td className="py-2">{j.jobCode}</td>
+                  <td>
+                    {j.quantityKg}kg {j.commodityCode}
+                  </td>
+                  <td>{ghs(j.quoteAmount)}</td>
+                  <td>
+                    <StateBadge state={j.state} />
+                  </td>
+                  <td className="text-xs">{dateTime(j.paidAt)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {history.map((j, i) => (
-                  <tr key={j.id} className={i % 2 ? 'bg-paper-dim' : ''}>
-                    <td className={`${tdCls} ${numCls}`}>{j.jobCode}</td>
-                    <td className={`${tdCls} ${numCls}`}>
-                      {j.quantityKg}kg {j.commodityCode}
-                    </td>
-                    <td className={`${tdCls} ${numCls}`}>{ghs(j.quoteAmount)}</td>
-                    <td className={tdCls}>
-                      <StateBadge state={j.state} />
-                    </td>
-                    <td className={`${tdCls} text-xs`}>{dateTime(j.paidAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
     </div>

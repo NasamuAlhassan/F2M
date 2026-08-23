@@ -156,7 +156,7 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 
 **Rejected:** Sending inline at the hook site (a slow SMS API inside accept/grade flows); storing template+params only (re-rendering later could silently change what was "sent").
 
-## D-020 · 2026-08-23 · Paper-terminal design system, component APIs frozen
+## D-020 · 2026-08-23 · Paper-terminal design system, component APIs frozen — SUPERSEDED by D-028
 
 **Decision:** The visual layer is a flat, light "paper terminal": black (#0A0A0A) on white, hard 1px/2px borders, zero shadows/gradients/rounded corners, dense bordered tables with inverse-ink header rows, monospace tabular numerals for every figure, uppercase tracked section labels, one accent (#15803D) plus sunlight-safe semantic colors (warn #B45309, err #B91C1C, info #1D4ED8), ≥44px touch targets. Tokens live in Tailwind v4 `@theme` (`apps/web/src/index.css`); shared classes and components in `components/ui.tsx`, whose **prop signatures are frozen** — every current and future surface (driver portal, notification bell, IVR tester) restyles through this one file.
 
@@ -213,3 +213,11 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** The USSD machine assumes inbound dials, role-dependent entry screens, and CON/END text; outbound calls are 2–3 nodes with a bound context. A generic engine buys nothing at this size, and the `guard` hook (say-and-hang-up when the flow is moot) fell out naturally under test.
 
 **Rejected:** Reusing the USSD screen machine with a voice transport (impedance everywhere: entry logic, session keying, pagination idioms); full IVR parity with all USSD menus (the offer/grade calls are the killer feature; menus can come with Khaya).
+
+## D-028 · 2026-08-23 · Revert to the original soft design (supersedes D-020)
+
+**Decision:** At the user's request, the brutalist paper-terminal skin is reverted and the ORIGINAL design system restored: rounded cards with soft shadows on a stone-100 ground, the green-900 header, pastel pill state badges, and rounded green buttons. Everything built after the redesign keeps working and was restyled into the original language: the driver login/jobs pages, the buyer transport panel, the Alerts bell, the Request-call button, and the IVR tester (now matching the USSD tester's dark handset aesthetic). The `STATE_COLORS` pill map was extended with the delivery-job and payment states, and the `tableCls/thCls/tdCls/numCls` exports survive with soft styling so post-redesign pages needed no API changes.
+
+**Why:** The owner's call on their own product's look. D-020's one enduring lesson carries forward regardless of skin: component APIs stay frozen through any restyle, which is exactly what made this reversal a skin swap rather than a rebuild.
+
+**How:** Pre-redesign files restored verbatim from git (index.css, Login, Demands, DemandDetail, Prices, ussd-tester); files that gained features after the redesign (Layout, ContractDetail, Trace, ui.tsx) were merged by hand; born-after files (DriverLogin, DriverJobs, ivr-tester) restyled.

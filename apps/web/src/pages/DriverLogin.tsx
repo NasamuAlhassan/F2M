@@ -29,13 +29,11 @@ export function DriverLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-4">
-      <form onSubmit={submit} className="w-96 border-2 border-ink bg-paper">
-        <div className="border-b-2 border-ink px-4 py-3">
-          <h1 className="text-base font-bold uppercase tracking-widest">Farm to Market</h1>
-          <p className="text-[11px] uppercase tracking-wide text-ink-soft">Driver terminal</p>
-        </div>
-        <div className="space-y-3 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-green-950">
+      <form onSubmit={submit} className="w-80 rounded-xl bg-white p-6 shadow-2xl">
+        <h1 className="mb-1 text-xl font-bold text-green-900">Farm to Market</h1>
+        <p className="mb-5 text-sm text-stone-500">Driver portal</p>
+        <div className="space-y-3">
           <Field label="Phone number">
             <input
               className={inputCls}
@@ -55,13 +53,13 @@ export function DriverLoginPage() {
               onChange={(e) => setPin(e.target.value)}
             />
           </Field>
-          {error && <p className="border border-err px-2 py-1.5 text-sm text-err">{error}</p>}
+          {error && <p className="text-sm text-red-700">{error}</p>}
           <button className={`${btnCls} w-full`} disabled={busy}>
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
-          <p className="text-[11px] text-ink-soft">
+          <p className="text-xs text-stone-400">
             No account? Dial the USSD code and choose “Register as a driver”.{' '}
-            <Link to="/login" className="underline">
+            <Link to="/login" className="text-green-700 hover:underline">
               Buyer login
             </Link>
           </p>

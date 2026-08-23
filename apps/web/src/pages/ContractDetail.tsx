@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, dateTime, ghs, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
-import { btnCls, btnGhostCls, Card, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, StateBadge } from '../components/ui';
 
 export function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,7 +42,7 @@ export function ContractDetailPage() {
     onError,
   });
 
-  if (!data) return <p className="text-sm text-ink-soft">Loading…</p>;
+  if (!data) return <p className="text-sm text-stone-500">Loading…</p>;
   const { contract, lot, farmer, commodity, payments, ledger, photos, gradings, match } = data;
   const canPhoto = ['FUNDS_HELD', 'PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state);
   const canGrade = ['PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state) && photos.length > 0;
@@ -50,16 +50,16 @@ export function ContractDetailPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-bold uppercase tracking-widest">
+        <h1 className="text-xl font-bold">
           {contract.quantityKg}kg {commodity.name}
         </h1>
         <StateBadge state={contract.state} />
-        <Link to={`/lots/${lot.id}/trace`} className="ml-auto text-sm font-bold uppercase text-accent underline">
-          Full trace timeline
+        <Link to={`/lots/${lot.id}/trace`} className="ml-auto text-sm text-green-700 hover:underline">
+          Full trace timeline →
         </Link>
       </div>
       {error && (
-        <p className="mb-3 border-2 border-err px-3 py-2 text-sm font-bold text-err" onClick={() => setError(null)}>
+        <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-800" onClick={() => setError(null)}>
           {error}
         </p>
       )}
@@ -67,45 +67,45 @@ export function ContractDetailPage() {
       <Card title="Parties & terms">
         <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-ink-soft">Farmer</p>
-            <p className="font-bold">{farmer?.name}</p>
-            <p className={`text-xs text-ink-soft ${numCls}`}>
+            <p className="text-xs uppercase text-stone-400">Farmer</p>
+            <p className="font-medium">{farmer?.name}</p>
+            <p className="text-xs text-stone-500">
               {farmer?.phone} · {farmer?.regionCode}
               {farmer?.district ? ` · ${farmer.district}` : ''}
             </p>
             <button
-              className="mt-1 border border-ink px-2 py-0.5 text-[10px] font-bold uppercase hover:bg-ink hover:text-paper"
+              className="mt-1 rounded border border-stone-300 px-2 py-0.5 text-xs font-medium hover:bg-stone-100"
               onClick={() => callFarmer.mutate()}
               disabled={callFarmer.isPending}
             >
-              {callFarmer.isSuccess ? 'Call queued' : 'Request call'}
+              {callFarmer.isSuccess ? 'Call queued ✓' : 'Request call'}
             </button>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-ink-soft">Lot</p>
-            <p className={`font-bold ${numCls}`}>{lot.lotCode}</p>
-            <p className={`text-xs text-ink-soft ${numCls}`}>declared {lot.declaredBand} · match score {match.score.toFixed(2)}</p>
+            <p className="text-xs uppercase text-stone-400">Lot</p>
+            <p className="font-medium">{lot.lotCode}</p>
+            <p className="text-xs text-stone-500">declared {lot.declaredBand} · match score {match.score.toFixed(2)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-ink-soft">Hold</p>
-            <p className={`font-bold ${numCls}`}>{ghs(contract.holdAmount)}</p>
-            <p className="text-xs text-ink-soft">held at acceptance</p>
+            <p className="text-xs uppercase text-stone-400">Hold</p>
+            <p className="font-medium">{ghs(contract.holdAmount)}</p>
+            <p className="text-xs text-stone-500">held at acceptance</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-ink-soft">Final</p>
-            <p className={`font-bold ${numCls}`}>{contract.finalAmount !== null ? ghs(contract.finalAmount) : '—'}</p>
-            <p className="text-xs text-ink-soft">{contract.finalGrade ? `graded ${contract.finalGrade}` : 'awaiting grade'}</p>
+            <p className="text-xs uppercase text-stone-400">Final</p>
+            <p className="font-medium">{contract.finalAmount !== null ? ghs(contract.finalAmount) : '—'}</p>
+            <p className="text-xs text-stone-500">{contract.finalGrade ? `graded ${contract.finalGrade}` : 'awaiting grade'}</p>
           </div>
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-ink-soft">Price per grade (frozen at offer)</p>
+          <p className="mb-1 text-xs font-semibold uppercase text-stone-400">Price per grade (frozen at offer)</p>
           <div className="flex flex-wrap gap-2">
             {(['A', 'B', 'C', 'REJECT'] as const).map((band) => (
               <div
                 key={band}
-                className={`border-2 px-3 py-1.5 text-sm ${numCls} ${
-                  contract.finalGrade === band ? 'border-ink bg-ink font-bold text-paper' : 'border-ink'
+                className={`rounded border px-3 py-1.5 text-sm ${
+                  contract.finalGrade === band ? 'border-green-600 bg-green-50 font-semibold' : 'border-stone-200'
                 }`}
               >
                 {band}: {ghs(contract.priceTerms[band])}/kg
@@ -149,14 +149,14 @@ export function ContractDetailPage() {
         }
       >
         {photos.length === 0 ? (
-          <p className="text-sm text-ink-soft">
+          <p className="text-sm text-stone-500">
             No photos yet. {canPhoto ? 'Upload pickup photos — grading needs at least one.' : ''}
           </p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {photos.map((p) => (
-              <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="border-2 border-ink">
-                <img src={p.url} alt="pickup" className="h-28 w-28 object-cover" />
+              <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
+                <img src={p.url} alt="pickup" className="h-28 w-28 rounded object-cover shadow-sm" />
               </a>
             ))}
           </div>
@@ -166,21 +166,19 @@ export function ContractDetailPage() {
       {gradings.length > 0 && (
         <Card title="Grading">
           {gradings.map((g) => (
-            <div key={g.id} className="mb-3 border-2 border-ink p-3 last:mb-0">
+            <div key={g.id} className="mb-3 rounded border border-stone-200 p-3 last:mb-0">
               <div className="mb-2 flex flex-wrap items-center gap-3">
-                <span className={`border-2 border-ink bg-ink px-2 py-0.5 text-lg font-bold text-paper ${numCls}`}>
-                  {g.gradeBand ?? '…'}
-                </span>
+                <span className="text-lg font-bold">{g.gradeBand ?? '…'}</span>
                 {g.confidence !== null && (
-                  <div className="flex items-center gap-2 text-xs text-ink-soft">
-                    <span className="uppercase tracking-wide">confidence</span>
-                    <div className="h-3 w-28 border border-ink bg-paper">
-                      <div className="h-full bg-ink" style={{ width: `${Math.round(g.confidence * 100)}%` }} />
+                  <div className="flex items-center gap-2 text-xs text-stone-500">
+                    confidence
+                    <div className="h-1.5 w-28 overflow-hidden rounded bg-stone-200">
+                      <div className="h-full bg-teal-600" style={{ width: `${Math.round(g.confidence * 100)}%` }} />
                     </div>
-                    <span className={numCls}>{(g.confidence * 100).toFixed(0)}%</span>
+                    {(g.confidence * 100).toFixed(0)}%
                   </div>
                 )}
-                <span className={`text-xs text-ink-soft ${numCls}`}>
+                <span className="text-xs text-stone-400">
                   attempt {g.attempt} · {g.provider}
                   {g.model ? ` · ${g.model}` : ''} · {dateTime(g.createdAt)}
                 </span>
@@ -188,21 +186,19 @@ export function ContractDetailPage() {
               </div>
               <ul className="space-y-1 text-sm">
                 {g.reasons.map((r, i) => (
-                  <li key={i} className="flex gap-2 border-b border-ink-soft/30 pb-1 last:border-0">
-                    <span className="w-32 shrink-0 font-bold">{r.criterion}</span>
-                    <span>{r.observation}</span>
-                    <span className={`ml-auto shrink-0 text-xs font-bold ${numCls}`}>{r.bandForCriterion}</span>
+                  <li key={i} className="flex gap-2">
+                    <span className="w-32 shrink-0 font-medium text-stone-600">{r.criterion}</span>
+                    <span className="text-stone-700">{r.observation}</span>
+                    <span className="ml-auto shrink-0 text-xs font-semibold text-stone-400">{r.bandForCriterion}</span>
                   </li>
                 ))}
               </ul>
               {contract.disputeNote && g.status === 'resolved' && (
-                <p className="mt-2 border border-warn px-2 py-1 text-xs font-bold text-warn">
-                  Farmer dispute: “{contract.disputeNote}”
-                </p>
+                <p className="mt-2 text-xs text-orange-700">Farmer dispute: “{contract.disputeNote}”</p>
               )}
             </div>
           ))}
-          <p className="text-xs text-ink-soft">
+          <p className="text-xs text-stone-400">
             The farmer sees this grade, its payout, and the top reason on her phone — and can dispute it within the window.
           </p>
         </Card>
@@ -214,56 +210,52 @@ export function ContractDetailPage() {
 
       <Card title="Payments & ledger">
         {payments.length === 0 ? (
-          <p className="text-sm text-ink-soft">No payments yet — the hold fires when the farmer accepts.</p>
+          <p className="text-sm text-stone-500">No payments yet — the hold fires when the farmer accepts.</p>
         ) : (
-          <div className="mb-3 overflow-x-auto">
-            <table className={tableCls}>
-              <thead>
-                <tr>
-                  <th className={thCls}>Direction</th>
-                  <th className={thCls}>Amount</th>
-                  <th className={thCls}>Counterparty</th>
-                  <th className={thCls}>Provider</th>
-                  <th className={thCls}>Status</th>
-                  <th className={thCls}>When</th>
+          <table className="mb-3 w-full text-left text-sm">
+            <thead className="text-xs uppercase text-stone-400">
+              <tr>
+                <th className="py-1">Direction</th>
+                <th>Amount</th>
+                <th>Counterparty</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {payments.map((p) => (
+                <tr key={p.id}>
+                  <td className="py-1.5 font-medium">{p.direction === 'collection' ? 'Hold (buyer)' : 'Payout'}</td>
+                  <td>{ghs(p.amount)}</td>
+                  <td className="text-xs">{p.counterpartyMsisdn}</td>
+                  <td className="text-xs">{p.provider}</td>
+                  <td>
+                    <StateBadge state={p.status} />
+                  </td>
+                  <td className="text-xs">{dateTime(p.createdAt)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {payments.map((p, i) => (
-                  <tr key={p.id} className={i % 2 ? 'bg-paper-dim' : ''}>
-                    <td className={`${tdCls} font-bold`}>{p.direction === 'collection' ? 'Hold (buyer)' : 'Payout (farmer)'}</td>
-                    <td className={`${tdCls} ${numCls}`}>{ghs(p.amount)}</td>
-                    <td className={`${tdCls} ${numCls} text-xs`}>{p.counterpartyMsisdn}</td>
-                    <td className={`${tdCls} text-xs`}>{p.provider}</td>
-                    <td className={tdCls}>
-                      <StateBadge state={p.status} />
-                    </td>
-                    <td className={`${tdCls} text-xs`}>{dateTime(p.createdAt)}</td>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {ledger.length > 0 && (
+          <>
+            <p className="mb-1 text-xs font-semibold uppercase text-stone-400">
+              Ledger — produce and transport money in one book (every journal sums to zero)
+            </p>
+            <table className="w-full text-left text-xs">
+              <tbody className="divide-y divide-stone-100">
+                {ledger.map((l) => (
+                  <tr key={l.id}>
+                    <td className="py-1 font-mono">{l.account}</td>
+                    <td className="text-right tabular-nums">{l.debit ? `DR ${ghs(l.debit)}` : ''}</td>
+                    <td className="text-right tabular-nums">{l.credit ? `CR ${ghs(l.credit)}` : ''}</td>
+                    <td className="pl-3 text-stone-400">{l.memoKey?.replace('ledger.', '')}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-        {ledger.length > 0 && (
-          <>
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-ink-soft">
-              Ledger — produce and transport money in one book (every journal sums to zero)
-            </p>
-            <div className="overflow-x-auto">
-              <table className={tableCls}>
-                <tbody>
-                  {ledger.map((l, i) => (
-                    <tr key={l.id} className={i % 2 ? 'bg-paper-dim' : ''}>
-                      <td className={`${tdCls} font-mono text-xs`}>{l.account}</td>
-                      <td className={`${tdCls} ${numCls} text-right text-xs`}>{l.debit ? `DR ${ghs(l.debit)}` : ''}</td>
-                      <td className={`${tdCls} ${numCls} text-right text-xs`}>{l.credit ? `CR ${ghs(l.credit)}` : ''}</td>
-                      <td className={`${tdCls} text-xs text-ink-soft`}>{l.memoKey?.replace('ledger.', '')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </>
         )}
       </Card>
@@ -324,15 +316,16 @@ function TransportSection({
       }
     >
       {job && !['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state) ? (
-        <div className="flex flex-wrap items-center gap-4">
-          <span className={`${numCls} text-lg font-bold`}>{job.jobCode}</span>
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <span className="text-base font-semibold">{job.jobCode}</span>
           <StateBadge state={job.state} />
-          <span className={numCls}>
+          <span className="tabular-nums text-stone-600">
             {job.vehicleClassName} · {job.distanceKm}km · fee {ghs(job.quoteAmount)}
           </span>
           {job.driver && (
             <span>
-              Driver: <b>{job.driver.name}</b> <span className={`${numCls} text-xs`}>{job.driver.phone}</span>
+              Driver: <span className="font-medium">{job.driver.name}</span>{' '}
+              <span className="text-xs text-stone-500">{job.driver.phone}</span>
             </span>
           )}
           {job.state === 'NO_DRIVER' && (
@@ -345,18 +338,18 @@ function TransportSection({
               Confirm delivery received
             </button>
           )}
-          {job.state === 'DELIVERED' && <span className="text-sm font-bold uppercase">Driver payout on the way</span>}
-          {job.state === 'PAID' && <span className="text-sm font-bold uppercase">Driver paid</span>}
+          {job.state === 'DELIVERED' && <span className="font-medium text-stone-500">Driver payout on the way…</span>}
+          {job.state === 'PAID' && <span className="font-medium text-green-700">Driver paid ✓</span>}
         </div>
       ) : canRequest && quoteData ? (
-        <p className={`text-sm ${numCls}`}>
-          Quote: <b>{quoteData.quote.vehicleClassName}</b> ({quoteData.quote.capacityKg}kg cap) ·{' '}
-          {quoteData.quote.distanceKm}km · base {ghs(quoteData.quote.baseFee)} + {ghs(quoteData.quote.perKmRate)}/km ={' '}
-          <b>{ghs(quoteData.quote.quoteAmount)}</b> — held in escrow when a driver accepts, released on your delivery
-          confirmation.
+        <p className="text-sm text-stone-600">
+          Quote: <span className="font-semibold">{quoteData.quote.vehicleClassName}</span> ({quoteData.quote.capacityKg}kg
+          cap) · {quoteData.quote.distanceKm}km · base {ghs(quoteData.quote.baseFee)} + {ghs(quoteData.quote.perKmRate)}
+          /km = <span className="font-semibold">{ghs(quoteData.quote.quoteAmount)}</span> — held in escrow when a driver
+          accepts, released on your delivery confirmation.
         </p>
       ) : (
-        <p className="text-sm text-ink-soft">
+        <p className="text-sm text-stone-500">
           {job ? 'Previous transport was cancelled.' : 'No transport requested for this contract.'}
         </p>
       )}
