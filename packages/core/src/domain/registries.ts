@@ -15,7 +15,7 @@ export function getRegion(code: string): Region {
 }
 
 export function listCommodities(): Array<Commodity & { clock: ClockConfig; units: Unit[] }> {
-  const all = db.select().from(commodities).orderBy(asc(commodities.code)).all();
+  const all = db.select().from(commodities).orderBy(asc(commodities.sortOrder), asc(commodities.code)).all();
   const allUnits = db.select().from(units).all();
   return all.map((c) => ({
     ...c,

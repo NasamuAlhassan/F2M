@@ -67,6 +67,7 @@ export const commodities = sqliteTable(
     clockType: text('clock_type', { enum: ['storable', 'perishable'] }).notNull(),
     clockConfig: text('clock_config').notNull(), // JSON ClockConfig
     activeRubricVersion: integer('active_rubric_version').notNull().default(1),
+    sortOrder: integer('sort_order').notNull().default(100), // menu position — most-traded first
   },
   (t) => [uniqueIndex('commodities_code_idx').on(t.code)],
 );

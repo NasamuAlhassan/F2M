@@ -7,7 +7,16 @@ import { commodities, farmers, lots, regions, rubrics, units } from './schema';
 describe('schema + seed', () => {
   it('seeds the three registries', () => {
     const all = db.select().from(commodities).all();
-    expect(all.map((c) => c.code).sort()).toEqual(['MAIZE', 'TOMATO', 'YAM']);
+    expect(all.map((c) => c.code).sort()).toEqual([
+      'GROUNDNUT',
+      'MAIZE',
+      'ONION',
+      'PEPPER',
+      'PLANTAIN',
+      'RICE',
+      'TOMATO',
+      'YAM',
+    ]);
     expect(db.select().from(regions).all()).toHaveLength(16);
 
     for (const c of all) {

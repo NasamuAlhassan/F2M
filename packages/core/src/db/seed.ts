@@ -26,6 +26,7 @@ const REGION_SEED: Array<{ code: string; lat: number; lng: number }> = [
 
 type CommoditySeed = {
   code: string;
+  sortOrder: number; // menu position — most-traded first
   category: 'grain' | 'perishable' | 'tuber';
   clockType: 'storable' | 'perishable';
   clock: ClockConfig;
@@ -38,6 +39,7 @@ const band = (a: string, b: string, c: string, reject: string) => ({ A: a, B: b,
 const COMMODITY_SEED: CommoditySeed[] = [
   {
     code: 'MAIZE',
+    sortOrder: 10,
     category: 'grain',
     clockType: 'storable',
     clock: { offerTtlMinutes: 1440, distanceDecayKm: 300, allowsForward: true, maxWindowDays: 60 },
@@ -110,6 +112,7 @@ const COMMODITY_SEED: CommoditySeed[] = [
   },
   {
     code: 'TOMATO',
+    sortOrder: 20,
     category: 'perishable',
     clockType: 'perishable',
     clock: { offerTtlMinutes: 120, distanceDecayKm: 50, allowsForward: false, maxWindowDays: 2 },
@@ -181,6 +184,7 @@ const COMMODITY_SEED: CommoditySeed[] = [
   },
   {
     code: 'YAM',
+    sortOrder: 30,
     category: 'tuber',
     clockType: 'storable',
     clock: { offerTtlMinutes: 720, distanceDecayKm: 200, allowsForward: true, maxWindowDays: 30 },
@@ -241,6 +245,259 @@ const COMMODITY_SEED: CommoditySeed[] = [
   },
 ];
 
+// Wave 2 (M9): adding a commodity means writing a rubric, not rewriting the platform.
+COMMODITY_SEED.push(
+  {
+    code: 'RICE',
+    sortOrder: 40,
+    category: 'grain',
+    clockType: 'storable',
+    clock: { offerTtlMinutes: 1440, distanceDecayKm: 300, allowsForward: true, maxWindowDays: 60 },
+    units: [
+      { code: 'BAG_50KG', kgPerUnit: 50 },
+      { code: 'BAG_25KG', kgPerUnit: 25 },
+      { code: 'OLONKA', kgPerUnit: 2.2, isInformal: true },
+    ],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'moisture',
+          labelKey: 'rubric.rice.moisture',
+          visualCues: 'clumping paddy or milled grains, dull wet sheen, condensation in the bag',
+          bandDescriptors: band(
+            'Dry free-flowing grain',
+            'Slight dullness, no clumping',
+            'Some clumped patches',
+            'Visibly wet or caked grain',
+          ),
+        },
+        {
+          key: 'broken_grains',
+          labelKey: 'rubric.rice.broken_grains',
+          visualCues: 'fragmented kernels, chalky broken ends among whole grains',
+          bandDescriptors: band(
+            'Under about 5% brokens',
+            'Roughly 5-15% brokens',
+            'Roughly 15-30% brokens',
+            'Mostly broken or crushed grain',
+          ),
+        },
+        {
+          key: 'foreign_matter',
+          labelKey: 'rubric.rice.foreign_matter',
+          visualCues: 'husk, stones, sand, paddy mixed into milled rice',
+          bandDescriptors: band('Essentially clean', 'Traces of husk', 'Visible stones or husk', 'Heavy contamination'),
+        },
+        {
+          key: 'discoloration',
+          labelKey: 'rubric.rice.discoloration',
+          visualCues: 'yellow, grey or heat-damaged kernels among white grain',
+          bandDescriptors: band(
+            'Uniform colour',
+            'A few discoloured kernels',
+            'Widespread discoloration',
+            'Predominantly yellowed or damaged',
+          ),
+        },
+        {
+          key: 'mould',
+          labelKey: 'rubric.rice.mould',
+          visualCues: 'musty caking, dark fungal specks',
+          bandDescriptors: band('No visible mould', 'Isolated specks', 'Small mouldy patches', 'Widespread mould'),
+        },
+      ],
+    },
+  },
+  {
+    code: 'GROUNDNUT',
+    sortOrder: 50,
+    category: 'grain',
+    clockType: 'storable',
+    clock: { offerTtlMinutes: 1440, distanceDecayKm: 300, allowsForward: true, maxWindowDays: 60 },
+    units: [
+      { code: 'BAG_50KG', kgPerUnit: 50 },
+      { code: 'BOWL', kgPerUnit: 2.2, isInformal: true },
+    ],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'moisture',
+          labelKey: 'rubric.groundnut.moisture',
+          visualCues: 'soft rubbery kernels, damp shells, clumping',
+          bandDescriptors: band('Dry hard kernels', 'Slightly soft few kernels', 'Noticeably damp', 'Wet or rubbery bulk'),
+        },
+        {
+          key: 'shrivelled_kernels',
+          labelKey: 'rubric.groundnut.shrivelled_kernels',
+          visualCues: 'wrinkled undersized kernels among plump ones',
+          bandDescriptors: band(
+            'Plump uniform kernels',
+            'Under ~10% shrivelled',
+            'Roughly 10-25% shrivelled',
+            'Mostly shrivelled or immature',
+          ),
+        },
+        {
+          key: 'foreign_matter',
+          labelKey: 'rubric.groundnut.foreign_matter',
+          visualCues: 'shell fragments, stones, soil mixed with kernels',
+          bandDescriptors: band('Essentially clean', 'Traces of shell', 'Visible stones or soil', 'Heavy contamination'),
+        },
+        {
+          key: 'mould',
+          labelKey: 'rubric.groundnut.mould',
+          visualCues: 'dark or greenish mould on kernels, damaged discoloured kernels — aflatoxin risk, grade strictly',
+          bandDescriptors: band(
+            'No mould or damage visible',
+            'One or two suspect kernels',
+            'Several mouldy or dark kernels',
+            'Visible mould — reject for aflatoxin risk',
+          ),
+        },
+      ],
+    },
+  },
+  {
+    code: 'PEPPER',
+    sortOrder: 60,
+    category: 'perishable',
+    clockType: 'perishable',
+    clock: { offerTtlMinutes: 120, distanceDecayKm: 50, allowsForward: false, maxWindowDays: 2 },
+    units: [
+      { code: 'SACK', kgPerUnit: 45 },
+      { code: 'BASKET', kgPerUnit: 20, isInformal: true },
+    ],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'colour_ripeness',
+          labelKey: 'rubric.pepper.colour_ripeness',
+          visualCues: 'uniform red or green versus mixed dull patches',
+          bandDescriptors: band(
+            'Uniform vivid colour',
+            'Mostly uniform, minor variation',
+            'Mixed ripeness or dull patches',
+            'Predominantly overripe or discoloured',
+          ),
+        },
+        {
+          key: 'firmness',
+          labelKey: 'rubric.pepper.firmness',
+          visualCues: 'taut glossy skin versus wrinkling and softness',
+          bandDescriptors: band('Firm glossy pods', 'Slight wrinkling on some', 'Soft pods visible', 'Limp or collapsing pods'),
+        },
+        {
+          key: 'rot',
+          labelKey: 'rubric.pepper.rot',
+          visualCues: 'dark wet lesions, white mould at the stem end',
+          bandDescriptors: band('No rot visible', 'One or two suspect pods', 'Several rotting pods', 'Rot through the sack'),
+        },
+        {
+          key: 'size_uniformity',
+          labelKey: 'rubric.pepper.size_uniformity',
+          visualCues: 'consistent pod size versus a mix of tiny and large',
+          bandDescriptors: band('Consistent size', 'Mostly consistent', 'Mixed sizes', 'Extremely uneven'),
+        },
+      ],
+    },
+  },
+  {
+    code: 'ONION',
+    sortOrder: 70,
+    category: 'perishable',
+    clockType: 'perishable',
+    clock: { offerTtlMinutes: 720, distanceDecayKm: 100, allowsForward: false, maxWindowDays: 7 },
+    units: [
+      { code: 'BAG_50KG', kgPerUnit: 50 },
+      { code: 'BASKET', kgPerUnit: 25, isInformal: true },
+    ],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'skin_cure',
+          labelKey: 'rubric.onion.skin_cure',
+          visualCues: 'dry papery outer skins versus stripped or moist bulbs',
+          bandDescriptors: band(
+            'Well-cured papery skins',
+            'Mostly cured, some bare bulbs',
+            'Many bare or moist bulbs',
+            'Uncured wet bulbs',
+          ),
+        },
+        {
+          key: 'firmness',
+          labelKey: 'rubric.onion.firmness',
+          visualCues: 'hard bulbs versus soft necks and give under pressure',
+          bandDescriptors: band('Hard tight bulbs', 'Slight give on a few', 'Soft bulbs present', 'Widespread soft bulbs'),
+        },
+        {
+          key: 'sprouting',
+          labelKey: 'rubric.onion.sprouting',
+          visualCues: 'green shoots at the neck',
+          bandDescriptors: band('No sprouting', 'Neck swelling only', 'Short sprouts on some', 'Green shoots widespread'),
+        },
+        {
+          key: 'rot',
+          labelKey: 'rubric.onion.rot',
+          visualCues: 'wet dark basal rot, sour smell staining the bag',
+          bandDescriptors: band('None visible', 'One or two suspect bulbs', 'Several rotting bulbs', 'Wet rot in the bag'),
+        },
+      ],
+    },
+  },
+  {
+    code: 'PLANTAIN',
+    sortOrder: 80,
+    category: 'perishable',
+    clockType: 'perishable',
+    clock: { offerTtlMinutes: 240, distanceDecayKm: 80, allowsForward: false, maxWindowDays: 3 },
+    units: [{ code: 'BUNCH', kgPerUnit: 12 }],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'ripeness_stage',
+          labelKey: 'rubric.plantain.ripeness_stage',
+          visualCues: 'green through yellow to black-spotted fingers',
+          bandDescriptors: band(
+            'Green to light-turning, trade-ready',
+            'Yellowing but firm',
+            'Ripe with dark spotting',
+            'Overripe blackened fingers',
+          ),
+        },
+        {
+          key: 'finger_fill',
+          labelKey: 'rubric.plantain.finger_fill',
+          visualCues: 'full rounded fingers versus thin angular ones',
+          bandDescriptors: band('Full well-filled fingers', 'Mostly filled', 'Thin or angular fingers', 'Immature thin bunches'),
+        },
+        {
+          key: 'bruising',
+          labelKey: 'rubric.plantain.bruising',
+          visualCues: 'dark pressure marks, split skins from transport',
+          bandDescriptors: band('Clean unmarked fingers', 'Minor marks on a few', 'Bruising on many', 'Widespread splits and crushing'),
+        },
+        {
+          key: 'rot',
+          labelKey: 'rubric.plantain.rot',
+          visualCues: 'soft wet patches, mould at the crown',
+          bandDescriptors: band('None visible', 'One or two suspect fingers', 'Several rotting fingers', 'Crown rot spreading'),
+        },
+      ],
+    },
+  },
+);
+
 export const DEMO_BUYER = {
   email: 'buyer@demo.ftm',
   password: 'demo-buyer-2026',
@@ -267,8 +524,9 @@ export async function seed(): Promise<void> {
         clockType: c.clockType,
         clockConfig: JSON.stringify(c.clock),
         activeRubricVersion: 1,
+        sortOrder: c.sortOrder,
       })
-      .onConflictDoNothing()
+      .onConflictDoUpdate({ target: commodities.code, set: { sortOrder: c.sortOrder } })
       .run();
     const commodity = db.select().from(commodities).where(eq(commodities.code, c.code)).get();
     if (!commodity) throw new Error(`seed: commodity ${c.code} missing after insert`);

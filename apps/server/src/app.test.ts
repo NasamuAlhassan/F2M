@@ -18,7 +18,16 @@ describe('API spine (M1)', () => {
     const res = await app.inject({ method: 'GET', url: '/api/registries' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.commodities.map((c: { code: string }) => c.code).sort()).toEqual(['MAIZE', 'TOMATO', 'YAM']);
+    expect(body.commodities.map((c: { code: string }) => c.code)).toEqual([
+      'MAIZE',
+      'TOMATO',
+      'YAM',
+      'RICE',
+      'GROUNDNUT',
+      'PEPPER',
+      'ONION',
+      'PLANTAIN',
+    ]);
     expect(body.regions).toHaveLength(16);
   });
 

@@ -8,6 +8,13 @@
       "when": 1787515020485,
       "tag": "0000_flawless_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787520708990,
+      "tag": "0001_flowery_millenium_guard",
+      "breakpoints": true
     }
   ]
 }
