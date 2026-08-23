@@ -1,5 +1,8 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import formbody from '@fastify/formbody';
 import jwt from '@fastify/jwt';
+import fastifyStatic from '@fastify/static';
 import { config, DomainError } from '@ftm/core';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
@@ -8,12 +11,16 @@ import { demandRoutes } from './routes/api/demands';
 import { farmerRoutes } from './routes/api/farmers';
 import { lotRoutes } from './routes/api/lots';
 import { registryRoutes } from './routes/api/registries';
+import { ussdRoutes } from './routes/ussd';
+
+const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export async function buildServer(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? true });
 
   await app.register(formbody); // Africa's Talking posts form-encoded USSD payloads
   await app.register(jwt, { secret: config.JWT_SECRET });
+  await app.register(fastifyStatic, { root: path.join(SERVER_ROOT, 'public') });
 
   app.decorate('authBuyer', async (req, reply) => {
     try {
@@ -36,6 +43,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
 
   app.get('/health', async () => ({ ok: true }));
 
+  await app.register(ussdRoutes);
   await app.register(authRoutes, { prefix: '/api' });
   await app.register(registryRoutes, { prefix: '/api' });
   await app.register(farmerRoutes, { prefix: '/api' });

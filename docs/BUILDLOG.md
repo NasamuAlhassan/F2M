@@ -25,3 +25,12 @@ Chronological record of what was built, changed, or edited, and why. One section
 - `DomainError` with stable codes: surfaces map them (REST → HTTP status now; USSD → error line in M2).
 - Fastify server (`apps/server`): JWT buyer auth, error handler mapping DomainError/ZodError, routes for auth, registries, farmers, lots (+trace), demands. `runMigrations()` on boot so a fresh checkout needs no manual db step.
 - Verified: 17 vitest tests green (unit conversions incl. olonka→kg, phone normalization, price expansion, full API flow: login → farmer → olonka lot → trace shows LOT_REGISTERED → authed demand; clock rejections for perishable forward listing and over-long tomato windows). Live server smoke-tested with Invoke-RestMethod.
+
+## 2026-08-23 · M2 complete — USSD machine, screens, local tester
+
+- `apps/server/src/ussd/machine.ts`: generic screen machine — screens return `{key, params}` i18n texts, the serializer is the only place `t()` runs (D-012 enforced structurally); server-side sessions keyed by the gateway sessionId, last-`*`-segment input parsing (D-008), 5-minute session TTL with restart-at-home, domain errors become terse error lines instead of dead sessions.
+- Screens: welcome/register (name → paged region list → district → confirm), home menu with live offer-count badge, sell flow (commodity → commodity-scoped units incl. olonka → quantity → quality band → ready date **gated by the commodity clock**: tomato gets Today/Tomorrow, maize gets Now…1 month → confirm → lot code), my lots (+detail), offers list (empty until M3 matching), payments (empty until M4). All USSD strings added to `en.json` (~60 keys).
+- `POST /ussd` route speaking the Africa's Talking wire format exactly (form-encoded in, `CON`/`END` text/plain out) + `public/ussd-tester.html`, a phone-styled page that speaks the same format against the real route — dev needs no tunnel.
+- Verified: 23 tests green, including scripted keypress walks (registration with region paging, olonka lot listing checked in the DB at 500kg canonical, perishable ready-choice gating, invalid-input re-render). Live `POST /ussd` + tester page smoke-tested.
+- **Deferred to account setup:** one Africa's Talking sandbox simulator session over ngrok (needs the user's AT account; the wire format is already exercised by the tester and tests).
+- Fixed while testing: SQLite ASC text sort puts `NORTHERN` before `NORTH_EAST` (underscore > letters) — harmless for users, mattered to the test's keypress script.
