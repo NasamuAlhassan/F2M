@@ -4,8 +4,16 @@ import { invalid, listLines, paginate, parseSelection } from './common';
 
 export const welcome: UssdScreen = {
   key: 'welcome',
-  render: () => [{ key: 'ussd.welcome.title' }, { key: 'ussd.welcome.register' }],
-  handleInput: (input) => (input === '1' ? { next: 'reg_name' } : invalid()),
+  render: () => [{ key: 'ussd.welcome.title' }, { key: 'ussd.welcome.register' }, { key: 'ussd.welcome.prices' }],
+  handleInput: (input, ctx) => {
+    if (input === '1') return { next: 'reg_name' };
+    if (input === '2') {
+      // Prices are open to everyone — no registration gate on information.
+      ctx.data.pricesPage = 0;
+      return { next: 'prices_commodity' };
+    }
+    return invalid();
+  },
 };
 
 export const regName: UssdScreen = {

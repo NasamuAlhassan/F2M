@@ -382,6 +382,26 @@ export const lotEvents = sqliteTable(
   (t) => [uniqueIndex('lot_events_lot_seq_idx').on(t.lotId, t.seq)],
 );
 
+// Published reference prices — what her onions fetch in Techiman before she
+// agrees to a number at her gate. Latest-only per (commodity, market); real
+// feeds can relax this later.
+export const marketPrices = sqliteTable(
+  'market_prices',
+  {
+    id: id(),
+    commodityId: text('commodity_id')
+      .notNull()
+      .references(() => commodities.id),
+    market: text('market').notNull(), // proper noun, e.g. 'Techiman', 'Agbogbloshie'
+    regionCode: text('region_code')
+      .notNull()
+      .references(() => regions.code),
+    pricePerKg: integer('price_per_kg').notNull(), // pesewas
+    recordedAt: integer('recorded_at').notNull(),
+  },
+  (t) => [uniqueIndex('market_prices_commodity_market_idx').on(t.commodityId, t.market)],
+);
+
 export const ussdSessions = sqliteTable('ussd_sessions', {
   sessionId: text('session_id').primaryKey(), // the gateway's sessionId
   phone: text('phone').notNull(),
@@ -408,3 +428,4 @@ export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type LotEvent = typeof lotEvents.$inferSelect;
 export type UssdSession = typeof ussdSessions.$inferSelect;
 export type Region = typeof regions.$inferSelect;
+export type MarketPrice = typeof marketPrices.$inferSelect;

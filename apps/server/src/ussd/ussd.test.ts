@@ -104,6 +104,22 @@ describe('USSD flows (M2)', () => {
     expect(bad).toContain('1. Sell produce'); // same screen re-rendered
   });
 
+  it('lets an UNREGISTERED phone browse market prices (M10)', async () => {
+    const [welcome, commodityList, prices] = await dial('+233559990001', ['2', '1']);
+    expect(welcome).toContain('2. Market prices'); // no registration gate on information
+    expect(commodityList).toContain('Prices for which crop?');
+    expect(prices).toContain('Latest Maize prices:');
+    expect(prices).toContain('Techiman: GHS 3.80/kg');
+    expect(prices).toContain('Agbogbloshie: GHS 4.60/kg');
+  });
+
+  it('reaches market prices from the registered home menu (M10)', async () => {
+    const [home, , prices] = await dial(PHONE, ['5', '2']);
+    expect(home).toContain('5. Market prices');
+    expect(home).toContain('6. Help');
+    expect(prices).toContain('Latest Tomato prices:');
+  });
+
   it('shows an offer with the price-per-grade table and accepts it (M3)', async () => {
     const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
     const now = Date.now();

@@ -15,6 +15,13 @@
       "when": 1787520708990,
       "tag": "0001_flowery_millenium_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787520906096,
+      "tag": "0002_heavy_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

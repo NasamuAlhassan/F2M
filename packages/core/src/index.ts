@@ -16,6 +16,7 @@ export {
   type Lot,
   type LotEvent,
   type LotEventType,
+  type MarketPrice,
   type Match,
   type Payment,
   type Photo,
@@ -41,6 +42,7 @@ export * from './domain/ledger';
 export * from './domain/paymentFlow';
 export * from './domain/photos';
 export * from './domain/gradingFlow';
+export * from './domain/marketPrices';
 export * from './providers/payment/index';
 export * from './providers/grading/index';
 export { transitionContract, type Actor, type TransitionExtra } from './state/contractMachine';

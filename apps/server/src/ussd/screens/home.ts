@@ -13,6 +13,7 @@ export const home: UssdScreen = {
       { key: 'ussd.home.offers', params: { badge: openOffers > 0 ? ` (${openOffers})` : '' } },
       { key: 'ussd.home.lots' },
       { key: 'ussd.home.payments' },
+      { key: 'ussd.home.prices' },
       { key: 'ussd.home.help' },
     ];
     return lines;
@@ -29,6 +30,9 @@ export const home: UssdScreen = {
       case '4':
         return { next: 'payments' };
       case '5':
+        ctx.data.pricesPage = 0;
+        return { next: 'prices_commodity' };
+      case '6':
         return { end: [{ key: 'ussd.help' }] };
       default:
         return invalid();

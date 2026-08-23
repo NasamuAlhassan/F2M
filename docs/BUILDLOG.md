@@ -94,3 +94,11 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **Bug found and fixed:** `npm run db:seed` had been a silent no-op since M0 — `seed.ts` only exports the function; running the file directly executed nothing. New `run-seed.ts` runner applies pending migrations then seeds idempotently. (`db:reset` was never affected — it always called `seed()` properly, which is why every earlier milestone still seeded correctly.)
 - New registry-coherence suite: for EVERY commodity — catalog name resolves, ≥1 unit each with catalog label and positive kg, active rubric parses with a label and full band descriptors per criterion, clock consistent with category (perishables never forward, grains always storable). This is the test that keeps "adding cashew or shea means writing a rubric" honest.
 - Verified: 82 tests green.
+
+## 2026-08-23 · M10 complete — market price information
+
+- The vision's honest near-term offer instead of unbuildable forecasting: published reference prices per commodity per market, so a farmer knows what her onions fetch in Techiman or Agbogbloshie before she agrees to a number at her gate.
+- `market_prices` table (migration 0002): latest-only per (commodity, market) with an upsert entry point (`upsertMarketPrice`) that a real price feed can call later; seeded with reference prices for all 8 commodities across Techiman, Agbogbloshie, Kumasi Central, and Tamale Aboabo (clearly placeholder values, timestamped).
+- **USSD: prices are open to everyone — no registration gate on information.** The unregistered welcome screen now offers "2. Market prices" directly; registered farmers get "5. Market prices" on home (Help moved to 6). Commodity list → per-market price list.
+- Portal: public `GET /api/market-prices` + a Market prices page (commodity × market grid) linked in the nav — the same numbers the farmer sees.
+- Verified: 85 tests green (unregistered USSD browse asserting actual GHS figures, home-menu path, API shape) + live USSD walk on the dev server.

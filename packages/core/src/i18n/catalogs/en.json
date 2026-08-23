@@ -89,6 +89,7 @@
 
   "ussd.welcome.title": "Welcome to Farm to Market",
   "ussd.welcome.register": "1. Register as a farmer",
+  "ussd.welcome.prices": "2. Market prices",
 
   "ussd.reg.name": "Enter your full name:",
   "ussd.reg.region": "Select your region:",
@@ -103,7 +104,8 @@
   "ussd.home.offers": "2. My offers{badge}",
   "ussd.home.lots": "3. My lots",
   "ussd.home.payments": "4. Payments",
-  "ussd.home.help": "5. Help",
+  "ussd.home.prices": "5. Market prices",
+  "ussd.home.help": "6. Help",
   "ussd.help": "Farm to Market connects farmers to buyers. List your produce, receive offers with clear prices per grade, and get paid on MoMo after pickup.",
 
   "ussd.sell.commodity": "What are you selling?",
@@ -159,6 +161,11 @@
   "ussd.offer.accepted": "Accepted. Up to {amount} is being held for you and pays out after pickup and grading.",
   "ussd.offer.declined": "Offer declined. Your lot stays listed for other buyers.",
   "ussd.offer.expired": "Sorry, this offer has expired. Your lot stays listed.",
+
+  "ussd.prices.commodity": "Prices for which crop?",
+  "ussd.prices.title": "Latest {commodity} prices:",
+  "ussd.prices.item": "{market}: {price}/kg",
+  "ussd.prices.none": "No price data yet for {commodity}.",
 
   "ussd.pay.title": "Recent payments:",
   "ussd.pay.none": "No payments yet.",

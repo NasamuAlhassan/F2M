@@ -9,6 +9,7 @@ import { ContractDetailPage } from './pages/ContractDetail';
 import { DemandDetailPage } from './pages/DemandDetail';
 import { DemandsPage } from './pages/Demands';
 import { LoginPage } from './pages/Login';
+import { PricesPage } from './pages/Prices';
 import { TracePage } from './pages/Trace';
 
 const queryClient = new QueryClient({
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
         children: [
           { path: '/', element: <Navigate to="/demands" replace /> },
           { path: '/demands', element: <DemandsPage /> },
+          { path: '/prices', element: <PricesPage /> },
           { path: '/demands/:id', element: <DemandDetailPage /> },
           { path: '/contracts/:id', element: <ContractDetailPage /> },
           { path: '/lots/:id/trace', element: <TracePage /> },

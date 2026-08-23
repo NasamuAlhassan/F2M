@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { RubricDoc, ClockConfig } from '../domain/types';
 import { db } from './client';
-import { buyers, commodities, regions, rubrics, units } from './schema';
+import { buyers, commodities, marketPrices, regions, rubrics, units } from './schema';
 
 // Approximate region centroids — distance fallback when a farmer has no GPS fix.
 const REGION_SEED: Array<{ code: string; lat: number; lng: number }> = [
@@ -550,6 +550,8 @@ export async function seed(): Promise<void> {
       .run();
   }
 
+  seedMarketPrices();
+
   const existingBuyer = db.select().from(buyers).where(eq(buyers.email, DEMO_BUYER.email)).get();
   if (!existingBuyer) {
     db.insert(buyers)
@@ -565,4 +567,43 @@ export async function seed(): Promise<void> {
   }
 
   console.log(`Seed complete. Demo buyer login: ${DEMO_BUYER.email} / ${DEMO_BUYER.password}`);
+}
+
+// Reference market prices (GHS/kg → pesewas). Placeholder data clearly marked
+// as reference — a real price feed replaces upsertMarketPrice's caller later.
+const MARKETS: Array<{ market: string; regionCode: string }> = [
+  { market: 'Techiman', regionCode: 'BONO_EAST' },
+  { market: 'Agbogbloshie', regionCode: 'GREATER_ACCRA' },
+  { market: 'Kumasi Central', regionCode: 'ASHANTI' },
+  { market: 'Tamale Aboabo', regionCode: 'NORTHERN' },
+];
+
+// pesewas/kg in market order above
+const PRICE_SEED: Record<string, [number, number, number, number]> = {
+  MAIZE: [380, 460, 420, 350],
+  TOMATO: [550, 780, 650, 500],
+  YAM: [320, 450, 380, 280],
+  RICE: [900, 1100, 1000, 850],
+  GROUNDNUT: [1200, 1450, 1300, 1050],
+  PEPPER: [800, 1050, 900, 700],
+  ONION: [650, 800, 720, 580],
+  PLANTAIN: [300, 420, 360, 340],
+};
+
+function seedMarketPrices(): void {
+  const now = Date.now();
+  const allCommodities = db.select().from(commodities).all();
+  for (const [code, prices] of Object.entries(PRICE_SEED)) {
+    const commodity = allCommodities.find((c) => c.code === code);
+    if (!commodity) continue;
+    MARKETS.forEach(({ market, regionCode }, i) => {
+      db.insert(marketPrices)
+        .values({ commodityId: commodity.id, market, regionCode, pricePerKg: prices[i]!, recordedAt: now })
+        .onConflictDoUpdate({
+          target: [marketPrices.commodityId, marketPrices.market],
+          set: { pricePerKg: prices[i]!, recordedAt: now },
+        })
+        .run();
+    });
+  }
 }

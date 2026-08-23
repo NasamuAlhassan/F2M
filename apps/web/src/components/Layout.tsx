@@ -14,6 +14,9 @@ export function Layout() {
             <Link to="/demands" className="hover:text-green-200">
               Demands
             </Link>
+            <Link to="/prices" className="hover:text-green-200">
+              Market prices
+            </Link>
             <button
               className="rounded bg-green-800 px-3 py-1 hover:bg-green-700"
               onClick={() => {

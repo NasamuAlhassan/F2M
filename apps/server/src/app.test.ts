@@ -31,6 +31,17 @@ describe('API spine (M1)', () => {
     expect(body.regions).toHaveLength(16);
   });
 
+  it('serves public market prices (M10)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/market-prices' });
+    expect(res.statusCode).toBe(200);
+    const { prices } = res.json();
+    expect(prices.length).toBe(8 * 4); // 8 commodities × 4 markets
+    const maizeTechiman = prices.find(
+      (p: { commodityCode: string; market: string }) => p.commodityCode === 'MAIZE' && p.market === 'Techiman',
+    );
+    expect(maizeTechiman.pricePerKg).toBe(380);
+  });
+
   it('logs the demo buyer in', async () => {
     const res = await app.inject({
       method: 'POST',

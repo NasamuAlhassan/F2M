@@ -3,6 +3,7 @@ import { home } from './screens/home';
 import { lotDetail, lotsList } from './screens/lots';
 import { offerDetail, offersList } from './screens/offers';
 import { paymentsScreen } from './screens/payments';
+import { pricesCommodity, pricesShow } from './screens/prices';
 import { regConfirm, regDistrict, regName, regRegion, welcome } from './screens/register';
 import { sellBand, sellCommodity, sellConfirm, sellQty, sellReady, sellUnit } from './screens/sell';
 
@@ -24,6 +25,8 @@ registerScreens(
   offersList,
   offerDetail,
   paymentsScreen,
+  pricesCommodity,
+  pricesShow,
 );
 
 export { handleUssdRequest } from './machine';
