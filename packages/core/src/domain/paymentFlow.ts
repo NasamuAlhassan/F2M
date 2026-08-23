@@ -6,8 +6,16 @@ import { transitionContract } from '../state/contractMachine';
 import { DomainError, notFound } from './errors';
 import { ACCOUNTS, postJournal } from './ledger';
 import { acceptOffer } from './matching';
+import { queueSms } from './notifications';
+import { getCommodityById } from './registries';
 import { appendLotEvent } from './trace';
+import { formatGhs } from './types';
+import { t } from '../i18n';
 import { config } from '../config';
+
+function smsDate(ms: number): string {
+  return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
 const MAX_FUNDING_ATTEMPTS = 2;
 
@@ -225,6 +233,23 @@ export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: nu
             ]);
           },
         });
+        const farmer = db.select().from(farmers).where(eq(farmers.id, contract.farmerId)).get();
+        const demand = db.select().from(demands).where(eq(demands.id, contract.demandId)).get();
+        if (farmer && demand) {
+          queueSms({
+            phone: farmer.phone,
+            locale: farmer.locale,
+            templateKey: 'sms.funded',
+            params: {
+              amount: formatGhs(contract.holdAmount),
+              commodity: t(farmer.locale, getCommodityById(contract.commodityId).nameKey),
+              start: smsDate(demand.windowStart),
+              end: smsDate(demand.windowEnd),
+            },
+            contractId: contract.id,
+            lotId: contract.lotId,
+          });
+        }
       } else if (status === 'failed') {
         handleCollectionFailure(contract.id);
       }
@@ -247,7 +272,17 @@ export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: nu
             ]);
           },
         });
-        // The farmer sees PAYMENT_RELEASED in the trace, distinct from SETTLED.
+        const farmer = db.select().from(farmers).where(eq(farmers.id, contract.farmerId)).get();
+        if (farmer) {
+          queueSms({
+            phone: farmer.phone,
+            locale: farmer.locale,
+            templateKey: 'sms.paid',
+            params: { amount: formatGhs(finalAmount) },
+            contractId: contract.id,
+            lotId: contract.lotId,
+          });
+        }
       }
       // A failed disbursement stays GRADED; the sweep retries via releaseDuePayments.
     }

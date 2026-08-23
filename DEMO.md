@@ -26,7 +26,7 @@ Start everything:
 npm run dev              # server on :3000, buyer portal on :5173
 ```
 
-**Tab 1 — the farmer's phone:** open `http://localhost:3000/ussd-tester.html`. This page speaks the exact Africa's Talking webhook format, so everything it does works unchanged on the AT sandbox.
+**Tab 1 — the farmer's phone:** open `http://localhost:3000/ussd-tester.html`. This page speaks the exact Africa's Talking webhook format, so everything it does works unchanged on the AT sandbox. The **SMS inbox** panel beside the phone shows the texts the platform sends this number (new offer, funds secured, grade with its reason, payout) as they arrive.
 
 **Tab 2 — the buyer portal:** open `http://localhost:5173`. Log in as `buyer@demo.ftm` (password printed by `npm run db:reset`).
 

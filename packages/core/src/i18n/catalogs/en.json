@@ -172,5 +172,11 @@
   "ussd.pay.item": "{amount} - {status}",
   "ussd.paystatus.pending": "On the way",
   "ussd.paystatus.successful": "Paid",
-  "ussd.paystatus.failed": "Failed"
+  "ussd.paystatus.failed": "Failed",
+
+  "sms.newOffer": "Farm to Market: New offer - {kg}kg {commodity} at up to {price}/kg. Dial {code} and choose My offers.",
+  "sms.funded": "Farm to Market: {amount} is secured for your {commodity}. Pickup {start} - {end}.",
+  "sms.graded": "Farm to Market: Your {commodity} graded {band}, pays {amount}. Reason: {reason}. Dial {code}, My lots, to agree or dispute.",
+  "sms.rejected": "Farm to Market: Sorry, your {commodity} was rejected at grading: {reason}. The buyer hold was refunded and your lot is listed again.",
+  "sms.paid": "Farm to Market: {amount} has been sent to your MoMo. Thank you for selling on Farm to Market."
 }

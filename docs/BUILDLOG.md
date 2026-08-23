@@ -102,3 +102,12 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **USSD: prices are open to everyone — no registration gate on information.** The unregistered welcome screen now offers "2. Market prices" directly; registered farmers get "5. Market prices" on home (Help moved to 6). Commodity list → per-market price list.
 - Portal: public `GET /api/market-prices` + a Market prices page (commodity × market grid) linked in the nav — the same numbers the farmer sees.
 - Verified: 85 tests green (unregistered USSD browse asserting actual GHS figures, home-menu path, API shape) + live USSD walk on the dev server.
+
+## 2026-08-23 · M11 complete — SMS notification outbox
+
+- "We will text you" has been in the USSD copy since M2 — now it's true. `notifications` outbox (migration 0003): message text resolved into the farmer's locale at queue time (what was promised is what's archived — D-019), delivered by the sweep's fast lane through a `NotifyProvider` — mock offline, **Africa's Talking SMS implemented** and selected by `NOTIFY_PROVIDER=at` when the key lands. Failures recorded per row.
+- Hooks at the four moments that matter, plus the honest one: offer made (with kg, commodity, best price, and the shortcode to dial), funds secured (amount + pickup window), graded (band, payout, **the model's reason**, dial-in hint), paid, and rejected (reason + "your lot is listed again").
+- The USSD tester page grew an **SMS inbox panel** (via `GET /api/dev/sms`) — the offline two-tab demo now shows the farmer's texts arriving in real time next to the phone.
+- `npm run demo` gained an SMS step printing every message that reached the farmer's phone, all `[sent]`.
+- **Demo-script bug found by the REJECT retry path:** after a refund restored the first lot, the identical replacement lot tied in scoring and the new offer could land on the OLD lot — while the script blindly pressed "1" for the newest on the USSD list. Fixed twice over: the janitor now parks leftover registered maize lots per attempt, and the keypresses are derived from the contract's actual lot position on the list.
+- Verified: 88 tests green + full typecheck + demo run green with a REJECT-free grade-A settle showing the four-line ledger (no refund remainder — the exact-payout case).

@@ -6,11 +6,14 @@ import { gradeWithFallback } from '../providers/grading/index';
 import { transitionContract } from '../state/contractMachine';
 import { contractPriceTerms, getContract } from './contracts';
 import { DomainError } from './errors';
+import { getFarmerById } from './farmers';
+import { queueSms } from './notifications';
 import { initiateRelease, refundHold } from './paymentFlow';
 import { listPhotosForContract, photoAsGradingImage } from './photos';
 import { getActiveRubric, getCommodityById, getRubricById } from './registries';
 import { appendLotEvent } from './trace';
-import { rubricDocSchema, type GradeBand } from './types';
+import { formatGhs, rubricDocSchema, type GradeBand } from './types';
+import { t } from '../i18n';
 
 const MAX_GRADING_ATTEMPTS = 2; // initial + one re-grade after a dispute — the re-grade is final
 
@@ -117,6 +120,38 @@ export async function runGrading(contractId: string): Promise<Grading> {
 
   if (result.gradeBand === 'REJECT') {
     refundHold(contractId, { reason: 'grade_reject', attempt });
+  }
+
+  // The grade reaches her phone the moment it exists — with the reason.
+  const farmer = getFarmerById(contract.farmerId);
+  if (farmer) {
+    const commodityName = t(farmer.locale, commodity.nameKey);
+    const reason = result.reasons[0]?.observation ?? '';
+    queueSms(
+      result.gradeBand === 'REJECT'
+        ? {
+            phone: farmer.phone,
+            locale: farmer.locale,
+            templateKey: 'sms.rejected',
+            params: { commodity: commodityName, reason },
+            contractId,
+            lotId: contract.lotId,
+          }
+        : {
+            phone: farmer.phone,
+            locale: farmer.locale,
+            templateKey: 'sms.graded',
+            params: {
+              commodity: commodityName,
+              band: t(farmer.locale, `band.${result.gradeBand}`),
+              amount: formatGhs(finalAmount),
+              reason,
+              code: config.USSD_SHORTCODE,
+            },
+            contractId,
+            lotId: contract.lotId,
+          },
+    );
   }
   return completed;
 }

@@ -11,12 +11,16 @@ import {
   type Lot,
   type Match,
 } from '../db/schema';
+import { config } from '../config';
+import { t } from '../i18n';
 import { transitionContract } from '../state/contractMachine';
 import { DomainError, notFound } from './errors';
+import { getFarmerById } from './farmers';
 import { haversineKm, resolvePoint } from './geo';
+import { queueSms } from './notifications';
 import { getCommodityById } from './registries';
 import { appendLotEvent } from './trace';
-import { bestBand, priceTermsSchema, type ClockConfig, type GradeBand, type ScoreBreakdown } from './types';
+import { bestBand, formatGhs, priceTermsSchema, type ClockConfig, type GradeBand, type ScoreBreakdown } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BAND_RANK: Record<string, number> = { A: 3, B: 2, C: 1 };
@@ -217,6 +221,24 @@ function matchDemand(demand: Demand, onlyLotId?: string): OfferResult[] {
       return { match, contract };
     });
     results.push(offer);
+
+    // "We will text you when a buyer sends an offer" — keep that promise.
+    const farmer = getFarmerById(lot.farmerId);
+    if (farmer) {
+      queueSms({
+        phone: farmer.phone,
+        locale: farmer.locale,
+        templateKey: 'sms.newOffer',
+        params: {
+          kg: allocatedKg,
+          commodity: t(farmer.locale, commodity.nameKey),
+          price: formatGhs(priceTerms[holdBand] ?? 0),
+          code: config.USSD_SHORTCODE,
+        },
+        contractId: offer.contract.id,
+        lotId: lot.id,
+      });
+    }
   }
   return results;
 }

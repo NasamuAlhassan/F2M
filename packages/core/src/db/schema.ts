@@ -402,6 +402,27 @@ export const marketPrices = sqliteTable(
   (t) => [uniqueIndex('market_prices_commodity_market_idx').on(t.commodityId, t.market)],
 );
 
+// SMS outbox — "we will text you" made true. Messages are resolved into the
+// recipient's locale at queue time; the sweep delivers via the configured
+// provider (mock offline, Africa's Talking when the key lands).
+export const notifications = sqliteTable(
+  'notifications',
+  {
+    id: id(),
+    phone: text('phone').notNull(), // E.164
+    templateKey: text('template_key').notNull(),
+    message: text('message').notNull(),
+    contractId: text('contract_id').references(() => contracts.id),
+    lotId: text('lot_id').references(() => lots.id),
+    status: text('status', { enum: ['pending', 'sent', 'failed'] }).notNull().default('pending'),
+    provider: text('provider'),
+    error: text('error'),
+    createdAt: createdAt(),
+    sentAt: integer('sent_at'),
+  },
+  (t) => [index('notifications_phone_idx').on(t.phone), index('notifications_status_idx').on(t.status)],
+);
+
 export const ussdSessions = sqliteTable('ussd_sessions', {
   sessionId: text('session_id').primaryKey(), // the gateway's sessionId
   phone: text('phone').notNull(),
@@ -429,3 +450,4 @@ export type LotEvent = typeof lotEvents.$inferSelect;
 export type UssdSession = typeof ussdSessions.$inferSelect;
 export type Region = typeof regions.$inferSelect;
 export type MarketPrice = typeof marketPrices.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;

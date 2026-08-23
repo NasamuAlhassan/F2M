@@ -15,7 +15,7 @@ npm install
 npm run db:reset        # migrate + seed (prints the demo buyer login)
 npm run demo            # one lot, end to end, fully offline — exits 0 on SETTLED
 npm run dev             # server :3000 + buyer portal :5173
-npm test                # 46 tests: scorer, state machine, ledger invariants, USSD walks, grading
+npm test                # 88 tests: scorer, state machine, ledger invariants, USSD walks, grading, SMS
 ```
 
 Then follow [`DEMO.md`](DEMO.md) for the two-tab demo: the USSD tester (`localhost:3000/ussd-tester.html`) as the farmer, the portal (`localhost:5173`) as the buyer.
@@ -41,5 +41,6 @@ Mock mode needs zero keys. To go real, copy `.env.example` → `.env` and fill i
 | AI grading | HuggingFace router (free vision models) | `HF_TOKEN` + `GRADING_PROVIDER=hf` |
 | Payments | MTN MoMo sandbox (Collections + Disbursements) | subscribe to both products, `npm run momo:provision`, `PAYMENT_PROVIDER=momo` |
 | USSD | Africa's Talking sandbox | service code + ngrok, callback → `/ussd` |
+| SMS | Africa's Talking | `AT_API_KEY` + `NOTIFY_PROVIDER=at` |
 
 Every external boundary has a deterministic mock behind the same interface, so nothing here blocks on an account (see D-013 in the decision log).

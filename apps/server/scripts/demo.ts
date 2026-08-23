@@ -24,9 +24,12 @@ import {
   getFarmerByPhone,
   getTrace,
   listContractsForFarmer,
+  listLotsByFarmer,
+  listNotificationsForPhone,
   pollPaymentsOnce,
   runMigrations,
   schema,
+  sendPendingNotifications,
 } from '@ftm/core';
 import { buildServer } from '../src/app';
 
@@ -94,6 +97,15 @@ async function pickupPhoto(): Promise<Buffer> {
   return sharp(noise, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 88 }).toBuffer();
 }
 
+/** The keypress that selects this lot on the USSD "My lots" screen (same query, same order). */
+function lotKeypress(farmerId: string, lotId: string): string {
+  const idx = listLotsByFarmer(farmerId)
+    .slice(0, 5)
+    .findIndex((l) => l.id === lotId);
+  if (idx === -1) fail('contract lot not visible on the USSD lots screen');
+  return String(idx + 1);
+}
+
 async function waitFor(label: string, predicate: () => boolean, timeoutMs = 30_000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -121,7 +133,16 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
     .set({ status: 'cancelled' })
     .where(and(eq(schema.demands.commodityId, maize.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
     .run();
-  if (stale.changes > 0) detail(`(cleaned up ${stale.changes} lingering open maize demand(s))`);
+  // Also park leftover registered maize lots (a refunded attempt restores its
+  // lot) — identical lots tie in scoring and the offer could land on the old one.
+  const parked = db
+    .update(schema.lots)
+    .set({ status: 'withdrawn' })
+    .where(and(eq(schema.lots.commodityId, maize.id), eq(schema.lots.status, 'registered')))
+    .run();
+  if (stale.changes + parked.changes > 0) {
+    detail(`(cleaned up ${stale.changes} open maize demand(s), parked ${parked.changes} leftover lot(s))`);
+  }
 
   // ---- 1. REGISTER (USSD) ----
   step(`Register — farmer dials in on a basic phone (${phone})`);
@@ -202,7 +223,7 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   const pickup = ussdSession(phone);
   await pickup();
   await pickup('3'); // My lots
-  await pickup('1'); // newest lot
+  await pickup(lotKeypress(farmer.id, contract.lotId)); // the contracted lot
   const confirmed = await pickup('1'); // Confirm pickup done
   if (!confirmed.startsWith('END Thank you')) fail(`pickup confirm failed: ${confirmed}`);
   const graded = await apiJson<{ grading: { gradeBand: string; confidence: number }; contract: { state: string } }>(
@@ -225,7 +246,7 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   const agree = ussdSession(phone);
   await agree();
   await agree('3');
-  const gradeScreen = await agree('1');
+  const gradeScreen = await agree(lotKeypress(farmer.id, contract.lotId));
   for (const line of gradeScreen.replace('CON ', '').split('\n').slice(1, 3)) detail(line);
   const agreed = await agree('1'); // Agree — get paid now
   if (!agreed.startsWith('END Thank you')) fail(`agree failed: ${agreed}`);
@@ -236,6 +257,12 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   step('Trace — the record the lot carries from farm to buyer');
   for (const e of getTrace(final.lotId)) {
     console.log(`  #${String(e.seq).padStart(2)} ${e.type.padEnd(18)} ${e.actorType}`);
+  }
+
+  step('SMS — every step reached her phone');
+  await sendPendingNotifications();
+  for (const n of listNotificationsForPhone(phone, 6).reverse()) {
+    console.log(`  [${n.status}] ${n.message}`);
   }
 
   step('Ledger — every journal sums to zero');

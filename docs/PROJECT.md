@@ -74,6 +74,10 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M5 — photos + grading | **done** (live HF verdict pending HF token) |
 | M6 — buyer portal | **done** (verified live in Chrome, full spine twice incl. REJECT path) |
 | M7 — settlement + scripted demo | **done** (`npm run demo` exits 0, offline) |
+| M8 — lifecycle sweeps (demand expiry, missed-pickup refunds) | **done** |
+| M9 — commodity expansion (rice, groundnut, pepper, onion, plantain) | **done** |
+| M10 — market price information (USSD + portal, no registration gate) | **done** |
+| M11 — SMS notification outbox (mock + Africa's Talking ready) | **done** |
 
 **MVP:** criteria 1 and 3 met (offline scripted demo to SETTLED; two-tab manual demo verified live in a browser). Criterion 2 — the same demo on real HF grading + MoMo sandbox — is code-complete and waits only on external accounts (HF token, MoMo sandbox subscriptions, Africa's Talking sandbox + ngrok).
 

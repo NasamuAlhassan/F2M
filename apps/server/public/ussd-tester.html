@@ -59,7 +59,29 @@
     form-encoded <code>sessionId</code>, <code>phoneNumber</code>, and the cumulative
     <code>*</code>-joined <code>text</code> history. What works here works on the AT sandbox unchanged.</p>
     <p>Try it: Dial → <code>1</code> to register, then dial again to sell produce.</p>
+    <h1 style="margin-top:1.2rem">SMS inbox</h1>
+    <p style="margin-bottom:.4rem">Texts the platform sends this phone (offers, funding, grades, payouts):</p>
+    <div id="smsbox" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto"></div>
   </div>
+<script>
+  const smsbox = document.getElementById('smsbox');
+  async function refreshSms() {
+    try {
+      const phone = encodeURIComponent(document.getElementById('phone').value.trim());
+      const res = await fetch('/api/dev/sms?phone=' + phone);
+      const { messages } = await res.json();
+      smsbox.innerHTML = messages.length === 0
+        ? '<span style="color:#777;font-size:12px">No messages yet.</span>'
+        : messages.map(m =>
+            '<div style="background:#20261c;border:1px solid #3a4433;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.4">'
+            + '<div style="color:#dfe8d4">' + m.message.replace(/</g, '&lt;') + '</div>'
+            + '<div style="color:#7d8a70;font-size:10px;margin-top:3px">' + m.status + ' · ' + new Date(m.createdAt).toLocaleTimeString() + '</div>'
+            + '</div>').join('');
+    } catch { /* server not up yet */ }
+  }
+  setInterval(refreshSms, 3000);
+  refreshSms();
+</script>
 <script>
   const screen = document.getElementById('screen');
   const reply = document.getElementById('reply');

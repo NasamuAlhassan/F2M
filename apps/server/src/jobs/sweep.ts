@@ -5,6 +5,7 @@ import {
   refundMissedPickups,
   releaseDuePayments,
   runMatching,
+  sendPendingNotifications,
 } from '@ftm/core';
 import type { FastifyBaseLogger } from 'fastify';
 
@@ -14,6 +15,7 @@ export interface SweepResult {
   missedPickupsRefunded: number;
   releasesStarted: number;
   paymentsResolved: number;
+  smsDelivered: number;
 }
 
 /** One full sweep pass: expiries → missed-pickup refunds → rematch → due releases → payment polling. */
@@ -24,7 +26,8 @@ export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
   runMatching(); // catch demand/lot pairs that appeared between event-driven runs
   const releasesStarted = await releaseDuePayments(now);
   const { resolved: paymentsResolved } = await pollPaymentsOnce(now);
-  return { expiredOffers, expiredDemands, missedPickupsRefunded, releasesStarted, paymentsResolved };
+  const smsDelivered = await sendPendingNotifications();
+  return { expiredOffers, expiredDemands, missedPickupsRefunded, releasesStarted, paymentsResolved, smsDelivered };
 }
 
 export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
@@ -37,9 +40,12 @@ export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
       (err) => log.error(err, 'sweep failed'),
     );
   }, 60_000);
-  // Fast lane: payment status polling every 5s — sandbox callbacks are unreliable (D-009).
+  // Fast lane: payment status polling + SMS delivery every 5s — sandbox
+  // callbacks are unreliable (D-009), and a farmer's SMS should not wait a minute.
   const fast = setInterval(() => {
-    pollPaymentsOnce().catch((err) => log.error(err, 'payment poll failed'));
+    pollPaymentsOnce()
+      .then(() => sendPendingNotifications())
+      .catch((err) => log.error(err, 'fast sweep failed'));
   }, 5_000);
   slow.unref();
   fast.unref();

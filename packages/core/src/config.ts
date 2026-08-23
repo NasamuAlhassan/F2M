@@ -38,11 +38,17 @@ const envSchema = z
 
     AT_USERNAME: z.string().default('sandbox'),
     AT_API_KEY: z.string().optional(),
+
+    NOTIFY_PROVIDER: z.enum(['mock', 'at']).default('mock'),
+    USSD_SHORTCODE: z.string().default('*384*7247#'),
   })
   .superRefine((env, ctx) => {
     // Fail at boot with the exact missing keys for the providers actually selected.
     if (env.GRADING_PROVIDER === 'hf' && !env.HF_TOKEN) {
       ctx.addIssue({ code: 'custom', message: 'GRADING_PROVIDER=hf requires HF_TOKEN' });
+    }
+    if (env.NOTIFY_PROVIDER === 'at' && !env.AT_API_KEY) {
+      ctx.addIssue({ code: 'custom', message: 'NOTIFY_PROVIDER=at requires AT_API_KEY' });
     }
     if (env.PAYMENT_PROVIDER === 'momo') {
       for (const key of ['MOMO_SUB_KEY_COLLECTIONS', 'MOMO_SUB_KEY_DISBURSEMENTS', 'MOMO_API_USER', 'MOMO_API_KEY'] as const) {
