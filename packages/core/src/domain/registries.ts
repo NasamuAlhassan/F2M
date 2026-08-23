@@ -37,7 +37,8 @@ export function getCommodityById(id: string): Commodity & { clock: ClockConfig }
 }
 
 export function listUnits(commodityId: string): Unit[] {
-  return db.select().from(units).where(eq(units.commodityId, commodityId)).all();
+  // Deterministic order — these become numbered USSD menu items.
+  return db.select().from(units).where(eq(units.commodityId, commodityId)).orderBy(asc(units.code)).all();
 }
 
 export function getUnit(commodityId: string, unitCode: string): Unit {
