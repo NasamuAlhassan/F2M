@@ -1,0 +1,240 @@
+import { and, eq, inArray } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { db } from '../db/client';
+import { deliveryJobOffers, demands, drivers as driversTable, lots } from '../db/schema';
+import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
+import { verifyBuyerLogin } from './buyers';
+import { getContract, listContractsForFarmer } from './contracts';
+import { createDemand } from './demands';
+import { registerDriver, verifyDriverLogin } from './drivers';
+import { registerFarmer } from './farmers';
+import { accountBalance, ACCOUNTS, allJournalsBalanced, jobEscrowBalance } from './ledger';
+import {
+  acceptJob,
+  cancelStaleJobs,
+  confirmJobDelivery,
+  confirmJobPickup,
+  declineJob,
+  dispatchJob,
+  expireJobOffers,
+  getJob,
+  getJobForContract,
+  quoteTransport,
+  requestTransport,
+  retryDispatch,
+} from './logistics';
+import { registerLot } from './lots';
+import { acceptOfferAndHold, pollPaymentsOnce, refundHold, refundMissedPickups } from './paymentFlow';
+import { getCommodityByCode } from './registries';
+import { getTrace } from './trace';
+
+const DAY = 24 * 60 * 60 * 1000;
+
+beforeAll(() => {
+  setPaymentProvider(new MockPaymentProvider(0));
+});
+afterAll(() => {
+  setPaymentProvider(null);
+});
+
+let phoneCounter = 100;
+function nextPhone(prefix: string): string {
+  phoneCounter += 1;
+  return `${prefix}${String(phoneCounter).padStart(6, '0')}9`;
+}
+
+/** Park all drivers so each test controls exactly who is available. */
+function parkAllDrivers(): void {
+  db.update(driversTable).set({ active: false }).run();
+}
+
+/** Yam-lane isolated FUNDS_HELD contract (500kg → van class). */
+async function fundedContract(regionCode = 'GREATER_ACCRA') {
+  const yam = getCommodityByCode('YAM');
+  db.update(demands)
+    .set({ status: 'cancelled' })
+    .where(and(eq(demands.commodityId, yam.id), inArray(demands.status, ['open', 'partially_matched'])))
+    .run();
+  db.update(lots)
+    .set({ status: 'withdrawn' })
+    .where(and(eq(lots.commodityId, yam.id), eq(lots.status, 'registered')))
+    .run();
+
+  const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+  const farmer = registerFarmer({ phone: nextPhone('024'), name: 'Logistics Farmer', regionCode });
+  const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+  createDemand({
+    buyerId: buyer.id,
+    commodityCode: 'YAM',
+    quantityKg: 500,
+    minBand: 'B',
+    basePricePerKg: 400,
+    windowStart: Date.now(),
+    windowEnd: Date.now() + 7 * DAY,
+    regionCode: 'GREATER_ACCRA',
+  });
+  const offer = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
+  await acceptOfferAndHold(offer.id, farmer.id);
+  await pollPaymentsOnce();
+  expect(getContract(offer.id).state).toBe('FUNDS_HELD');
+  return { buyer, farmer, lot, contractId: offer.id };
+}
+
+function vanDriver(regionCode: string, name = 'Test Driver') {
+  return registerDriver({
+    phone: nextPhone('054'),
+    name,
+    regionCode,
+    vehicleClassCode: 'van',
+    pin: '1234',
+  });
+}
+
+describe('logistics (M13)', () => {
+  it('quotes from the rate card: cheapest class that carries the load', async () => {
+    parkAllDrivers();
+    const { contractId } = await fundedContract();
+    const quote = quoteTransport(contractId);
+    expect(quote.vehicleClass.code).toBe('van'); // 500kg exceeds the 400kg tricycle
+    expect(quote.quoteAmount).toBe(quote.vehicleClass.baseFee + Math.round(quote.vehicleClass.perKmRate * quote.distanceKm));
+  });
+
+  it('dispatches nearest-first, walks the ladder on decline/expiry, then NO_DRIVER + retry', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('ASHANTI'); // pickup ≈ Ashanti centroid
+    const near = vanDriver('ASHANTI', 'Near Driver');
+    const far = vanDriver('NORTHERN', 'Far Driver');
+
+    const job = requestTransport(contractId, buyer.id);
+    expect(job.state).toBe('REQUESTED');
+    expect(getTrace(job.lotId).map((e) => e.type)).toContain('TRANSPORT_REQUESTED');
+
+    // Nearest (Ashanti) holds the one live offer.
+    let offers = db.select().from(deliveryJobOffers).where(eq(deliveryJobOffers.jobId, job.id)).all();
+    expect(offers).toHaveLength(1);
+    expect(offers[0]!.driverId).toBe(near.id);
+
+    // Decline → the far driver is next.
+    declineJob(job.id, near.id);
+    offers = db.select().from(deliveryJobOffers).where(eq(deliveryJobOffers.jobId, job.id)).all();
+    expect(offers).toHaveLength(2);
+    expect(offers.find((o) => o.status === 'offered')!.driverId).toBe(far.id);
+
+    // Expire the far driver's offer → nobody left → NO_DRIVER.
+    expect(expireJobOffers(Date.now() + 11 * 60 * 1000)).toBe(1);
+    expect(getJob(job.id).state).toBe('NO_DRIVER');
+
+    // Buyer retries once a new driver appears — but both are blocked (one shot), so a fresh driver gets it.
+    const fresh = vanDriver('ASHANTI', 'Fresh Driver');
+    retryDispatch(job.id, buyer.id);
+    const liveOffer = db
+      .select()
+      .from(deliveryJobOffers)
+      .where(and(eq(deliveryJobOffers.jobId, job.id), eq(deliveryJobOffers.status, 'offered')))
+      .get();
+    expect(liveOffer!.driverId).toBe(fresh.id);
+  });
+
+  it('runs a job end to end: accept → fee held → pickup (auto-confirms contract) → delivered → PAID', async () => {
+    parkAllDrivers();
+    const { contractId, buyer, lot } = await fundedContract('BONO');
+    const driver = vanDriver('BONO');
+    const job = requestTransport(contractId, buyer.id);
+
+    await acceptJob(job.id, driver.id);
+    expect(getJob(job.id).state).toBe('ASSIGNED');
+    expect(getJob(job.id).driverId).toBe(driver.id);
+
+    await pollPaymentsOnce();
+    expect(getJob(job.id).state).toBe('FUNDS_HELD');
+    expect(jobEscrowBalance(job.id)).toBe(job.quoteAmount);
+
+    // Driver confirms goods on the vehicle — the produce contract's pickup confirms too (D-025).
+    confirmJobPickup(job.id, driver.id);
+    expect(getJob(job.id).state).toBe('PICKED_UP');
+    expect(getContract(contractId).state).toBe('PICKUP_CONFIRMED');
+
+    await confirmJobDelivery(job.id, buyer.id);
+    expect(getJob(job.id).state).toBe('DELIVERED');
+    await pollPaymentsOnce();
+
+    const done = getJob(job.id);
+    expect(done.state).toBe('PAID');
+    expect(jobEscrowBalance(job.id)).toBe(0);
+    expect(accountBalance(ACCOUNTS.driverPayable(driver.id))).toBe(job.quoteAmount);
+    expect(allJournalsBalanced()).toBe(true);
+
+    const types = getTrace(lot.id).map((e) => e.type);
+    for (const expected of ['TRANSPORT_REQUESTED', 'DRIVER_ASSIGNED', 'TRANSPORT_FUNDED', 'IN_TRANSIT', 'TRANSPORT_DELIVERED', 'DRIVER_PAID']) {
+      expect(types).toContain(expected);
+    }
+  });
+
+  it('guards actors: wrong driver cannot pick up, wrong buyer cannot confirm delivery', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('VOLTA');
+    const driver = vanDriver('VOLTA');
+    const stranger = vanDriver('AHAFO', 'Stranger');
+    const job = requestTransport(contractId, buyer.id);
+    await acceptJob(job.id, driver.id);
+    await pollPaymentsOnce();
+
+    expect(() => confirmJobPickup(job.id, stranger.id)).toThrow(/Not your job/);
+    await expect(confirmJobDelivery(job.id, 'not-the-buyer')).rejects.toThrow();
+  });
+
+  it('cancels and refunds a funded job when the produce contract dies', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('CENTRAL');
+    const driver = vanDriver('CENTRAL');
+    const job = requestTransport(contractId, buyer.id);
+    await acceptJob(job.id, driver.id);
+    await pollPaymentsOnce();
+    expect(getJob(job.id).state).toBe('FUNDS_HELD');
+
+    refundHold(contractId, { reason: 'test' }); // produce contract → CANCELLED_REFUNDED
+    expect(cancelStaleJobs()).toBe(1);
+
+    expect(getJob(job.id).state).toBe('CANCELLED_REFUNDED');
+    expect(jobEscrowBalance(job.id)).toBe(0);
+    expect(allJournalsBalanced()).toBe(true);
+  });
+
+  it('never treats goods-on-a-truck as a missed pickup', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('EASTERN');
+    const driver = vanDriver('EASTERN');
+    const job = requestTransport(contractId, buyer.id);
+    await acceptJob(job.id, driver.id);
+    await pollPaymentsOnce();
+    confirmJobPickup(job.id, driver.id);
+
+    // The far-future sweep may legitimately refund OTHER stale contracts from
+    // earlier tests — the claim here is that THIS in-transit one survives.
+    refundMissedPickups(Date.now() + 30 * DAY);
+    expect(getContract(contractId).state).toBe('PICKUP_CONFIRMED');
+    expect(getJob(job.id).state).toBe('PICKED_UP');
+  });
+
+  it('registers drivers with PIN login and blocks role collisions', async () => {
+    const phone = nextPhone('055');
+    registerDriver({ phone, name: 'Pin Driver', regionCode: 'BONO', vehicleClassCode: 'tricycle', pin: '4321' });
+    expect(verifyDriverLogin(phone, '4321').name).toBe('Pin Driver');
+    expect(() => verifyDriverLogin(phone, '0000')).toThrow(/Invalid/);
+
+    const farmerPhone = nextPhone('026');
+    registerFarmer({ phone: farmerPhone, name: 'Role Farmer', regionCode: 'BONO' });
+    expect(() =>
+      registerDriver({ phone: farmerPhone, name: 'X', regionCode: 'BONO', vehicleClassCode: 'van', pin: '1111' }),
+    ).toThrow(/already registered as a farmer/);
+  });
+
+  it('collects the fee at accept, not at request (D-024)', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('WESTERN');
+    const job = requestTransport(contractId, buyer.id);
+    // No driver accepted yet → no fee payment exists.
+    expect(getJobForContract(contractId)!.state).toBe('NO_DRIVER'); // no active drivers
+    expect(jobEscrowBalance(job.id)).toBe(0);
+  });
+});

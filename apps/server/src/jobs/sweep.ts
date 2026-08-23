@@ -1,5 +1,7 @@
 import {
+  cancelStaleJobs,
   expireDemands,
+  expireJobOffers,
   expireOffers,
   pollPaymentsOnce,
   refundMissedPickups,
@@ -13,21 +15,34 @@ export interface SweepResult {
   expiredOffers: number;
   expiredDemands: number;
   missedPickupsRefunded: number;
+  expiredJobOffers: number;
+  staleJobsCancelled: number;
   releasesStarted: number;
   paymentsResolved: number;
   smsDelivered: number;
 }
 
-/** One full sweep pass: expiries → missed-pickup refunds → rematch → due releases → payment polling. */
+/** One full sweep pass: expiries → missed-pickup refunds → job dispatch upkeep → rematch → releases → payment polling. */
 export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
   const expiredOffers = expireOffers(now);
   const expiredDemands = expireDemands(now);
   const missedPickupsRefunded = refundMissedPickups(now);
+  const expiredJobOffers = expireJobOffers(now);
+  const staleJobsCancelled = cancelStaleJobs(now);
   runMatching(); // catch demand/lot pairs that appeared between event-driven runs
   const releasesStarted = await releaseDuePayments(now);
   const { resolved: paymentsResolved } = await pollPaymentsOnce(now);
   const smsDelivered = await sendPendingNotifications();
-  return { expiredOffers, expiredDemands, missedPickupsRefunded, releasesStarted, paymentsResolved, smsDelivered };
+  return {
+    expiredOffers,
+    expiredDemands,
+    missedPickupsRefunded,
+    expiredJobOffers,
+    staleJobsCancelled,
+    releasesStarted,
+    paymentsResolved,
+    smsDelivered,
+  };
 }
 
 export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
@@ -35,7 +50,9 @@ export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
   const slow = setInterval(() => {
     sweepOnce().then(
       (r) => {
-        if (r.expiredOffers + r.expiredDemands + r.missedPickupsRefunded + r.releasesStarted > 0) log.info(r, 'sweep');
+        const activity =
+          r.expiredOffers + r.expiredDemands + r.missedPickupsRefunded + r.expiredJobOffers + r.staleJobsCancelled + r.releasesStarted;
+        if (activity > 0) log.info(r, 'sweep');
       },
       (err) => log.error(err, 'sweep failed'),
     );

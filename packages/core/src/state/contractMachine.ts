@@ -26,7 +26,7 @@ const TRANSITIONS: Record<string, { actors: Array<Actor['type']> }> = {
   'ACCEPTED>FUNDING_FAILED': { actors: ['system'] },
   'FUNDING_FAILED>ACCEPTED': { actors: ['system'] }, // retry with a fresh reference
   'FUNDING_FAILED>CANCELLED': { actors: ['system'] },
-  'FUNDS_HELD>PICKUP_CONFIRMED': { actors: ['farmer', 'buyer'] },
+  'FUNDS_HELD>PICKUP_CONFIRMED': { actors: ['farmer', 'buyer', 'system'] }, // system = driver pickup via logistics (D-025)
   'FUNDS_HELD>CANCELLED_REFUNDED': { actors: ['system'] }, // pickup window missed
   'PICKUP_CONFIRMED>GRADED': { actors: ['system'] },
   'GRADED>DISPUTED': { actors: ['farmer'] },

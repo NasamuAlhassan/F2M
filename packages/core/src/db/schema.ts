@@ -313,6 +313,7 @@ export const payments = sqliteTable(
     contractId: text('contract_id')
       .notNull()
       .references(() => contracts.id),
+    jobId: text('job_id').references(() => deliveryJobs.id), // set for transport-fee payments
     direction: text('direction', { enum: ['collection', 'disbursement'] }).notNull(),
     provider: text('provider', { enum: ['momo', 'mock'] }).notNull(),
     providerRef: text('provider_ref').notNull(), // UUID sent as X-Reference-Id — idempotency key
@@ -338,6 +339,7 @@ export const ledgerEntries = sqliteTable(
     debit: integer('debit').notNull().default(0), // pesewas; exactly one of debit/credit is non-zero
     credit: integer('credit').notNull().default(0),
     contractId: text('contract_id').references(() => contracts.id),
+    jobId: text('job_id').references(() => deliveryJobs.id), // set for transport-fee journals
     memoKey: text('memo_key'),
     createdAt: createdAt(),
   },
@@ -362,6 +364,14 @@ export const LOT_EVENT_TYPES = [
   'REFUNDED',
   'CANCELLED',
   'SETTLED',
+  'TRANSPORT_REQUESTED',
+  'DRIVER_ASSIGNED',
+  'TRANSPORT_FUNDED',
+  'IN_TRANSIT',
+  'TRANSPORT_DELIVERED',
+  'DRIVER_PAID',
+  'TRANSPORT_CANCELLED',
+  'VOICE_CALL',
 ] as const;
 export type LotEventType = (typeof LOT_EVENT_TYPES)[number];
 
@@ -400,6 +410,117 @@ export const marketPrices = sqliteTable(
     recordedAt: integer('recorded_at').notNull(),
   },
   (t) => [uniqueIndex('market_prices_commodity_market_idx').on(t.commodityId, t.market)],
+);
+
+// ---- Logistics: the middle-mile bridge ----
+
+export const vehicleClasses = sqliteTable('vehicle_classes', {
+  code: text('code').primaryKey(), // tricycle | van | light_truck
+  nameKey: text('name_key').notNull(),
+  capacityKg: real('capacity_kg').notNull(),
+  baseFee: integer('base_fee').notNull(), // pesewas
+  perKmRate: integer('per_km_rate').notNull(), // pesewas per km
+  sortOrder: integer('sort_order').notNull().default(100),
+});
+
+export const drivers = sqliteTable(
+  'drivers',
+  {
+    id: id(),
+    phone: text('phone').notNull(), // E.164 — the USSD identity, same as farmers
+    name: text('name').notNull(),
+    regionCode: text('region_code')
+      .notNull()
+      .references(() => regions.code),
+    gpsLat: real('gps_lat'), // home base; region centroid fallback
+    gpsLng: real('gps_lng'),
+    momoMsisdn: text('momo_msisdn').notNull(),
+    locale: text('locale').notNull().default('en'),
+    vehicleClassCode: text('vehicle_class_code')
+      .notNull()
+      .references(() => vehicleClasses.code),
+    pinHash: text('pin_hash').notNull(), // 4-digit PIN set at USSD registration — web login uses it too (D-021)
+    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('drivers_phone_idx').on(t.phone)],
+);
+
+export const DELIVERY_JOB_STATES = [
+  'REQUESTED',
+  'NO_DRIVER',
+  'ASSIGNED',
+  'FUNDING_FAILED',
+  'FUNDS_HELD',
+  'PICKED_UP',
+  'DELIVERED',
+  'PAID',
+  'CANCELLED',
+  'CANCELLED_REFUNDED',
+] as const;
+export type DeliveryJobState = (typeof DELIVERY_JOB_STATES)[number];
+
+export const deliveryJobs = sqliteTable(
+  'delivery_jobs',
+  {
+    id: id(),
+    jobCode: text('job_code').notNull(), // human short code read over USSD, e.g. DLV-7Q2K
+    contractId: text('contract_id')
+      .notNull()
+      .references(() => contracts.id),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => lots.id),
+    buyerId: text('buyer_id') // the requester and payer
+      .notNull()
+      .references(() => buyers.id),
+    farmerId: text('farmer_id')
+      .notNull()
+      .references(() => farmers.id),
+    driverId: text('driver_id').references(() => drivers.id),
+    vehicleClassCode: text('vehicle_class_code')
+      .notNull()
+      .references(() => vehicleClasses.code),
+    distanceKm: real('distance_km').notNull(), // frozen at request time
+    quoteAmount: integer('quote_amount').notNull(), // pesewas, frozen = base + perKm × km
+    pickupLat: real('pickup_lat').notNull(),
+    pickupLng: real('pickup_lng').notNull(),
+    dropoffLat: real('dropoff_lat').notNull(),
+    dropoffLng: real('dropoff_lng').notNull(),
+    state: text('state', { enum: DELIVERY_JOB_STATES }).notNull().default('REQUESTED'),
+    fundingAttempts: integer('funding_attempts').notNull().default(0),
+    assignedAt: integer('assigned_at'),
+    fundedAt: integer('funded_at'),
+    pickedUpAt: integer('picked_up_at'),
+    deliveredAt: integer('delivered_at'),
+    paidAt: integer('paid_at'),
+    closedAt: integer('closed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('delivery_jobs_code_idx').on(t.jobCode),
+    index('delivery_jobs_contract_idx').on(t.contractId),
+    index('delivery_jobs_driver_idx').on(t.driverId),
+    index('delivery_jobs_state_idx').on(t.state),
+  ],
+);
+
+// One shot per (job, driver) — mirrors the matches rule (D-016).
+export const deliveryJobOffers = sqliteTable(
+  'delivery_job_offers',
+  {
+    id: id(),
+    jobId: text('job_id')
+      .notNull()
+      .references(() => deliveryJobs.id),
+    driverId: text('driver_id')
+      .notNull()
+      .references(() => drivers.id),
+    offeredAt: integer('offered_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    status: text('status', { enum: ['offered', 'accepted', 'declined', 'expired'] }).notNull().default('offered'),
+  },
+  (t) => [uniqueIndex('delivery_job_offers_job_driver_idx').on(t.jobId, t.driverId)],
 );
 
 // SMS outbox — "we will text you" made true. Messages are resolved into the
@@ -451,3 +572,7 @@ export type UssdSession = typeof ussdSessions.$inferSelect;
 export type Region = typeof regions.$inferSelect;
 export type MarketPrice = typeof marketPrices.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type VehicleClass = typeof vehicleClasses.$inferSelect;
+export type Driver = typeof drivers.$inferSelect;
+export type DeliveryJob = typeof deliveryJobs.$inferSelect;
+export type DeliveryJobOffer = typeof deliveryJobOffers.$inferSelect;

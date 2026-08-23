@@ -14,12 +14,14 @@ export interface JournalLine {
 export const ACCOUNTS = {
   external: 'external:momo',
   escrow: (contractId: string) => `escrow:contract:${contractId}`,
+  escrowJob: (jobId: string) => `escrow:job:${jobId}`,
   farmerPayable: (farmerId: string) => `farmer:${farmerId}:payable`,
+  driverPayable: (driverId: string) => `driver:${driverId}:payable`,
   buyerRefunds: (buyerId: string) => `buyer:${buyerId}:refunds`,
 };
 
 /** Post a balanced journal. Every journal MUST sum to zero (D-010). */
-export function postJournal(tx: DbLike, contractId: string, lines: JournalLine[]): string {
+export function postJournal(tx: DbLike, contractId: string, lines: JournalLine[], jobId?: string): string {
   const journalId = crypto.randomUUID();
   let debits = 0;
   let credits = 0;
@@ -43,11 +45,16 @@ export function postJournal(tx: DbLike, contractId: string, lines: JournalLine[]
         debit: line.debit ?? 0,
         credit: line.credit ?? 0,
         contractId,
+        jobId: jobId ?? null,
         memoKey: line.memoKey ?? null,
       })
       .run();
   }
   return journalId;
+}
+
+export function jobEscrowBalance(jobId: string): number {
+  return accountBalance(ACCOUNTS.escrowJob(jobId));
 }
 
 /** Credit-minus-debit balance (escrow and payable accounts are liabilities). */

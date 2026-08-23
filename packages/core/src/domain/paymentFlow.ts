@@ -6,6 +6,7 @@ import { transitionContract } from '../state/contractMachine';
 import { DomainError, notFound } from './errors';
 import { ACCOUNTS, postJournal } from './ledger';
 import { acceptOffer } from './matching';
+import { contractsWithGoodsInTransit, resolveJobPayment } from './logistics';
 import { queueSms } from './notifications';
 import { getCommodityById } from './registries';
 import { appendLotEvent } from './trace';
@@ -221,6 +222,12 @@ export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: nu
       .run();
     resolved += 1;
 
+    // Transport-fee payments resolve through the delivery-job machine.
+    if (payment.jobId) {
+      resolveJobPayment({ ...payment, status }, status);
+      continue;
+    }
+
     const contract = getContractRow(payment.contractId);
     if (payment.direction === 'collection') {
       if (status === 'successful' && contract.state === 'ACCEPTED') {
@@ -313,8 +320,12 @@ const PICKUP_GRACE_MS = 24 * 60 * 60 * 1000; // one day beyond the delivery wind
  */
 export function refundMissedPickups(now = Date.now()): number {
   const held = db.select().from(contracts).where(eq(contracts.state, 'FUNDS_HELD')).all();
+  // Defensive (D-025): goods already on a truck are not a missed pickup, even
+  // if the contract's own pickup confirmation hasn't landed yet.
+  const inTransit = contractsWithGoodsInTransit();
   let refunded = 0;
   for (const contract of held) {
+    if (inTransit.has(contract.id)) continue;
     const demand = db.select().from(demands).where(eq(demands.id, contract.demandId)).get();
     if (demand && now > demand.windowEnd + PICKUP_GRACE_MS) {
       refundHold(contract.id, { reason: 'pickup_window_missed' });

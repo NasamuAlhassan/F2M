@@ -118,3 +118,11 @@ Chronological record of what was built, changed, or edited, and why. One section
 - Page sweep left zero `rounded|shadow|bg-stone|bg-amber|…` classes (grep-verified). Trace timeline keeps its structure with square markers on a hard 2px spine; ledger and prices render as proper bordered ledgers.
 - `ussd-tester.html` restyled to match (inline CSS only, wire logic untouched); SMS panel became a bordered OUTBOX list.
 - Verified: 88 tests green (zero behavior change), web production build clean, visual pass in Chrome of demands table, prices grid, and the tester.
+
+## 2026-08-23 · M13 complete — logistics core (expansion W1 backend)
+
+- Migration 0004: `vehicle_classes` (seeded rate card — tricycle 400kg/GHS20+2.50/km, van 1500kg/GHS40+4/km, light truck 5000kg/GHS80+6/km), `drivers` (phone identity + PIN hash, D-021), `delivery_jobs` (frozen quote/distance/points, `DLV-XXXX` codes), `delivery_job_offers` (one shot per job+driver), nullable `jobId` on payments and ledger entries (D-022), 8 new lot-event types.
+- `state/deliveryJobMachine.ts`: guarded job transitions (REQUESTED→ASSIGNED→FUNDS_HELD→PICKED_UP→DELIVERED→PAID with NO_DRIVER/FUNDING_FAILED/CANCELLED/CANCELLED_REFUNDED paths), atomic with lot-trace events and `also(tx)` ledger hooks — a structural clone of the contract machine.
+- `domain/logistics.ts`: rate-card quoting (cheapest class that carries the load), sequential nearest-first dispatch with TTL (D-023), fee collection at driver accept (D-024) riding the existing payment poll via the `jobId` branch, pickup auto-confirming the produce contract (D-025), buyer-verified delivery releasing the fee to the driver's MoMo, stale-job cancellation with refunds when the produce contract dies. SMS at the four driver moments (job offer, assigned-to-farmer, paid, cancelled).
+- `domain/drivers.ts`: registration (role-collision guard against farmer phones), PIN verify for web login. Sweep gains `expireJobOffers` + `cancelStaleJobs`; `refundMissedPickups` now skips goods-on-a-truck contracts.
+- Verified: 96 tests green — rate-card math, nearest-first ladder (decline → next, expire → NO_DRIVER, retry with fresh driver), full job lifecycle with balanced books (escrow zero, driver payable = quote), actor guards, contract-death refunds, in-transit protection, PIN auth + role collision. Full typecheck clean.

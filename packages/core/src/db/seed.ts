@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { RubricDoc, ClockConfig } from '../domain/types';
 import { db } from './client';
-import { buyers, commodities, marketPrices, regions, rubrics, units } from './schema';
+import { buyers, commodities, marketPrices, regions, rubrics, units, vehicleClasses } from './schema';
 
 // Approximate region centroids — distance fallback when a farmer has no GPS fix.
 const REGION_SEED: Array<{ code: string; lat: number; lng: number }> = [
@@ -551,6 +551,22 @@ export async function seed(): Promise<void> {
   }
 
   seedMarketPrices();
+
+  // Logistics rate card (D-024): base fee + per-km, quoted upfront per vehicle class.
+  const VEHICLE_SEED = [
+    { code: 'tricycle', capacityKg: 400, baseFee: 2000, perKmRate: 250, sortOrder: 10 },
+    { code: 'van', capacityKg: 1500, baseFee: 4000, perKmRate: 400, sortOrder: 20 },
+    { code: 'light_truck', capacityKg: 5000, baseFee: 8000, perKmRate: 600, sortOrder: 30 },
+  ];
+  for (const v of VEHICLE_SEED) {
+    db.insert(vehicleClasses)
+      .values({ ...v, nameKey: `vehicle.${v.code}` })
+      .onConflictDoUpdate({
+        target: vehicleClasses.code,
+        set: { capacityKg: v.capacityKg, baseFee: v.baseFee, perKmRate: v.perKmRate, sortOrder: v.sortOrder },
+      })
+      .run();
+  }
 
   const existingBuyer = db.select().from(buyers).where(eq(buyers.email, DEMO_BUYER.email)).get();
   if (!existingBuyer) {

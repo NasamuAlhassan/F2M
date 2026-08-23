@@ -4,7 +4,13 @@ export { runMigrations } from './db/migrate';
 export * as schema from './db/schema';
 export {
   CONTRACT_STATES,
+  DELIVERY_JOB_STATES,
   LOT_EVENT_TYPES,
+  type DeliveryJob,
+  type DeliveryJobOffer,
+  type DeliveryJobState,
+  type Driver,
+  type VehicleClass,
   type Buyer,
   type Commodity,
   type Contract,
@@ -44,6 +50,9 @@ export * from './domain/photos';
 export * from './domain/gradingFlow';
 export * from './domain/marketPrices';
 export * from './domain/notifications';
+export * from './domain/drivers';
+export * from './domain/logistics';
+export { transitionJob, type JobActor, type JobTransitionExtra } from './state/deliveryJobMachine';
 export * from './providers/notify/index';
 export * from './providers/payment/index';
 export * from './providers/grading/index';

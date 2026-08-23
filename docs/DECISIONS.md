@@ -163,3 +163,37 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** The addendum's requirement is outdoor readability on low-spec screens — dark themes and low-contrast grays wash out in direct sunlight; decoration costs rendering and communicates nothing. A trading-terminal ledger look also matches what the product actually is.
 
 **Rejected:** Dark terminal green-on-black (fails the sunlight test); light/dark toggle (double the consistency surface — can come later); component API changes during the restyle (would force a page-by-page rewrite instead of a skin swap).
+
+## D-021 · 2026-08-23 · Drivers authenticate with phone + 4-digit PIN
+
+**Decision:** A driver's identity is her phone (E.164, same as farmers). The PIN is set during USSD registration; the web portal exchanges phone+PIN for a JWT with `kind: 'driver'`. One role per phone in v1 (a farmer phone cannot double as a driver phone). One vehicle class per driver in v1 — fleet operators come later.
+
+**Why:** Drivers are phone-first actors; demanding an email would exclude exactly the tricycle operators the middle-mile bridge exists for. PIN parity with buyer password auth keeps it demo-grade and symmetric.
+
+**Rejected:** Email+password for drivers (wrong medium); SMS OTP login (needs live SMS delivery — later); multi-role phones (ambiguous USSD entry screen).
+
+## D-022 · 2026-08-23 · Logistics rides the same ledger with job-scoped escrow
+
+**Decision:** Transport fees post through the existing `postJournal` with new accounts `escrow:job:{id}` and `driver:{id}:payable`, and a nullable `jobId` on payments and ledger entries. `contractId` stays populated on job money, so the contract page's ledger shows produce and transport money in one place.
+
+**Why:** One book, same zero-sum invariants (terminal job escrow must be zero), no parallel money system to reconcile.
+
+## D-023 · 2026-08-23 · Sequential nearest-first dispatch, one live offer at a time
+
+**Decision:** Dispatch offers a job to ONE driver at a time (nearest first by haversine to the pickup), with a TTL (`DISPATCH_OFFER_TTL_MINUTES`, default 10). Declined/expired offers stay blocked per (job, driver) — same one-shot rule as produce matching (D-016) — and the next-nearest candidate gets it. Exhausted → NO_DRIVER, buyer can retry.
+
+**Why:** Broadcast creates double-accept races USSD cannot render and punishes the driver who answers second. Sequential offers reuse semantics the whole system (and its tests) already understand.
+
+**Rejected:** Broadcast-first-wins; driver bidding (a negotiation loop that perishables can't afford).
+
+## D-024 · 2026-08-23 · Transport fee collects at driver accept, not at request
+
+**Decision:** The quote is frozen and shown at request time; the actual MoMo collection fires when a driver accepts (ASSIGNED → FUNDS_HELD via poll), mirroring the produce flow (farmer accepts → hold). Retry-once-then-cancel on funding failure.
+
+**Why:** The buyer is never charged for a job no driver took; symmetry keeps the payment orchestration one pattern.
+
+## D-025 · 2026-08-23 · Driver pickup auto-confirms the produce contract
+
+**Decision:** `confirmJobPickup` transitions the job to PICKED_UP and then, if the produce contract is still FUNDS_HELD, transitions it to PICKUP_CONFIRMED as a system actor (the transition table now allows system there). Sequential transactions — never nested. Defensively, `refundMissedPickups` skips any contract whose job is PICKED_UP or beyond.
+
+**Why:** Goods on a truck ARE the pickup; requiring a second farmer keypress would strand contracts mid-flow. The defensive filter closes the crash window between the two sequential transactions.

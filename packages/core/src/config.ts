@@ -41,6 +41,7 @@ const envSchema = z
 
     NOTIFY_PROVIDER: z.enum(['mock', 'at']).default('mock'),
     USSD_SHORTCODE: z.string().default('*384*7247#'),
+    DISPATCH_OFFER_TTL_MINUTES: z.coerce.number().default(10),
   })
   .superRefine((env, ctx) => {
     // Fail at boot with the exact missing keys for the providers actually selected.

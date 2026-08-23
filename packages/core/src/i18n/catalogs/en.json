@@ -174,6 +174,15 @@
   "ussd.paystatus.successful": "Paid",
   "ussd.paystatus.failed": "Failed",
 
+  "vehicle.tricycle": "Motor tricycle",
+  "vehicle.van": "Van",
+  "vehicle.light_truck": "Light truck",
+
+  "sms.jobOffer": "Farm to Market: Delivery job {code} - {kg}kg over {km}km, pays {fee}. Dial {ussd} and choose Job offers.",
+  "sms.jobAssigned": "Farm to Market: {driver} ({vehicle}, {phone}) will collect your produce. Job {code}.",
+  "sms.jobPaid": "Farm to Market: {amount} for delivery job {code} has been sent to your MoMo.",
+  "sms.jobCancelled": "Farm to Market: Delivery job {code} was cancelled. You are available for new jobs.",
+
   "sms.newOffer": "Farm to Market: New offer - {kg}kg {commodity} at up to {price}/kg. Dial {code} and choose My offers.",
   "sms.funded": "Farm to Market: {amount} is secured for your {commodity}. Pickup {start} - {end}.",
   "sms.graded": "Farm to Market: Your {commodity} graded {band}, pays {amount}. Reason: {reason}. Dial {code}, My lots, to agree or dispute.",
