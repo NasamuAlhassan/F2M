@@ -1,5 +1,19 @@
 @import 'tailwindcss';
 
+/* Paper terminal (D-020): black on white, hard borders, zero decoration.
+   Built for direct sunlight and low-spec screens. */
+@theme {
+  --color-paper: #ffffff;
+  --color-paper-dim: #f4f4f1;
+  --color-ink: #0a0a0a;
+  --color-ink-soft: #52524e;
+  --color-accent: #15803d;
+  --color-ok: #15803d;
+  --color-warn: #b45309;
+  --color-err: #b91c1c;
+  --color-info: #1d4ed8;
+}
+
 body {
-  @apply bg-stone-100 text-stone-900 antialiased;
+  @apply bg-paper text-ink antialiased;
 }

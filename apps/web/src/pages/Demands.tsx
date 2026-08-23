@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type Demand, type PriceTerms, type Registries } from '../api';
-import { btnCls, btnGhostCls, Card, Field, inputCls, StateBadge } from '../components/ui';
+import { btnCls, btnGhostCls, Card, Field, inputCls, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
 const MULTIPLIERS: Record<'A' | 'B' | 'C', number> = { A: 1.0, B: 0.88, C: 0.7 };
 
@@ -22,7 +22,7 @@ export function DemandsPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold">Demands</h1>
+        <h1 className="text-lg font-bold uppercase tracking-widest">Demands</h1>
         <button className={btnCls} onClick={() => setShowForm((v) => !v)}>
           {showForm ? 'Close' : 'New demand'}
         </button>
@@ -32,44 +32,46 @@ export function DemandsPage() {
 
       <Card>
         {!data?.demands.length ? (
-          <p className="text-sm text-stone-500">No demands yet. Post one — matching runs the moment it lands.</p>
+          <p className="text-sm text-ink-soft">No demands yet. Post one — matching runs the moment it lands.</p>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase text-stone-400">
-              <tr>
-                <th className="py-2">Commodity</th>
-                <th>Quantity</th>
-                <th>Remaining</th>
-                <th>Min band</th>
-                <th>Price (min band)</th>
-                <th>Window</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {data.demands.map((d) => (
-                <tr key={d.id}>
-                  <td className="py-2 font-medium">{commodityById.get(d.commodityId)?.name ?? '—'}</td>
-                  <td>{d.quantityKg}kg</td>
-                  <td>{d.remainingKg}kg</td>
-                  <td>{d.minBand}</td>
-                  <td>{ghs(d.priceTerms[d.minBand as 'A' | 'B' | 'C'] ?? 0)}/kg</td>
-                  <td>
-                    {shortDate(d.windowStart)} – {shortDate(d.windowEnd)}
-                  </td>
-                  <td>
-                    <StateBadge state={d.status} />
-                  </td>
-                  <td className="text-right">
-                    <Link className="text-green-700 hover:underline" to={`/demands/${d.id}`}>
-                      Matches →
-                    </Link>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className={tableCls}>
+              <thead>
+                <tr>
+                  <th className={thCls}>Commodity</th>
+                  <th className={thCls}>Quantity</th>
+                  <th className={thCls}>Remaining</th>
+                  <th className={thCls}>Min band</th>
+                  <th className={thCls}>Price (min band)</th>
+                  <th className={thCls}>Window</th>
+                  <th className={thCls}>Status</th>
+                  <th className={thCls} />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.demands.map((d, i) => (
+                  <tr key={d.id} className={i % 2 ? 'bg-paper-dim' : ''}>
+                    <td className={`${tdCls} font-bold`}>{commodityById.get(d.commodityId)?.name ?? '—'}</td>
+                    <td className={`${tdCls} ${numCls}`}>{d.quantityKg}kg</td>
+                    <td className={`${tdCls} ${numCls}`}>{d.remainingKg}kg</td>
+                    <td className={`${tdCls} ${numCls}`}>{d.minBand}</td>
+                    <td className={`${tdCls} ${numCls}`}>{ghs(d.priceTerms[d.minBand as 'A' | 'B' | 'C'] ?? 0)}/kg</td>
+                    <td className={tdCls}>
+                      {shortDate(d.windowStart)} – {shortDate(d.windowEnd)}
+                    </td>
+                    <td className={tdCls}>
+                      <StateBadge state={d.status} />
+                    </td>
+                    <td className={`${tdCls} text-right`}>
+                      <Link className="font-bold uppercase text-accent underline" to={`/demands/${d.id}`}>
+                        Matches
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>
@@ -163,7 +165,7 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
               ))}
             </select>
           </div>
-          <span className="mt-1 block text-xs text-stone-400">= {kg}kg</span>
+          <span className={`mt-1 block text-xs text-ink-soft ${numCls}`}>= {kg}kg</span>
         </Field>
         <Field label="Minimum band">
           <select className={inputCls} value={minBand} onChange={(e) => setMinBand(e.target.value as 'A' | 'B' | 'C')}>
@@ -181,7 +183,7 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
         <Field label="Window end">
           <input className={inputCls} type="date" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} />
           {commodity?.clockType === 'perishable' && (
-            <span className="mt-1 block text-xs text-amber-600">
+            <span className="mt-1 block text-xs font-bold text-warn">
               Perishable: window limited to {commodity.clock.maxWindowDays} days
             </span>
           )}
@@ -197,14 +199,14 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
         </Field>
       </div>
 
-      <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase text-stone-500">
+      <div className="mt-4 border-2 border-ink bg-paper-dim p-3">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-widest">
           Price per grade — this full schedule is what the farmer accepts
         </p>
         <div className="flex flex-wrap gap-4">
           {(['A', 'B', 'C'] as const).map((band) => (
             <label key={band} className="flex items-center gap-2 text-sm">
-              <span className="font-semibold">{band}</span>
+              <span className="font-mono font-bold">{band}</span>
               <input
                 className={`${inputCls} w-24`}
                 type="number"
@@ -212,14 +214,14 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
                 value={terms[band] ?? (derived[band] / 100).toFixed(2)}
                 onChange={(e) => setTerms((t) => ({ ...t, [band]: e.target.value }))}
               />
-              <span className="text-xs text-stone-400">/kg</span>
+              <span className="text-xs text-ink-soft">/kg</span>
             </label>
           ))}
-          <span className="flex items-center text-sm text-stone-400">REJECT pays 0</span>
+          <span className="flex items-center font-mono text-sm text-ink-soft">REJECT PAYS 0</span>
         </div>
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-2 border border-err px-2 py-1.5 text-sm text-err">{error}</p>}
       <div className="mt-4 flex gap-2">
         <button className={btnCls} onClick={() => create.mutate()} disabled={create.isPending}>
           {create.isPending ? 'Posting…' : 'Post demand'}

@@ -155,3 +155,11 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** Resolving at queue time archives exactly what was promised to the farmer even if catalogs change later — these messages state prices and amounts. The outbox makes delivery retryable and inspectable (the USSD tester grew an SMS-inbox panel reading it), and mock-first keeps `npm run demo` fully offline (D-013). Hooks fire at the four moments that matter: offer made, funds secured, graded (with the reason), paid — plus an honest rejection message.
 
 **Rejected:** Sending inline at the hook site (a slow SMS API inside accept/grade flows); storing template+params only (re-rendering later could silently change what was "sent").
+
+## D-020 · 2026-08-23 · Paper-terminal design system, component APIs frozen
+
+**Decision:** The visual layer is a flat, light "paper terminal": black (#0A0A0A) on white, hard 1px/2px borders, zero shadows/gradients/rounded corners, dense bordered tables with inverse-ink header rows, monospace tabular numerals for every figure, uppercase tracked section labels, one accent (#15803D) plus sunlight-safe semantic colors (warn #B45309, err #B91C1C, info #1D4ED8), ≥44px touch targets. Tokens live in Tailwind v4 `@theme` (`apps/web/src/index.css`); shared classes and components in `components/ui.tsx`, whose **prop signatures are frozen** — every current and future surface (driver portal, notification bell, IVR tester) restyles through this one file.
+
+**Why:** The addendum's requirement is outdoor readability on low-spec screens — dark themes and low-contrast grays wash out in direct sunlight; decoration costs rendering and communicates nothing. A trading-terminal ledger look also matches what the product actually is.
+
+**Rejected:** Dark terminal green-on-black (fails the sunlight test); light/dark toggle (double the consistency surface — can come later); component API changes during the restyle (would force a page-by-page rewrite instead of a skin swap).

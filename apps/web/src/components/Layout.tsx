@@ -1,24 +1,30 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { setToken } from '../api';
+
+function navCls({ isActive }: { isActive: boolean }): string {
+  return `border-2 border-ink px-3 py-1.5 text-[12px] font-bold uppercase tracking-wide ${
+    isActive ? 'bg-ink text-paper' : 'bg-paper text-ink hover:bg-ink hover:text-paper'
+  }`;
+}
 
 export function Layout() {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen">
-      <header className="bg-green-900 text-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <Link to="/demands" className="text-lg font-semibold tracking-tight">
-            Farm to Market <span className="font-normal text-green-300">· Buyer</span>
-          </Link>
-          <nav className="flex items-center gap-5 text-sm">
-            <Link to="/demands" className="hover:text-green-200">
+    <div className="min-h-screen bg-paper">
+      <header className="border-b-2 border-ink bg-paper">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <NavLink to="/demands" className="text-base font-bold uppercase tracking-widest">
+            Farm to Market <span className="font-normal text-ink-soft">/ Buyer</span>
+          </NavLink>
+          <nav className="flex items-center gap-2">
+            <NavLink to="/demands" className={navCls}>
               Demands
-            </Link>
-            <Link to="/prices" className="hover:text-green-200">
-              Market prices
-            </Link>
+            </NavLink>
+            <NavLink to="/prices" className={navCls}>
+              Prices
+            </NavLink>
             <button
-              className="rounded bg-green-800 px-3 py-1 hover:bg-green-700"
+              className="border-2 border-ink bg-paper px-3 py-1.5 text-[12px] font-bold uppercase tracking-wide hover:bg-ink hover:text-paper"
               onClick={() => {
                 setToken(null);
                 navigate('/login');
@@ -29,7 +35,7 @@ export function Layout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className="mx-auto max-w-5xl px-4 py-5">
         <Outlet />
       </main>
     </div>

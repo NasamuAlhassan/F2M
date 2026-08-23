@@ -111,3 +111,10 @@ Chronological record of what was built, changed, or edited, and why. One section
 - `npm run demo` gained an SMS step printing every message that reached the farmer's phone, all `[sent]`.
 - **Demo-script bug found by the REJECT retry path:** after a refund restored the first lot, the identical replacement lot tied in scoring and the new offer could land on the OLD lot — while the script blindly pressed "1" for the newest on the USSD list. Fixed twice over: the janitor now parks leftover registered maize lots per attempt, and the keypresses are derived from the contract's actual lot position on the list.
 - Verified: 88 tests green + full typecheck + demo run green with a REJECT-free grade-A settle showing the four-line ledger (no refund remainder — the exact-payout case).
+
+## 2026-08-23 · M12 complete — brutalist "paper terminal" redesign (expansion W2)
+
+- Dropped the glossy card aesthetic across the buyer portal and the USSD tester for the flat, high-contrast system in D-020: Tailwind v4 `@theme` tokens (paper/ink/ink-soft/accent + sunlight-safe semantic colors), `ui.tsx` restyled with **frozen APIs** (Card → bordered section with uppercase header strip; StateBadge → flat square chips in five variants incl. the future logistics states; Bar → blocky bordered meter) plus new dense-table exports (`tableCls/thCls/tdCls/numCls` — inverse-ink header rows, zebra `paper-dim`, mono numerals).
+- Page sweep left zero `rounded|shadow|bg-stone|bg-amber|…` classes (grep-verified). Trace timeline keeps its structure with square markers on a hard 2px spine; ledger and prices render as proper bordered ledgers.
+- `ussd-tester.html` restyled to match (inline CSS only, wire logic untouched); SMS panel became a bordered OUTBOX list.
+- Verified: 88 tests green (zero behavior change), web production build clean, visual pass in Chrome of demands table, prices grid, and the tester.

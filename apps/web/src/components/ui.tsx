@@ -1,44 +1,42 @@
 import type { ReactNode } from 'react';
 
+// Paper-terminal design system (D-020). Component APIs are frozen — pages and
+// future surfaces (driver portal, notifications, IVR tester) share this pass.
+
 export function Card({ title, children, actions }: { title?: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section className="mb-5 rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
+    <section className="mb-4 border-2 border-ink bg-paper">
       {(title || actions) && (
-        <div className="mb-3 flex items-center justify-between">
-          {title && <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">{title}</h2>}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink px-3 py-2">
+          {title && <h2 className="text-[11px] font-bold uppercase tracking-widest">{title}</h2>}
           {actions}
         </div>
       )}
-      {children}
+      <div className="p-3">{children}</div>
     </section>
   );
 }
 
-const STATE_COLORS: Record<string, string> = {
-  OFFERED: 'bg-amber-100 text-amber-900',
-  ACCEPTED: 'bg-sky-100 text-sky-900',
-  FUNDS_HELD: 'bg-indigo-100 text-indigo-900',
-  PICKUP_CONFIRMED: 'bg-violet-100 text-violet-900',
-  GRADED: 'bg-teal-100 text-teal-900',
-  DISPUTED: 'bg-orange-100 text-orange-900',
-  SETTLED: 'bg-green-100 text-green-900',
-  DECLINED: 'bg-stone-200 text-stone-700',
-  EXPIRED: 'bg-stone-200 text-stone-700',
-  CANCELLED: 'bg-red-100 text-red-900',
-  CANCELLED_REFUNDED: 'bg-red-100 text-red-900',
-  FUNDING_FAILED: 'bg-red-100 text-red-900',
-  open: 'bg-amber-100 text-amber-900',
-  partially_matched: 'bg-sky-100 text-sky-900',
-  fulfilled: 'bg-green-100 text-green-900',
-  offered: 'bg-amber-100 text-amber-900',
-  accepted: 'bg-green-100 text-green-900',
-  declined: 'bg-stone-200 text-stone-700',
-  expired: 'bg-stone-200 text-stone-700',
-};
+// Flat square chips. Four variants that survive full sunlight:
+// done-good = inverse ink, live = bordered ink, attention = bordered warn,
+// failed = bordered err, dead = bordered gray.
+const DONE = new Set(['SETTLED', 'PAID', 'DELIVERED', 'fulfilled', 'accepted', 'settled', 'sent', 'completed']);
+const FAILED = new Set(['FUNDING_FAILED', 'CANCELLED', 'CANCELLED_REFUNDED', 'failed', 'cancelled', 'NO_DRIVER']);
+const DEAD = new Set(['DECLINED', 'EXPIRED', 'declined', 'expired', 'withdrawn', 'superseded']);
+const ATTENTION = new Set(['OFFERED', 'DISPUTED', 'REQUESTED', 'open', 'offered', 'pending', 'partially_matched', 'disputed']);
 
 export function StateBadge({ state }: { state: string }) {
+  const cls = DONE.has(state)
+    ? 'bg-ink text-paper border-ink'
+    : FAILED.has(state)
+      ? 'border-err text-err'
+      : DEAD.has(state)
+        ? 'border-ink-soft text-ink-soft'
+        : ATTENTION.has(state)
+          ? 'border-warn text-warn'
+          : 'border-ink text-ink';
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATE_COLORS[state] ?? 'bg-stone-200'}`}>
+    <span className={`inline-block border px-2 py-0.5 font-mono text-[11px] font-bold uppercase ${cls}`}>
       {state.replaceAll('_', ' ')}
     </span>
   );
@@ -47,11 +45,11 @@ export function StateBadge({ state }: { state: string }) {
 export function Bar({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-24 shrink-0 text-stone-500">{label}</span>
-      <div className="h-1.5 w-24 overflow-hidden rounded bg-stone-200">
-        <div className="h-full rounded bg-green-600" style={{ width: `${Math.round(value * 100)}%` }} />
+      <span className="w-24 shrink-0 uppercase tracking-wide text-[10px] text-ink-soft">{label}</span>
+      <div className="h-3 w-24 border border-ink bg-paper">
+        <div className="h-full bg-ink" style={{ width: `${Math.round(value * 100)}%` }} />
       </div>
-      <span className="tabular-nums text-stone-600">{value.toFixed(2)}</span>
+      <span className="font-mono tabular-nums">{value.toFixed(2)}</span>
     </div>
   );
 }
@@ -59,13 +57,22 @@ export function Bar({ value, label }: { value: number; label: string }) {
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block text-sm">
-      <span className="mb-1 block font-medium text-stone-600">{label}</span>
+      <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide">{label}</span>
       {children}
     </label>
   );
 }
 
 export const inputCls =
-  'w-full rounded border border-stone-300 bg-white px-2.5 py-1.5 text-sm focus:border-green-600 focus:outline-none';
-export const btnCls = 'rounded bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50';
-export const btnGhostCls = 'rounded border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100';
+  'w-full border border-ink bg-paper px-3 py-2.5 text-sm focus:outline-2 focus:outline-accent min-h-11';
+export const btnCls =
+  'min-h-11 border-2 border-accent bg-accent px-4 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-paper hover:text-accent disabled:pointer-events-none disabled:opacity-40';
+export const btnGhostCls =
+  'min-h-11 border-2 border-ink bg-paper px-4 py-2 text-sm font-bold uppercase tracking-wide hover:bg-ink hover:text-paper disabled:pointer-events-none disabled:opacity-40';
+
+// Dense bordered tables — the ledger look.
+export const tableCls = 'w-full border-collapse border-2 border-ink text-sm';
+export const thCls =
+  'border border-ink bg-ink px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-paper';
+export const tdCls = 'border border-ink px-2 py-1.5 align-top';
+export const numCls = 'font-mono tabular-nums';
