@@ -22,7 +22,8 @@ export function listPaymentsForFarmer(farmerId: string, limit = 3): Payment[] {
     )
     .orderBy(desc(payments.createdAt))
     .all()
-    .filter((p) => p.direction === 'disbursement')
+    // Exclude jobId payments — driver payouts share the contractId but are not the farmer's money.
+    .filter((p) => p.direction === 'disbursement' && p.jobId === null)
     .slice(0, limit);
 }
 

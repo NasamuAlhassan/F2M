@@ -197,3 +197,11 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Decision:** `confirmJobPickup` transitions the job to PICKED_UP and then, if the produce contract is still FUNDS_HELD, transitions it to PICKUP_CONFIRMED as a system actor (the transition table now allows system there). Sequential transactions — never nested. Defensively, `refundMissedPickups` skips any contract whose job is PICKED_UP or beyond.
 
 **Why:** Goods on a truck ARE the pickup; requiring a second farmer keypress would strand contracts mid-flow. The defensive filter closes the crash window between the two sequential transactions.
+
+## D-026 · 2026-08-23 · Buyer notifications are a separate table from the SMS outbox
+
+**Decision:** `buyer_notifications` is its own table (buyerId + read/unread semantics + entity refs), not a channel on the SMS `notifications` outbox. Messages resolve at queue time like SMS; fan-out hooks live in core domain right beside the existing `queueSms` calls (offer accepted/declined/expired, funds held, graded/rejected, driver assigned, in transit, no-driver, driver paid, settled).
+
+**Why:** The two tables answer different questions — "was this delivered to a phone?" vs "has this buyer seen this?". Forcing them into one schema muddles both.
+
+**Rejected:** A `channel` column on the outbox (read-tracking and delivery-status semantics collide); real Web Push (service workers + VAPID for marginal gain — the portal already polls).

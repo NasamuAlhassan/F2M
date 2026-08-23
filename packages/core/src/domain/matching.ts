@@ -14,6 +14,7 @@ import {
 import { config } from '../config';
 import { t } from '../i18n';
 import { transitionContract } from '../state/contractMachine';
+import { queueBuyerNotification } from './buyerNotifications';
 import { DomainError, notFound } from './errors';
 import { getFarmerById } from './farmers';
 import { haversineKm, resolvePoint } from './geo';
@@ -268,12 +269,27 @@ export function expireOffers(now = Date.now()): number {
   for (const match of expired) {
     const contract = db.select().from(contracts).where(eq(contracts.matchId, match.id)).get();
     if (!contract || contract.state !== 'OFFERED') continue;
-    transitionContract(contract.id, 'EXPIRED', { type: 'system' });
+    const expiredContract = transitionContract(contract.id, 'EXPIRED', { type: 'system' });
+    notifyBuyerOfferEvent(expiredContract, 'notif.offerExpired');
     touchedDemands.add(contract.demandId);
   }
   // Freed quantity may match someone else immediately.
   for (const demandId of touchedDemands) runMatching({ demandId });
   return expired.length;
+}
+
+/** In-app alert to the buyer about an offer outcome (M15 fan-out). */
+function notifyBuyerOfferEvent(contract: Contract, templateKey: string): void {
+  const farmer = getFarmerById(contract.farmerId);
+  const commodity = getCommodityById(contract.commodityId);
+  queueBuyerNotification({
+    buyerId: contract.buyerId,
+    templateKey,
+    params: { farmer: farmer?.name ?? 'Farmer', kg: contract.quantityKg, commodity: t('en', commodity.nameKey) },
+    contractId: contract.id,
+    lotId: contract.lotId,
+    demandId: contract.demandId,
+  });
 }
 
 export function getMatch(id: string): Match {
@@ -301,11 +317,15 @@ export function acceptOffer(contractId: string, farmerId: string): Contract {
     transitionContract(contract.id, 'EXPIRED', { type: 'system' });
     throw new DomainError('This offer has expired', 'OFFER_EXPIRED', 409);
   }
-  return transitionContract(contractId, 'ACCEPTED', { type: 'farmer', id: farmerId });
+  const accepted = transitionContract(contractId, 'ACCEPTED', { type: 'farmer', id: farmerId });
+  notifyBuyerOfferEvent(accepted, 'notif.offerAccepted');
+  return accepted;
 }
 
 export function declineOffer(contractId: string, farmerId: string, reasonKey?: string): Contract {
-  return transitionContract(contractId, 'DECLINED', { type: 'farmer', id: farmerId }, { declineReasonKey: reasonKey });
+  const declined = transitionContract(contractId, 'DECLINED', { type: 'farmer', id: farmerId }, { declineReasonKey: reasonKey });
+  notifyBuyerOfferEvent(declined, 'notif.offerDeclined');
+  return declined;
 }
 
 export { type GradeBand };

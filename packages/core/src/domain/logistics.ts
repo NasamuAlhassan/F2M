@@ -20,6 +20,7 @@ import { t } from '../i18n';
 import { getPaymentProvider } from '../providers/payment/index';
 import { transitionContract } from '../state/contractMachine';
 import { transitionJob } from '../state/deliveryJobMachine';
+import { queueBuyerNotification } from './buyerNotifications';
 import { getDriverById, getVehicleClass, listVehicleClasses } from './drivers';
 import { DomainError, notFound } from './errors';
 import { getFarmerById } from './farmers';
@@ -187,6 +188,13 @@ export function dispatchJob(jobId: string): DeliveryJobOffer | null {
   const next = candidates[0];
   if (!next) {
     transitionJob(jobId, 'NO_DRIVER', { type: 'system' }, { payload: { reason: 'no_available_driver' } });
+    queueBuyerNotification({
+      buyerId: job.buyerId,
+      templateKey: 'notif.noDriver',
+      params: { jobCode: job.jobCode },
+      contractId: job.contractId,
+      jobId: job.id,
+    });
     return null;
   }
 
@@ -263,9 +271,18 @@ export async function acceptJob(jobId: string, driverId: string): Promise<Delive
     },
   });
 
-  // The farmer learns who is coming for her produce.
+  // The farmer learns who is coming for her produce; the buyer sees the assignment.
   const farmer = getFarmerById(job.farmerId);
   const driver = getDriverById(driverId);
+  if (driver) {
+    queueBuyerNotification({
+      buyerId: job.buyerId,
+      templateKey: 'notif.driverAssigned',
+      params: { driver: driver.name, vehicle: t('en', `vehicle.${driver.vehicleClassCode}`), jobCode: job.jobCode },
+      contractId: job.contractId,
+      jobId: job.id,
+    });
+  }
   if (farmer && driver) {
     queueSms({
       phone: farmer.phone,
@@ -398,6 +415,13 @@ export function confirmJobPickup(jobId: string, driverId: string): DeliveryJob {
   if (contract?.state === 'FUNDS_HELD') {
     transitionContract(job.contractId, 'PICKUP_CONFIRMED', { type: 'system' }, { payload: { via: 'driver', jobId } });
   }
+  queueBuyerNotification({
+    buyerId: job.buyerId,
+    templateKey: 'notif.inTransit',
+    params: { jobCode: job.jobCode },
+    contractId: job.contractId,
+    jobId: job.id,
+  });
   return job;
 }
 
@@ -517,6 +541,13 @@ export function resolveJobPayment(payment: Payment, status: 'successful' | 'fail
         templateKey: 'sms.jobPaid',
         params: { amount: formatGhs(job.quoteAmount), code: job.jobCode },
         lotId: job.lotId,
+      });
+      queueBuyerNotification({
+        buyerId: job.buyerId,
+        templateKey: 'notif.driverPaid',
+        params: { jobCode: job.jobCode, fee: formatGhs(job.quoteAmount), driver: driver.name },
+        contractId: job.contractId,
+        jobId: job.id,
       });
     }
   }

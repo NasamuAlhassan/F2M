@@ -4,6 +4,7 @@ import { db } from '../db/client';
 import { gradings, type Contract, type Grading } from '../db/schema';
 import { gradeWithFallback } from '../providers/grading/index';
 import { transitionContract } from '../state/contractMachine';
+import { queueBuyerNotification } from './buyerNotifications';
 import { contractPriceTerms, getContract } from './contracts';
 import { DomainError } from './errors';
 import { getFarmerById } from './farmers';
@@ -121,6 +122,18 @@ export async function runGrading(contractId: string): Promise<Grading> {
   if (result.gradeBand === 'REJECT') {
     refundHold(contractId, { reason: 'grade_reject', attempt });
   }
+
+  queueBuyerNotification({
+    buyerId: contract.buyerId,
+    templateKey: result.gradeBand === 'REJECT' ? 'notif.rejected' : 'notif.graded',
+    params: {
+      band: result.gradeBand,
+      amount: formatGhs(finalAmount),
+      reason: result.reasons[0]?.observation ?? '',
+    },
+    contractId,
+    lotId: contract.lotId,
+  });
 
   // The grade reaches her phone the moment it exists — with the reason.
   const farmer = getFarmerById(contract.farmerId);

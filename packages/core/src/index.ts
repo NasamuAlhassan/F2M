@@ -50,6 +50,7 @@ export * from './domain/photos';
 export * from './domain/gradingFlow';
 export * from './domain/marketPrices';
 export * from './domain/notifications';
+export * from './domain/buyerNotifications';
 export * from './domain/drivers';
 export * from './domain/logistics';
 export { transitionJob, type JobActor, type JobTransitionExtra } from './state/deliveryJobMachine';

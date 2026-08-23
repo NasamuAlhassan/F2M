@@ -6,6 +6,7 @@ import { transitionContract } from '../state/contractMachine';
 import { DomainError, notFound } from './errors';
 import { ACCOUNTS, postJournal } from './ledger';
 import { acceptOffer } from './matching';
+import { queueBuyerNotification } from './buyerNotifications';
 import { contractsWithGoodsInTransit, resolveJobPayment } from './logistics';
 import { queueSms } from './notifications';
 import { getCommodityById } from './registries';
@@ -96,7 +97,8 @@ export async function initiateRelease(contractId: string): Promise<Payment> {
     .from(payments)
     .where(and(eq(payments.contractId, contractId), eq(payments.direction, 'disbursement')))
     .all()
-    .find((p) => p.status !== 'failed');
+    // jobId payments are DRIVER payouts that share the contractId — not this release.
+    .find((p) => p.jobId === null && p.status !== 'failed');
   if (existing) return existing; // idempotent — a pending/successful release already exists
 
   const farmer = db.select().from(farmers).where(eq(farmers.id, contract.farmerId)).get();
@@ -257,6 +259,17 @@ export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: nu
             lotId: contract.lotId,
           });
         }
+        queueBuyerNotification({
+          buyerId: contract.buyerId,
+          templateKey: 'notif.fundsHeld',
+          params: {
+            amount: formatGhs(contract.holdAmount),
+            kg: contract.quantityKg,
+            commodity: t('en', getCommodityById(contract.commodityId).nameKey),
+          },
+          contractId: contract.id,
+          lotId: contract.lotId,
+        });
       } else if (status === 'failed') {
         handleCollectionFailure(contract.id);
       }
@@ -290,6 +303,13 @@ export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: nu
             lotId: contract.lotId,
           });
         }
+        queueBuyerNotification({
+          buyerId: contract.buyerId,
+          templateKey: 'notif.settled',
+          params: { amount: formatGhs(finalAmount), refunded: formatGhs(remainder) },
+          contractId: contract.id,
+          lotId: contract.lotId,
+        });
       }
       // A failed disbursement stays GRADED; the sweep retries via releaseDuePayments.
     }

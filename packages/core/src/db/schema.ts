@@ -544,6 +544,28 @@ export const notifications = sqliteTable(
   (t) => [index('notifications_phone_idx').on(t.phone), index('notifications_status_idx').on(t.status)],
 );
 
+// Buyer in-app notification center — read/unread semantics, distinct from the
+// SMS delivery outbox (D-026). Message resolved at queue time, same archival
+// principle as SMS.
+export const buyerNotifications = sqliteTable(
+  'buyer_notifications',
+  {
+    id: id(),
+    buyerId: text('buyer_id')
+      .notNull()
+      .references(() => buyers.id),
+    templateKey: text('template_key').notNull(),
+    message: text('message').notNull(),
+    contractId: text('contract_id').references(() => contracts.id),
+    lotId: text('lot_id').references(() => lots.id),
+    demandId: text('demand_id').references(() => demands.id),
+    jobId: text('job_id').references(() => deliveryJobs.id),
+    readAt: integer('read_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('buyer_notifications_buyer_idx').on(t.buyerId, t.readAt)],
+);
+
 export const ussdSessions = sqliteTable('ussd_sessions', {
   sessionId: text('session_id').primaryKey(), // the gateway's sessionId
   phone: text('phone').notNull(),
@@ -573,6 +595,7 @@ export type Region = typeof regions.$inferSelect;
 export type MarketPrice = typeof marketPrices.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type VehicleClass = typeof vehicleClasses.$inferSelect;
+export type BuyerNotification = typeof buyerNotifications.$inferSelect;
 export type Driver = typeof drivers.$inferSelect;
 export type DeliveryJob = typeof deliveryJobs.$inferSelect;
 export type DeliveryJobOffer = typeof deliveryJobOffers.$inferSelect;
