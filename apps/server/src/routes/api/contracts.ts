@@ -1,6 +1,7 @@
 import {
   addPhoto,
   confirmPickup,
+  contractLedger,
   contractPriceTerms,
   DomainError,
   getCommodityById,
@@ -48,6 +49,7 @@ export async function contractRoutes(app: FastifyInstance): Promise<void> {
         : null,
       commodity: { code: commodity.code, name: t('en', commodity.nameKey) },
       payments: listPaymentsForContract(contract.id),
+      ledger: contractLedger(contract.id),
       photos: listPhotosForContract(contract.id).map((p) => ({ id: p.id, url: `/${p.path}`, createdAt: p.createdAt })),
       gradings: listGradingsForContract(contract.id).map((g) => ({
         ...g,

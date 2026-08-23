@@ -72,7 +72,7 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M3 — matching + contracts | **done** |
 | M4 — payments + ledger | **done** (MoMo sandbox round-trip pending account setup) |
 | M5 — photos + grading | **done** (live HF verdict pending HF token) |
-| M6 — buyer portal | not started |
+| M6 — buyer portal | **done** (verified live in Chrome, full spine twice incl. REJECT path) |
 | M7 — settlement + scripted demo | not started |
 
 _Update this table at every milestone. Last updated: 2026-08-23._
