@@ -20,7 +20,7 @@ export function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       setToken(res.token);
-      navigate('/demands');
+      navigate('/market');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

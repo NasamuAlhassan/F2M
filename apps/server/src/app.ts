@@ -16,6 +16,7 @@ import { contractRoutes } from './routes/api/contracts';
 import { devRoutes } from './routes/api/dev';
 import { engineRoutes } from './routes/api/engine';
 import { logisticsRoutes } from './routes/api/logistics';
+import { marketRoutes } from './routes/api/market';
 import { notificationRoutes } from './routes/api/notifications';
 import { registryRoutes } from './routes/api/registries';
 import { momoCallbackRoutes } from './routes/momoCallbacks';
@@ -81,6 +82,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   await app.register(logisticsRoutes, { prefix: '/api' });
   await app.register(notificationRoutes, { prefix: '/api' });
   await app.register(engineRoutes, { prefix: '/api' });
+  await app.register(marketRoutes, { prefix: '/api' });
   await app.register(devRoutes, { prefix: '/api' });
 
   return app;

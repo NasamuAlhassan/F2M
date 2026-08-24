@@ -237,3 +237,11 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** The owner designed exactly what they want in Figma and handed over the code export as the reference. Matching a concrete prototype beats iterating on taste by prose.
 
 **Rejected:** Cherry-picking only some frames (a half-adopted design system reads as inconsistency); introducing the prototype's mock-data frames as pages (seller dashboard, QR card, co-op view are design references, not built features — they come when their features do).
+
+## D-031 · 2026-08-24 · Marketplace browse view — a "bid" is a pre-filled demand
+
+**Decision:** The prototype's Frame 01 (browse Active Commodity Lots as cards with filters and search) is now a real page, built entirely on existing machinery. `GET /api/market/lots` is read-only: open lots joined with farmer, unit, region, distance from the buyer (haversine), and a price — the lot's `asking_price_per_kg` when set, else the commodity's cross-market reference average, labeled "market ref" on the card. **"Place Bid" opens the existing demand form pre-filled from the lot** (commodity, unit, remaining units, declared band, reference price); posting it runs the normal demand → engine → offer → farmer-consent flow. Card art is a brand-styled crop gradient + emoji — farmers list over USSD from basic phones, so no lot photos exist and none are faked. The header's language switcher shows English active and Twi/Ewe/Dagbani/Hausa visibly disabled (tooltip: awaiting native-speaker review) — the portal's own strings are not i18n-wired, and D-012/D-029 forbid shipping machine-drafted text as if reviewed.
+
+**Why:** Buyers think in "browse and bid"; the platform's consent model is "offer and the farmer accepts". Pre-filling a demand gives buyers the browsing mental model without inventing a second negotiation path that bypasses farmer consent, price-schedule freezing, or the one-shot match rule. The form's perishable-window snap (end date clamps to the commodity's clock) fell out of this — pre-filling a perishable surfaced the invalid default.
+
+**Rejected:** A separate `bids` entity with farmer-side accept (duplicates matches/contracts wholesale); stock-photo or AI-generated produce imagery (misrepresents the actual lot); enabling the unreviewed locales on the switcher.

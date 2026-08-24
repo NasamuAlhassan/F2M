@@ -152,6 +152,40 @@ export interface JobView {
   createdAt: number;
 }
 
+export interface MarketLot {
+  id: string;
+  lotCode: string;
+  status: string;
+  commodityCode: string;
+  commodityName: string;
+  clockType: 'storable' | 'perishable';
+  listingType: 'SAME_DAY' | 'FORWARD';
+  declaredBand: string;
+  remainingKg: number;
+  unitCode: string | null;
+  unitName: string;
+  kgPerUnit: number;
+  unitsRemaining: number | null;
+  pricePerKg: number | null;
+  pricePerUnit: number | null;
+  priceSource: 'asking' | 'market' | null;
+  fairPrice: boolean;
+  farmerName: string | null;
+  district: string | null;
+  regionCode: string;
+  regionName: string;
+  distanceKm: number;
+  readyDate: number;
+  createdAt: number;
+}
+
+export interface Me {
+  buyerId: string;
+  name: string | null;
+  company: string | null;
+  regionCode: string | null;
+}
+
 export interface TransportQuoteView {
   vehicleClassCode: string;
   vehicleClassName: string;

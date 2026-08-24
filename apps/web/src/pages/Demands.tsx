@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type Demand, type PriceTerms, type Registries } from '../api';
 import { btnCls, btnGhostCls, Card, CROP_EMOJI, Field, inputCls, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
@@ -93,14 +93,32 @@ export function DemandsPage() {
   );
 }
 
-function NewDemandForm({ registries, onDone }: { registries: Registries; onDone: () => void }) {
+export interface DemandPrefill {
+  commodityCode?: string;
+  unitCode?: string;
+  unitQty?: number;
+  minBand?: 'A' | 'B' | 'C';
+  basePriceGhs?: string;
+}
+
+export function NewDemandForm({
+  registries,
+  onDone,
+  onCancel,
+  initial,
+}: {
+  registries: Registries;
+  onDone: () => void;
+  onCancel?: () => void;
+  initial?: DemandPrefill;
+}) {
   const queryClient = useQueryClient();
-  const [commodityCode, setCommodityCode] = useState(registries.commodities[0]?.code ?? '');
+  const [commodityCode, setCommodityCode] = useState(initial?.commodityCode ?? registries.commodities[0]?.code ?? '');
   const commodity = registries.commodities.find((c) => c.code === commodityCode);
-  const [unitCode, setUnitCode] = useState('');
-  const [unitQty, setUnitQty] = useState('10');
-  const [minBand, setMinBand] = useState<'A' | 'B' | 'C'>('B');
-  const [basePrice, setBasePrice] = useState('4.00'); // GHS/kg
+  const [unitCode, setUnitCode] = useState(initial?.unitCode ?? '');
+  const [unitQty, setUnitQty] = useState(String(initial?.unitQty ?? 10));
+  const [minBand, setMinBand] = useState<'A' | 'B' | 'C'>(initial?.minBand ?? 'B');
+  const [basePrice, setBasePrice] = useState(initial?.basePriceGhs ?? '4.00'); // GHS/kg
   const [terms, setTerms] = useState<Partial<Record<'A' | 'B' | 'C', string>>>({});
   const [windowStart, setWindowStart] = useState(() => new Date().toISOString().slice(0, 10));
   const [windowEnd, setWindowEnd] = useState(() => new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10));
@@ -109,6 +127,19 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
 
   const units = commodity?.units ?? [];
   const activeUnit = units.find((u) => u.code === unitCode) ?? units[0];
+
+  // A perishable's clock caps the window (end date is inclusive) — snap the
+  // end date down whenever the chosen commodity can't reach the current one.
+  useEffect(() => {
+    if (!commodity) return;
+    const maxDays = commodity.clock.maxWindowDays;
+    const start = new Date(windowStart).getTime();
+    const end = new Date(windowEnd).getTime();
+    const lastAllowed = start + (maxDays - 1) * 86400000;
+    if (Number.isFinite(start) && Number.isFinite(end) && end > lastAllowed) {
+      setWindowEnd(new Date(lastAllowed).toISOString().slice(0, 10));
+    }
+  }, [commodity, windowStart, windowEnd]);
 
   // Per-band schedule: derived from the base price via multipliers, each band editable.
   const derived = useMemo(() => {
@@ -264,7 +295,7 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
         <button className={`${btnCls} flex-1 py-2.5`} onClick={() => create.mutate()} disabled={create.isPending}>
           {create.isPending ? 'Posting…' : 'Post Demand'}
         </button>
-        <button className={`${btnGhostCls} flex-1 py-2.5`} onClick={onDone}>
+        <button className={`${btnGhostCls} flex-1 py-2.5`} onClick={onCancel ?? onDone}>
           Cancel
         </button>
       </div>

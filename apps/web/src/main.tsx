@@ -12,6 +12,7 @@ import { DriverJobsPage } from './pages/DriverJobs';
 import { DriverLoginPage } from './pages/DriverLogin';
 import { EnginePage } from './pages/Engine';
 import { LoginPage } from './pages/Login';
+import { MarketplacePage } from './pages/Marketplace';
 import { PricesPage } from './pages/Prices';
 import { TracePage } from './pages/Trace';
 
@@ -32,7 +33,8 @@ const router = createBrowserRouter([
       {
         element: <Layout />,
         children: [
-          { path: '/', element: <Navigate to="/demands" replace /> },
+          { path: '/', element: <Navigate to="/market" replace /> },
+          { path: '/market', element: <MarketplacePage /> },
           { path: '/demands', element: <DemandsPage /> },
           { path: '/engine', element: <EnginePage /> },
           { path: '/prices', element: <PricesPage /> },

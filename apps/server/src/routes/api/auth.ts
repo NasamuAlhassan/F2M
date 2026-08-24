@@ -1,4 +1,5 @@
-import { verifyBuyerLogin, verifyDriverLogin } from '@ftm/core';
+import { db, schema, verifyBuyerLogin, verifyDriverLogin } from '@ftm/core';
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -17,7 +18,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/auth/me', { preHandler: [app.authBuyer] }, async (req) => {
-    return { buyerId: req.user.sub };
+    const buyer = db.select().from(schema.buyers).where(eq(schema.buyers.id, req.user.sub)).get();
+    return {
+      buyerId: req.user.sub,
+      name: buyer?.name ?? null,
+      company: buyer?.company ?? null,
+      regionCode: buyer?.regionCode ?? null,
+    };
   });
 
   // Drivers sign in with the phone + PIN they set during USSD registration (D-021).
