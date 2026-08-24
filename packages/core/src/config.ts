@@ -46,6 +46,12 @@ const envSchema = z
     VOICE_PROVIDER: z.enum(['mock', 'at']).default('mock'),
     AT_VOICE_NUMBER: z.string().optional(),
     VOICE_ANSWER_TIMEOUT_MS: z.coerce.number().default(120_000),
+
+    // Voice listing pipeline (D-038): speech → text → English → parsed lot.
+    // Khaya AI (GhanaNLP) slots in per-provider when the key lands.
+    ASR_PROVIDER: z.enum(['mock', 'khaya']).default('mock'),
+    MT_PROVIDER: z.enum(['mock', 'khaya']).default('mock'),
+    KHAYA_API_KEY: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     // Fail at boot with the exact missing keys for the providers actually selected.
@@ -54,6 +60,9 @@ const envSchema = z
     }
     if (env.NOTIFY_PROVIDER === 'at' && !env.AT_API_KEY) {
       ctx.addIssue({ code: 'custom', message: 'NOTIFY_PROVIDER=at requires AT_API_KEY' });
+    }
+    if ((env.ASR_PROVIDER === 'khaya' || env.MT_PROVIDER === 'khaya') && !env.KHAYA_API_KEY) {
+      ctx.addIssue({ code: 'custom', message: 'ASR/MT_PROVIDER=khaya requires KHAYA_API_KEY' });
     }
     if (env.VOICE_PROVIDER === 'at' && (!env.AT_API_KEY || !env.AT_VOICE_NUMBER)) {
       ctx.addIssue({ code: 'custom', message: 'VOICE_PROVIDER=at requires AT_API_KEY and AT_VOICE_NUMBER' });

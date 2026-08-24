@@ -599,6 +599,30 @@ export const buyerNotifications = sqliteTable(
   (t) => [index('buyer_notifications_buyer_idx').on(t.buyerId, t.readAt)],
 );
 
+// Voice listings (D-038): one open-ended call = one row — the audio ref, what
+// ASR heard, what MT made of it, what the parser extracted, and the lot it
+// became. The audit trail for "the AI listed this for me".
+export const voiceListings = sqliteTable(
+  'voice_listings',
+  {
+    id: id(),
+    phone: text('phone').notNull(),
+    farmerId: text('farmer_id').references(() => farmers.id),
+    audioRef: text('audio_ref'), // recording URL from the gateway; null in mock
+    transcript: text('transcript'),
+    translatedText: text('translated_text'),
+    locale: text('locale').notNull().default('en'),
+    parsed: text('parsed'), // JSON ParsedListing
+    lotId: text('lot_id').references(() => lots.id),
+    status: text('status', { enum: ['recorded', 'listed', 'failed'] })
+      .notNull()
+      .default('recorded'),
+    error: text('error'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('voice_listings_phone_idx').on(t.phone)],
+);
+
 // Farmer web-login OTPs (D-032): the code travels over the same SMS outbox as
 // every other farmer message — mock-visible offline, real SMS when AT keys land.
 export const loginOtps = sqliteTable(
@@ -645,6 +669,7 @@ export type Notification = typeof notifications.$inferSelect;
 export type VehicleClass = typeof vehicleClasses.$inferSelect;
 export type BuyerNotification = typeof buyerNotifications.$inferSelect;
 export type VoiceCall = typeof voiceCalls.$inferSelect;
+export type VoiceListing = typeof voiceListings.$inferSelect;
 export type Driver = typeof drivers.$inferSelect;
 export type DeliveryJob = typeof deliveryJobs.$inferSelect;
 export type DeliveryJobOffer = typeof deliveryJobOffers.$inferSelect;

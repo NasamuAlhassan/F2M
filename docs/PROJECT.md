@@ -93,6 +93,10 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M23 — Transaction Flow / MoMo timeline card (Frame 03) | **done** |
 | M24 — QR traceability + public trace page (Frame 09, D-033) | **done** |
 | M25 — Co-op Consolidation Board with pool bids (Frame 10, D-034) | **done** |
+| M26 — buyer IA consolidation: 4 tabs, compact layouts (D-035) | **done** |
+| M27 — listing channel, produce photos, call-to-negotiate (D-036) | **done** |
+| M28 — driver directory, direct hire, seller-arranged delivery (D-037) | **done** |
+| M29 — open-ended voice listing pipeline, mock-first ASR/MT (D-038) | **done** |
 
 **MVP:** criteria 1 and 3 met (offline scripted demo to SETTLED; two-tab manual demo verified live in a browser). Criterion 2 — the same demo on real HF grading + MoMo sandbox — is code-complete and waits only on external accounts (HF token, MoMo sandbox subscriptions, Africa's Talking sandbox + ngrok).
 

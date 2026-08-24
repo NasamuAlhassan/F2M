@@ -84,7 +84,21 @@
       <input id="phone" value="+233201234567">
     </div>
   </div>
-  <div class="panel">
+  <div class="panel" style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-head">
+        <h1>🎙 Speak Your Listing</h1>
+        <p>the open-ended call: say it once, the AI lists it</p>
+      </div>
+      <div class="card-body">
+        Calling the listing line, the farmer hears <em>“tell us everything you want to sell”</em> and just talks.
+        The recording runs ASR → translation → parsing and the lot goes live with their phone on the card.
+        Type here what the farmer would say:
+        <textarea id="speech" rows="3" style="width:100%;margin-top:10px;border:1px solid #e5e7eb;border-radius:10px;padding:10px;font-size:13px;font-family:'Inter',sans-serif" placeholder="I have ten bags of maize, good quality"></textarea>
+        <button id="speak" style="width:100%;margin-top:8px;background:#d97706;color:white;padding:10px;border-radius:10px;font-size:13px">📞 Call &amp; speak</button>
+        <div id="speakout" style="margin-top:10px;display:none;background:#f3f4f6;border-radius:10px;padding:10px;font-size:12px;line-height:1.5"></div>
+      </div>
+    </div>
     <div class="card">
       <div class="card-head">
         <h1>IVR Simulator</h1>
@@ -187,6 +201,28 @@
     if (!currentCall) return;
     postAnswer(d);
   }
+
+  // The open-ended listing call (D-038): drives the REAL inbound wire — the
+  // typed text stands in for the recording (mock ASR); Khaya transcribes later.
+  document.getElementById('speak').addEventListener('click', async () => {
+    const speech = document.getElementById('speech').value.trim();
+    const out = document.getElementById('speakout');
+    if (!speech) return;
+    out.style.display = 'block';
+    out.textContent = '☎ dialing the listing line…';
+    try {
+      const res = await fetch('/voice/answer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ callerNumber: phoneInput.value.trim(), transcript: speech }),
+      });
+      const xml = await res.text();
+      const say = new DOMParser().parseFromString(xml, 'application/xml').querySelector('Say');
+      out.textContent = '🔊 ' + (say ? say.textContent : xml);
+    } catch {
+      out.textContent = 'Network error — is the server running on :3000?';
+    }
+  });
 
   reject.addEventListener('click', async () => {
     if (!currentCall) return;
