@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ghs, placeName, sellerName, shortDate, type MarketLot, type Registries } from '../api';
+import { POLL } from '../poll';
 import { NewDemandForm } from '../components/DemandForm';
 import { CropMark, Glyph } from '../components/engrave';
 import { Modal } from '../components/Modal';
@@ -20,7 +21,7 @@ export function MarketplacePage() {
   const { data, dataUpdatedAt } = useQuery({
     queryKey: ['market-lots'],
     queryFn: () => api<{ lots: MarketLot[] }>('/api/market/lots'),
-    refetchInterval: 10000,
+    refetchInterval: POLL.ambient,
   });
 
   const [crops, setCrops] = useState<Set<string>>(new Set());
@@ -250,7 +251,7 @@ export function MarketplacePage() {
                   {/* media well */}
                   <div className="relative h-36 overflow-hidden border border-[var(--ink-2)]">
                     {l.photoUrl ? (
-                      <img src={l.photoUrl} alt={l.commodityName} className="h-full w-full object-cover" />
+                      <img src={l.photoUrl} alt={l.commodityName} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                     ) : (
                       <div className="hatch flex h-full w-full items-center justify-center">
                         <CropMark code={l.commodityCode} className="h-20 w-20 text-[var(--ink-7)]" />

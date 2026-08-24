@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { api, ghs, shortDate, type Demand, type MatchRow } from '../api';
+import { POLL } from '../poll';
 import { Glyph } from '../components/engrave';
 import { Bar, Card, GradeBadge, Stat, StateBadge } from '../components/ui';
 
@@ -9,7 +10,7 @@ export function DemandDetailPage() {
   const { data } = useQuery({
     queryKey: ['demand', id],
     queryFn: () => api<{ demand: Demand; matches: MatchRow[] }>(`/api/demands/${id}`),
-    refetchInterval: 5000,
+    refetchInterval: POLL.active,
   });
   if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
   const { demand, matches } = data;

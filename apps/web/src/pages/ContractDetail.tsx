@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, dateTime, ghs, type AvailableDriver, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
+import { POLL } from '../poll';
 import { Glyph, VehicleMark } from '../components/engrave';
 import { QrImage } from '../components/QrImage';
 import { btnCls, btnGhostCls, Card, ErrorStamp, GradeBadge, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
@@ -30,7 +31,7 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
       <div className="relative flex min-w-[600px] items-start justify-between">
         <div className="absolute left-0 right-0 top-4 h-px bg-[var(--ink-2)]">
           <div
-            className="h-full bg-[var(--ink)] transition-all duration-500"
+            className="h-full bg-[var(--ink)] transition-[width] duration-500"
             style={{ width: `${steps.length > 1 ? (Math.max(0, doneCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
           />
         </div>
@@ -130,7 +131,7 @@ export function ContractDetailPage() {
   const { data } = useQuery({
     queryKey: ['contract', id],
     queryFn: () => api<ContractDetail>(`/api/contracts/${id}`),
-    refetchInterval: 4000, // payments + grading move live during a demo
+    refetchInterval: POLL.live, // payments + grading move live during a demo
   });
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -311,7 +312,7 @@ export function ContractDetailPage() {
               <div className="flex flex-wrap gap-3">
                 {photos.map((p) => (
                   <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="border border-[var(--ink-3)] p-1">
-                    <img src={p.url} alt="pickup" className="h-24 w-24 object-cover" />
+                    <img src={p.url} alt="Pickup photo" loading="lazy" decoding="async" className="h-24 w-24 object-cover" />
                   </a>
                 ))}
               </div>
@@ -493,7 +494,7 @@ function TransportSection({
   const { data: jobData } = useQuery({
     queryKey: ['transport', contractId],
     queryFn: () => api<{ job: JobView | null }>(`/api/contracts/${contractId}/transport`),
-    refetchInterval: 4000,
+    refetchInterval: POLL.live,
   });
   const job = jobData?.job ?? null;
   const canRequest = contractState === 'FUNDS_HELD' && (!job || ['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state));
@@ -506,7 +507,7 @@ function TransportSection({
     queryKey: ['drivers-available'],
     queryFn: () => api<{ drivers: AvailableDriver[] }>('/api/drivers/available'),
     enabled: canRequest && showDrivers,
-    refetchInterval: 10000,
+    refetchInterval: POLL.ambient,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['transport', contractId] });

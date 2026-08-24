@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, dateTime, ghs, type JobView, type Registries } from '../api';
+import { POLL } from '../poll';
 import { CropMark, VehicleMark } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
 import { btnCls, btnGhostCls, Card, ErrorStamp, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
@@ -78,10 +79,10 @@ function ProfileSidebar() {
               onClick={() => save.mutate({ active: !profile.active })}
             >
               <span
-                className={`absolute top-[3px] h-5 w-5 rounded-full transition-all ${
+                className={`absolute left-1 top-[3px] h-5 w-5 rounded-full transition-[transform,background-color] ${
                   profile.active ? 'bg-[var(--gold)]' : 'bg-[var(--ink-4)]'
                 }`}
-                style={{ left: profile.active ? 27 : 4 }}
+                style={{ transform: profile.active ? 'translateX(23px)' : 'translateX(0)' }}
               />
             </button>
           </div>
@@ -178,7 +179,7 @@ export function DriverJobsPage() {
   const { data } = useQuery({
     queryKey: ['driver-jobs'],
     queryFn: () => api<{ offers: OfferView[]; openRequests: JobView[]; jobs: JobView[] }>('/api/driver/jobs'),
-    refetchInterval: 5000,
+    refetchInterval: POLL.active,
   });
   const [error, setError] = useState<string | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['driver-jobs'] });

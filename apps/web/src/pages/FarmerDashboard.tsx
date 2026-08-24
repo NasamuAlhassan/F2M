@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type FarmerDashboard, type Registries } from '../api';
+import { POLL } from '../poll';
 import { CropMark, Glyph } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
 import { btnCls, btnGhostCls, ErrorStamp, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
@@ -186,7 +187,7 @@ export function FarmerDashboardPage() {
   const { data } = useQuery({
     queryKey: ['farmer-dashboard'],
     queryFn: () => api<FarmerDashboard>('/api/farmer/dashboard'),
-    refetchInterval: 5000,
+    refetchInterval: POLL.active,
   });
   const [error, setError] = useState<string | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['farmer-dashboard'] });
@@ -347,7 +348,7 @@ export function FarmerDashboardPage() {
                 <div key={l.id} className="certificate flex flex-wrap items-center gap-4 bg-[var(--paper-lift)] p-4">
                   {l.photoUrl ? (
                     <span className="border border-[var(--ink-3)] p-0.5">
-                      <img src={l.photoUrl} alt="" className="h-11 w-11 object-cover" />
+                      <img src={l.photoUrl} alt="" loading="lazy" decoding="async" className="h-11 w-11 object-cover" />
                     </span>
                   ) : (
                     <span className="hatch flex h-12 w-12 flex-shrink-0 items-center justify-center border border-[var(--ink-2)]">

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ghs, placeName, sellerName, type MarketLot, type Registries } from '../api';
+import { POLL } from '../poll';
 import { CropMark, Glyph, VehicleMark } from '../components/engrave';
 import { ErrorStamp, GradeBadge } from '../components/ui';
 
@@ -19,7 +20,7 @@ export function PoolBuilder() {
   const { data } = useQuery({
     queryKey: ['market-lots'],
     queryFn: () => api<{ lots: MarketLot[] }>('/api/market/lots'),
-    refetchInterval: 10000,
+    refetchInterval: POLL.ambient,
   });
 
   const all = data?.lots ?? [];
@@ -135,7 +136,7 @@ export function PoolBuilder() {
               </div>
               <div className="h-4 border border-[var(--ink-3)] bg-[var(--paper)] p-[2px]">
                 <div
-                  className={`h-full transition-all duration-500 ${
+                  className={`h-full transition-[width,background-color] duration-500 ${
                     overload ? 'bg-[var(--stamp)]' : full ? 'bg-[var(--ink)]' : 'bg-[var(--gold)]'
                   }`}
                   style={{ width: `${pct}%` }}

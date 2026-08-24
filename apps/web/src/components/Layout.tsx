@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, dateTime, getRole, setToken, type LocaleInfo, type MarketLot, type Me } from '../api';
+import { POLL } from '../poll';
 import { F2MSeal, Glyph } from './engrave';
 
 interface NotificationRow {
@@ -67,7 +68,7 @@ function NotificationBell() {
   const { data } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => api<{ unread: number; notifications: NotificationRow[] }>('/api/notifications'),
-    refetchInterval: 6000,
+    refetchInterval: POLL.ambient,
   });
   const markRead = useMutation({
     mutationFn: () => api('/api/notifications/read', { method: 'POST', body: JSON.stringify({}) }),
@@ -191,7 +192,7 @@ export function Layout() {
     queryKey: ['market-lots'],
     queryFn: () => api<{ lots: MarketLot[] }>('/api/market/lots'),
     enabled: role === 'buyer',
-    refetchInterval: 15000,
+    refetchInterval: POLL.slow,
   });
 
   const displayName =

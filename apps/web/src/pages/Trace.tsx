@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { api, dateTime, type TraceEvent } from '../api';
+import { POLL } from '../poll';
 import { RouteSpine } from '../components/engrave';
 import { Card } from '../components/ui';
 
@@ -82,7 +83,7 @@ export function TracePage() {
   const { data } = useQuery({
     queryKey: ['trace', id],
     queryFn: () => api<{ events: TraceEvent[] }>(`/api/lots/${id}/trace`),
-    refetchInterval: 5000,
+    refetchInterval: POLL.active,
   });
   if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
 

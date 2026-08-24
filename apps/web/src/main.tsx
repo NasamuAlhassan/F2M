@@ -1,23 +1,33 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
 import { getToken } from './api';
 import { Layout } from './components/Layout';
 import './index.css';
-import { ContractDetailPage } from './pages/ContractDetail';
-import { ContractsPage } from './pages/Contracts';
-import { DemandDetailPage } from './pages/DemandDetail';
-import { DriverJobsPage } from './pages/DriverJobs';
-import { DriverLoginPage } from './pages/DriverLogin';
-import { FarmerDashboardPage } from './pages/FarmerDashboard';
-import { FarmerLoginPage } from './pages/FarmerLogin';
-import { LoginPage } from './pages/Login';
-import { MarketplacePage } from './pages/Marketplace';
-import { OrdersPage } from './pages/Orders';
-import { PricesPage } from './pages/Prices';
-import { PublicTracePage } from './pages/PublicTrace';
-import { TracePage } from './pages/Trace';
+
+// Route-level code splitting: each page ships as its own chunk, so a phone on
+// mobile data pays only for the surface it opens (the QR library, for one,
+// rides the contract/trace chunks instead of the login path).
+const page = <T extends Record<string, unknown>, K extends keyof T>(
+  loader: () => Promise<T>,
+  name: K,
+): React.LazyExoticComponent<React.ComponentType> =>
+  lazy(() => loader().then((m) => ({ default: m[name] as React.ComponentType })));
+
+const LoginPage = page(() => import('./pages/Login'), 'LoginPage');
+const DriverLoginPage = page(() => import('./pages/DriverLogin'), 'DriverLoginPage');
+const FarmerLoginPage = page(() => import('./pages/FarmerLogin'), 'FarmerLoginPage');
+const PublicTracePage = page(() => import('./pages/PublicTrace'), 'PublicTracePage');
+const MarketplacePage = page(() => import('./pages/Marketplace'), 'MarketplacePage');
+const OrdersPage = page(() => import('./pages/Orders'), 'OrdersPage');
+const ContractsPage = page(() => import('./pages/Contracts'), 'ContractsPage');
+const PricesPage = page(() => import('./pages/Prices'), 'PricesPage');
+const DriverJobsPage = page(() => import('./pages/DriverJobs'), 'DriverJobsPage');
+const FarmerDashboardPage = page(() => import('./pages/FarmerDashboard'), 'FarmerDashboardPage');
+const DemandDetailPage = page(() => import('./pages/DemandDetail'), 'DemandDetailPage');
+const ContractDetailPage = page(() => import('./pages/ContractDetail'), 'ContractDetailPage');
+const TracePage = page(() => import('./pages/Trace'), 'TracePage');
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
@@ -27,12 +37,19 @@ function RequireAuth() {
   return getToken() ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
+// The chunk-load interstitial, in the world's own voice.
+function PageLoading() {
+  return <p className="smallcaps p-6 text-[var(--ink-6)]">Loading…</p>;
+}
+
+const withSuspense = (el: React.ReactNode) => <Suspense fallback={<PageLoading />}>{el}</Suspense>;
+
 const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
-  { path: '/driver/login', element: <DriverLoginPage /> },
-  { path: '/farmer/login', element: <FarmerLoginPage /> },
+  { path: '/login', element: withSuspense(<LoginPage />) },
+  { path: '/driver/login', element: withSuspense(<DriverLoginPage />) },
+  { path: '/farmer/login', element: withSuspense(<FarmerLoginPage />) },
   // The QR destination — public by design (D-033), no auth wrapper.
-  { path: '/t/:lotId', element: <PublicTracePage /> },
+  { path: '/t/:lotId', element: withSuspense(<PublicTracePage />) },
   {
     element: <RequireAuth />,
     children: [
@@ -40,15 +57,15 @@ const router = createBrowserRouter([
         element: <Layout />,
         children: [
           { path: '/', element: <Navigate to="/market" replace /> },
-          { path: '/market', element: <MarketplacePage /> },
-          { path: '/orders', element: <OrdersPage /> },
-          { path: '/contracts', element: <ContractsPage /> },
-          { path: '/prices', element: <PricesPage /> },
-          { path: '/driver/jobs', element: <DriverJobsPage /> },
-          { path: '/farmer/dashboard', element: <FarmerDashboardPage /> },
-          { path: '/demands/:id', element: <DemandDetailPage /> },
-          { path: '/contracts/:id', element: <ContractDetailPage /> },
-          { path: '/lots/:id/trace', element: <TracePage /> },
+          { path: '/market', element: withSuspense(<MarketplacePage />) },
+          { path: '/orders', element: withSuspense(<OrdersPage />) },
+          { path: '/contracts', element: withSuspense(<ContractsPage />) },
+          { path: '/prices', element: withSuspense(<PricesPage />) },
+          { path: '/driver/jobs', element: withSuspense(<DriverJobsPage />) },
+          { path: '/farmer/dashboard', element: withSuspense(<FarmerDashboardPage />) },
+          { path: '/demands/:id', element: withSuspense(<DemandDetailPage />) },
+          { path: '/contracts/:id', element: withSuspense(<ContractDetailPage />) },
+          { path: '/lots/:id/trace', element: withSuspense(<TracePage />) },
           // M26 consolidation — old URLs stay alive (deploying live, no dead links).
           { path: '/demands', element: <Navigate to="/orders" replace /> },
           { path: '/engine', element: <Navigate to="/orders" replace /> },

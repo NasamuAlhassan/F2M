@@ -287,3 +287,12 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **Named controls**: the distance slider and lot-sort select carry aria-labels; the alerts bell declares `aria-expanded`/`aria-haspopup` and its tray now closes on Escape and outside click.
 - Double-submission was already guarded everywhere (`isPending` disables); verified, not changed.
 - Verified: tsc + build clean, detector reports no new findings (the three open ones are the polish pass's QrImage/scrollbar items), render smoke at 390px.
+
+## 2026-08-24 · Optimize pass — the phone pays only for the page it opens (audit P2 perf closed)
+
+- **Route-level code splitting** (main.tsx, React.lazy + a smallcaps Suspense interstitial): the critical path dropped from one 479.5 kB chunk (139.1 kB gzip) to a 321.2 kB entry (101.1 kB gzip) — **27% lighter** — plus per-page chunks of 2–20 kB; the QR-carrying contract page is a 47.9 kB chunk that loads only when opened.
+- **First-viewport fonts preloaded** (Cinzel-700, Public Sans-400, Courier Prime-400) so the three voices arrive before the CSS asks.
+- **Lot photos and pickup thumbnails** carry `loading="lazy" decoding="async"` (fixed-height wells already contained CLS).
+- **Named transitions**: the stepper progress fill and pool capacity meter animate `width`/`background-color` explicitly; the driver duty toggle's knob moved from animating `left` (layout) to `transform: translateX` — the one genuinely layout-bound animation in the app.
+- **One polling knob**: all fourteen `refetchInterval` literals now read from `src/poll.ts` (live 4s · active 5s · ambient 8s · slow 15s) — the ambient tier eased from 6/10s to 8s, and the whole refresh appetite tunes in one file before a data-billed pilot.
+- Verified: tsc + build clean, chunk table measured before/after, smoke captures of the lazy login and marketplace routes at 390px.

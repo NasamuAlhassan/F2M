@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type Demand, type Registries } from '../api';
+import { POLL } from '../poll';
 import { NewDemandForm } from '../components/DemandForm';
 import { MatchBanner, MatchRow, SimulationDrawer, type Feed } from '../components/engine';
 import { CropMark } from '../components/engrave';
@@ -19,12 +20,12 @@ export function OrdersPage() {
   const { data: demandData } = useQuery({
     queryKey: ['demands'],
     queryFn: () => api<{ demands: Demand[] }>('/api/demands'),
-    refetchInterval: 5000,
+    refetchInterval: POLL.active,
   });
   const { data: feed } = useQuery({
     queryKey: ['engine-feed'],
     queryFn: () => api<Feed>('/api/engine/feed'),
-    refetchInterval: 5000,
+    refetchInterval: POLL.active,
   });
 
   const [showForm, setShowForm] = useState(false);
