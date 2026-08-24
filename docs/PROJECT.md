@@ -39,7 +39,8 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 
 - The six-step spine for **3 commodities** spanning every architecture case: MAIZE (storable grain), TOMATO (perishable), YAM (tuber).
 - **USSD at feature parity** — Africa's Talking sandbox webhook + a local browser tester.
-- **Buyer web portal** — login, demands, matches, contract detail (photos, grading, payments), lot trace timeline.
+- **Buyer web portal** — marketplace browse + bids, demands, matches, contract detail (photos, grading, payments, transaction flow), consolidation, QR traceability, lot trace timeline.
+- **Seller web dashboard** — farmers log in with phone + SMS code: list lots, accept/decline bids, watch payouts (same domain calls as USSD).
 - **Real AI grading** via free HuggingFace vision models, with a deterministic mock fallback.
 - **Real payment rails** via MTN MoMo sandbox (Collections hold, Disbursements release), with a mock ledger fallback.
 - **Double-entry ledger** (every journal sums to zero) and an **append-only trace** per lot.
@@ -84,7 +85,15 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M15 — buyer notification center (autonomous-engine alerts) | **done** |
 | M16 — voice/IVR layer (hear the offer, press 1; AT Voice ready) | **done** |
 | M17 — expanded demo (voice accept + transport leg, exits 0 offline) | **done** |
+| M18 — driver dashboard, route-filtered dispatch board, multi-quote Request Driver | **done** |
+| M19 — AI Intent & Auto-Matching Engine page (banner, feed, simulation drawer) | **done** |
+| M20 — the owner's Figma design system adopted across every surface (D-030) | **done** |
+| M21 — marketplace browse + Place Bid (Frame 01, D-031) | **done** |
+| M22 — Seller Dashboard + farmer OTP web login (Frame 07, D-032) | **done** |
+| M23 — Transaction Flow / MoMo timeline card (Frame 03) | **done** |
+| M24 — QR traceability + public trace page (Frame 09, D-033) | **done** |
+| M25 — Co-op Consolidation Board with pool bids (Frame 10, D-034) | **done** |
 
 **MVP:** criteria 1 and 3 met (offline scripted demo to SETTLED; two-tab manual demo verified live in a browser). Criterion 2 — the same demo on real HF grading + MoMo sandbox — is code-complete and waits only on external accounts (HF token, MoMo sandbox subscriptions, Africa's Talking sandbox + ngrok).
 
-_Update this table at every milestone. Last updated: 2026-08-23._
+_Update this table at every milestone. Last updated: 2026-08-24._
