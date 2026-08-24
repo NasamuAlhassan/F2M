@@ -20,7 +20,7 @@ export function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      setToken(res.token);
+      setToken(res.token, 'buyer');
       navigate('/market');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');

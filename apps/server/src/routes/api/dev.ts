@@ -2,6 +2,7 @@ import { listNotificationsForPhone, listVoiceCallsForPhone, normalizePhone } fro
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { sweepOnce } from '../../jobs/sweep';
+import { endUssdSession } from '../../ussd/machine';
 
 const sweepSchema = z.object({ now: z.number().optional() }).default({});
 
@@ -10,6 +11,14 @@ export async function devRoutes(app: FastifyInstance): Promise<void> {
   app.post('/dev/sweep', async (req) => {
     const { now } = sweepSchema.parse(req.body ?? {});
     return sweepOnce(now ?? Date.now());
+  });
+
+  // The handset's End key. A real carrier reports the abandoned dial itself;
+  // the simulator has to say so, or the session outlives the caller's intent.
+  app.post('/dev/ussd-end', async (req) => {
+    const { sessionId } = z.object({ sessionId: z.string().min(1) }).parse(req.body ?? {});
+    endUssdSession(sessionId);
+    return { ok: true };
   });
 
   // Powers the incoming-call panel in ivr-tester.html.

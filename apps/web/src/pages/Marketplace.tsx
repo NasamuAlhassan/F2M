@@ -66,7 +66,7 @@ export function MarketplacePage() {
   };
 
   const modeSwitch = (
-    <div className="mb-4 inline-flex border border-[var(--ink-7)]">
+    <div className="mb-4 inline-flex overflow-hidden rounded-xl border border-[var(--ink-2)] bg-[var(--paper-lift)] shadow-sm">
       {(
         [
           ['browse', 'Browse Lots'],
@@ -77,7 +77,7 @@ export function MarketplacePage() {
           key={m}
           onClick={() => setSearchParams(m === 'pool' ? { mode: 'pool' } : {}, { replace: true })}
           className={`smallcaps min-h-11 px-4 py-2 transition-colors lg:min-h-0 ${
-            mode === m ? 'bg-[var(--ink)] text-[var(--paper)]' : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'
+            mode === m ? 'bg-[var(--ink)] text-[var(--paper)]' : 'text-[var(--ink-6)] hover:text-[var(--ink)]'
           }`}
         >
           {label}
@@ -102,7 +102,7 @@ export function MarketplacePage() {
         {/* ── The filter index (folds behind a summary row on phones) ── */}
         <aside className="w-full flex-shrink-0 lg:w-52">
           <button
-            className="smallcaps flex min-h-11 w-full items-center justify-between border border-[var(--ink-3)] bg-[var(--paper-lift)] px-3 py-2.5 text-[var(--ink)] lg:hidden"
+            className="smallcaps flex min-h-11 w-full items-center justify-between rounded-xl border border-[var(--ink-2)] bg-[var(--paper-lift)] px-3 py-2.5 text-[var(--ink)] shadow-sm lg:hidden"
             onClick={() => setFiltersOpen((v) => !v)}
             aria-expanded={filtersOpen}
           >
@@ -239,97 +239,108 @@ export function MarketplacePage() {
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {lots.map((l) => (
-                <article key={l.id} className="certificate flex flex-col bg-[var(--paper-lift)] p-3">
-                  {/* document head: serial + seal */}
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <span className="serial text-[11px] font-bold tracking-[0.06em] text-[var(--ink-7)]">
-                      LOT №&nbsp;{l.lotCode.replace('FTM-', '')}
-                    </span>
-                    <GradeBadge grade={l.declaredBand} />
-                  </div>
-
-                  {/* media well */}
-                  <div className="relative h-36 overflow-hidden border border-[var(--ink-2)]">
+                <article key={l.id} className="certificate flex flex-col overflow-hidden">
+                  {/* media well — full bleed to the card's own rounded corners, a
+                      real photo where the farmer uploaded one, otherwise a
+                      considered brand panel (never a stand-in photo: photoUrl
+                      is null by construction for every USSD/voice listing). */}
+                  <div className="relative h-44 flex-shrink-0">
                     {l.photoUrl ? (
                       <img src={l.photoUrl} alt={l.commodityName} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                     ) : (
                       <div className="hatch flex h-full w-full items-center justify-center">
-                        <CropMark code={l.commodityCode} className="h-20 w-20 text-[var(--ink-7)]" />
+                        <CropMark code={l.commodityCode} className="h-20 w-20 text-[var(--forest)]" />
                       </div>
                     )}
-                    <span
-                      className={`stamp absolute left-2 top-2 bg-[var(--paper)] px-1.5 py-0.5 text-[11px] ${
-                        l.listingType === 'FORWARD' ? 'text-[var(--ink-7)]' : 'text-[var(--gold-deep)]'
-                      }`}
-                    >
-                      {l.listingType === 'FORWARD' ? `Ready ${shortDate(l.readyDate)}` : 'Same-day'}
-                    </span>
-                    {l.channel !== 'web' && (
-                      <span className="stamp absolute right-2 top-2 bg-[var(--paper)] px-1.5 py-0.5 text-[11px] text-[var(--ink-6)]">
-                        {l.channel === 'ivr' ? 'Voice listing' : 'USSD listing'}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* subject */}
-                  <div className="mt-3 flex items-baseline justify-between gap-2 px-1">
-                    <h2 className="truncate text-base font-bold text-[var(--ink)]">{l.commodityName}</h2>
-                    <span className="serial flex-shrink-0 text-[11px] text-[var(--ink-6)]">{l.distanceKm} km</span>
-                  </div>
-                  <p className="truncate px-1 text-sm text-[var(--ink-6)]">
-                    {sellerName(l.farmerName)} · {placeName(l.district) ? `${placeName(l.district)}, ` : ''}
-                    {l.regionName}
-                  </p>
-
-                  {/* value line */}
-                  <div className="mt-2.5 flex items-baseline justify-between gap-2 border-t border-[var(--ink-2)] px-1 pt-2.5">
-                    <div className="whitespace-nowrap">
-                      <span className="serial text-2xl font-bold text-[var(--gold-deep)]">
-                        {l.pricePerUnit !== null ? ghs(l.pricePerUnit) : '—'}
-                      </span>
-                      <span className="smallcaps ml-1.5 text-[var(--ink-6)]">/ {l.unitName}</span>
-                    </div>
-                    {l.fairPrice && l.pricePerUnit !== null && (
+                    <div className="absolute inset-x-0 top-0 flex items-start justify-between p-2.5">
                       <span
-                        className="stamp whitespace-nowrap px-1.5 py-0.5 text-[11px] text-[var(--ink)]"
-                        title="At or below the cross-market reference average"
+                        className={`stamp bg-[var(--paper-lift)]/95 px-2 py-1 text-[11px] shadow-sm backdrop-blur-sm ${
+                          l.listingType === 'FORWARD' ? 'text-[var(--ink-7)]' : 'text-[var(--gold-deep)]'
+                        }`}
                       >
-                        Fair price
+                        {l.listingType === 'FORWARD' ? `Ready ${shortDate(l.readyDate)}` : 'Same-day'}
                       </span>
+                      <GradeBadge grade={l.declaredBand} />
+                    </div>
+                    {/* subject caption over the photo's own gradient scrim */}
+                    {l.photoUrl && (
+                      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/70 via-black/10 to-transparent p-2.5 pt-8">
+                        <h2 className="truncate text-base font-bold text-white">{l.commodityName}</h2>
+                        <span className="serial flex-shrink-0 text-[11px] text-white/90">{l.distanceKm} km</span>
+                      </div>
                     )}
                   </div>
-                  <p className="serial px-1 text-[11px] text-[var(--ink-6)]">
-                    {l.unitsRemaining !== null ? `${l.unitsRemaining} units · ` : ''}
-                    {l.remainingKg.toLocaleString()} kg on offer
-                    {l.priceSource === 'market' ? ' · market ref' : ''}
-                  </p>
 
-                  {l.farmerPhone && (
-                    <a
-                      href={`tel:${l.farmerPhone}`}
-                      className="mt-2.5 flex min-h-11 items-center justify-center gap-2 border border-[var(--stamp)] py-2 text-sm font-semibold text-[var(--stamp)] transition-colors hover:bg-[var(--stamp-wash)] lg:min-h-0"
-                    >
-                      <Glyph name="phone" className="h-4 w-4" />
-                      Call to negotiate <span className="serial text-xs">{l.farmerPhone}</span>
-                    </a>
-                  )}
-                  {l.channel !== 'web' && (
-                    <p className="mt-1.5 px-1 text-[11px] leading-snug text-[var(--ink-6)]">
-                      This farmer listed by {l.channel === 'ivr' ? 'voice call' : 'USSD'} and may not read SMS — call to
-                      agree terms, or bid and they'll get a voice call.
+                  <div className="flex flex-1 flex-col p-3">
+                    {!l.photoUrl && (
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <h2 className="truncate text-base font-bold text-[var(--ink)]">{l.commodityName}</h2>
+                        <span className="serial flex-shrink-0 text-[11px] text-[var(--ink-6)]">{l.distanceKm} km</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm text-[var(--ink-6)]">
+                        {sellerName(l.farmerName)} · {placeName(l.district) ? `${placeName(l.district)}, ` : ''}
+                        {l.regionName}
+                      </p>
+                      {l.channel !== 'web' && (
+                        <span className="stamp flex-shrink-0 bg-[var(--paper)] px-1.5 py-0.5 text-[10px] text-[var(--ink-6)]">
+                          {l.channel === 'ivr' ? 'Voice listing' : 'USSD listing'}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* value line */}
+                    <div className="mt-2.5 flex items-baseline justify-between gap-2 border-t border-[var(--ink-2)] pt-2.5">
+                      <div className="whitespace-nowrap">
+                        <span className="serial text-2xl font-bold text-[var(--gold-deep)]">
+                          {l.pricePerUnit !== null ? ghs(l.pricePerUnit) : '—'}
+                        </span>
+                        <span className="smallcaps ml-1.5 text-[var(--ink-6)]">/ {l.unitName}</span>
+                      </div>
+                      {l.fairPrice && l.pricePerUnit !== null && (
+                        <span
+                          className="stamp whitespace-nowrap bg-[var(--success-wash)] px-1.5 py-0.5 text-[11px] text-[var(--success)]"
+                          title="At or below the cross-market reference average"
+                        >
+                          Fair price
+                        </span>
+                      )}
+                    </div>
+                    <p className="serial text-[11px] text-[var(--ink-6)]">
+                      {l.unitsRemaining !== null ? `${l.unitsRemaining} units · ` : ''}
+                      {l.remainingKg.toLocaleString()} kg on offer
+                      {l.priceSource === 'market' ? ' · market ref' : ''}
+                      <span className="text-[var(--ink-4)]"> · LOT №&nbsp;{l.lotCode.replace('FTM-', '')}</span>
                     </p>
-                  )}
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Link
-                      to={`/lots/${l.id}/trace`}
-                      className="rounded-[2px] border border-[var(--ink-5)] py-2 text-center text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
-                    >
-                      View Trace
-                    </Link>
-                    <button className={btnCls} onClick={() => setBidLot(l)}>
-                      Place Bid
-                    </button>
+                    {l.farmerPhone && (
+                      <a
+                        href={`tel:${l.farmerPhone}`}
+                        className="mt-2.5 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--stamp)] py-2 text-sm font-semibold text-[var(--stamp)] transition-colors hover:bg-[var(--stamp-wash)] lg:min-h-0"
+                      >
+                        <Glyph name="phone" className="h-4 w-4" />
+                        Call to negotiate <span className="serial text-xs">{l.farmerPhone}</span>
+                      </a>
+                    )}
+                    {l.channel !== 'web' && (
+                      <p className="mt-1.5 text-[11px] leading-snug text-[var(--ink-6)]">
+                        This farmer listed by {l.channel === 'ivr' ? 'voice call' : 'USSD'} and may not read SMS — call to
+                        agree terms, or bid and they'll get a voice call.
+                      </p>
+                    )}
+
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <Link
+                        to={`/lots/${l.id}/trace`}
+                        className="flex items-center justify-center rounded-xl border border-[var(--ink-5)] py-2 text-center text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+                      >
+                        View Trace
+                      </Link>
+                      <button className={btnCls} onClick={() => setBidLot(l)}>
+                        Place Bid
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))}

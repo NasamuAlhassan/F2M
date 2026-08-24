@@ -1,0 +1,27 @@
+# Secrets never enter the image — they ride `fly secrets set` instead.
+.env
+_env.crash
+
+# Rebuilt inside the container.
+node_modules
+**/node_modules
+apps/web/dist
+
+# Local runtime state; production keeps its own on the Fly volume.
+data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+apps/server/storage
+coverage
+.vite
+
+.git
+.github
+.claude
+.impeccable
+**/.impeccable
+docs
+demo-assets
+*.md

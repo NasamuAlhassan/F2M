@@ -113,7 +113,7 @@ export function ContractsPage() {
                   <td className={`${tdCls} text-xs text-[var(--ink-6)]`}>{shortDate(c.createdAt)}</td>
                   <td className={`${tdCls} text-right`}>
                     <Link
-                      className="rounded-[2px] border border-[var(--ink-5)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+                      className="rounded-lg border border-[var(--ink-5)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
                       to={`/contracts/${c.id}`}
                     >
                       Open

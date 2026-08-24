@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React, { lazy, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
-import { getToken } from './api';
+import { activeRole, getToken, loginPathFor, type Role } from './api';
 import { Layout } from './components/Layout';
 import './index.css';
 
@@ -28,13 +28,20 @@ const FarmerDashboardPage = page(() => import('./pages/FarmerDashboard'), 'Farme
 const DemandDetailPage = page(() => import('./pages/DemandDetail'), 'DemandDetailPage');
 const ContractDetailPage = page(() => import('./pages/ContractDetail'), 'ContractDetailPage');
 const TracePage = page(() => import('./pages/Trace'), 'TracePage');
+const PhonePage = page(() => import('./pages/Phone'), 'PhonePage');
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
 });
 
-function RequireAuth() {
-  return getToken() ? <Outlet /> : <Navigate to="/login" replace />;
+// Auth is checked per role, because every tab carries its own identity — the
+// buyer portal, the seller desk and the dispatch board are meant to be open at
+// once. A group that names a role demands that role's token; the unnamed group
+// (/prices, which buyer and farmer both link to) accepts whichever identity
+// this tab happens to hold.
+function RequireAuth({ role }: { role?: Role }) {
+  if (role) return getToken(role) ? <Outlet /> : <Navigate to={loginPathFor(role)} replace />;
+  return activeRole() ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
 // The chunk-load interstitial, in the world's own voice.
@@ -50,19 +57,19 @@ const router = createBrowserRouter([
   { path: '/farmer/login', element: withSuspense(<FarmerLoginPage />) },
   // The QR destination — public by design (D-033), no auth wrapper.
   { path: '/t/:lotId', element: withSuspense(<PublicTracePage />) },
+  // The handset simulator has no web login — a phone identifies itself by the
+  // number it dials from, exactly as it does on a real shortcode.
+  { path: '/phone', element: withSuspense(<PhonePage />) },
   {
-    element: <RequireAuth />,
+    element: <RequireAuth role="buyer" />,
     children: [
       {
-        element: <Layout />,
+        element: <Layout role="buyer" />,
         children: [
           { path: '/', element: <Navigate to="/market" replace /> },
           { path: '/market', element: withSuspense(<MarketplacePage />) },
           { path: '/orders', element: withSuspense(<OrdersPage />) },
           { path: '/contracts', element: withSuspense(<ContractsPage />) },
-          { path: '/prices', element: withSuspense(<PricesPage />) },
-          { path: '/driver/jobs', element: withSuspense(<DriverJobsPage />) },
-          { path: '/farmer/dashboard', element: withSuspense(<FarmerDashboardPage />) },
           { path: '/demands/:id', element: withSuspense(<DemandDetailPage />) },
           { path: '/contracts/:id', element: withSuspense(<ContractDetailPage />) },
           { path: '/lots/:id/trace', element: withSuspense(<TracePage />) },
@@ -72,6 +79,34 @@ const router = createBrowserRouter([
           { path: '/consolidate', element: <Navigate to="/market?mode=pool" replace /> },
           { path: '/traceability', element: <Navigate to="/contracts" replace /> },
         ],
+      },
+    ],
+  },
+  {
+    element: <RequireAuth role="farmer" />,
+    children: [
+      {
+        element: <Layout role="farmer" />,
+        children: [{ path: '/farmer/dashboard', element: withSuspense(<FarmerDashboardPage />) }],
+      },
+    ],
+  },
+  {
+    element: <RequireAuth role="driver" />,
+    children: [
+      {
+        element: <Layout role="driver" />,
+        children: [{ path: '/driver/jobs', element: withSuspense(<DriverJobsPage />) }],
+      },
+    ],
+  },
+  // Prices belongs to no single role — the buyer and the farmer both link to it.
+  {
+    element: <RequireAuth />,
+    children: [
+      {
+        element: <Layout />,
+        children: [{ path: '/prices', element: withSuspense(<PricesPage />) }],
       },
     ],
   },

@@ -1,10 +1,10 @@
 import type { ReactNode, SVGProps } from 'react';
 
 /**
- * The engraving plate (D-039, seed 222cf785): every icon in the Trade
- * Instrument world is drawn line-work — one stroke weight, currentColor,
- * no emoji. Crops and vehicles read like the engraved vignettes on a
- * printed certificate.
+ * The engraving plate: every icon here is drawn line-work — one stroke
+ * weight, currentColor, no emoji. Carried over from the paper world on
+ * purpose (D-039 → market redesign) — hand-drawn line icons were never the
+ * problem, and the F2M seal is a confirmed brand mark (PRODUCT.md).
  */
 
 function Mark({ children, ...rest }: SVGProps<SVGSVGElement> & { children: ReactNode }) {
@@ -318,7 +318,7 @@ export function RouteSpine({ eventTypes, compact }: { eventTypes: string[]; comp
                 y={compact ? 36 : 40}
                 textAnchor="middle"
                 fill={isDone ? 'var(--ink)' : isActive ? 'var(--gold-ink)' : 'var(--ink-6)'}
-                style={{ font: `600 10px 'Public Sans', sans-serif`, letterSpacing: '0.1em' }}
+                style={{ font: `700 10px 'Hanken Grotesk', sans-serif`, letterSpacing: '0.06em' }}
               >
                 {s.label.toUpperCase()}
               </text>

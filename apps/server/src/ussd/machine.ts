@@ -48,6 +48,15 @@ function entryScreen(ctx: UssdCtx): string {
   return liveLocales().length > 1 ? 'lang_welcome' : 'welcome';
 }
 
+/**
+ * Drop a session the caller hung up on. Africa's Talking reports an abandoned
+ * dial to the events URL; the simulator calls this directly so a cancelled flow
+ * does not linger until TTL and resume itself on the next dial.
+ */
+export function endUssdSession(sessionId: string): void {
+  db.delete(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, sessionId)).run();
+}
+
 export async function handleUssdRequest(req: UssdRequest): Promise<string> {
   const farmer = getFarmerByPhone(req.phoneNumber) ?? null;
   const driver = farmer ? null : (getDriverByPhone(req.phoneNumber) ?? null);

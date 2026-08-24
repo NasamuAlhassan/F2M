@@ -160,8 +160,8 @@ function ProfileSidebar() {
 function JobStats({ job }: { job: JobView }) {
   return (
     <>
-      <span className="hatch flex h-11 w-11 flex-shrink-0 items-center justify-center border border-[var(--ink-2)]">
-        <CropMark code={job.commodityCode} className="h-7 w-7 text-[var(--ink-7)]" />
+      <span className="hatch flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg">
+        <CropMark code={job.commodityCode} className="h-7 w-7 text-[var(--forest)]" />
       </span>
       <div className="w-24 min-w-0">
         <p className="serial truncate text-xs font-bold text-[var(--ink)]">{job.jobCode}</p>
@@ -186,17 +186,20 @@ export function DriverJobsPage() {
   const onError = (err: unknown) => setError(err instanceof Error ? err.message : 'Action failed');
 
   const accept = useMutation({
-    mutationFn: (id: string) => api(`/api/jobs/${id}/accept`, { method: 'POST' }),
+    // /api/jobs/:id/* is split between roles — accept, decline and pickup are
+    // the driver's, while deliver and retry-dispatch belong to the buyer — so
+    // the path cannot imply the identity and these three name it outright.
+    mutationFn: (id: string) => api(`/api/jobs/${id}/accept`, { method: 'POST', role: 'driver' }),
     onSuccess: invalidate,
     onError,
   });
   const decline = useMutation({
-    mutationFn: (id: string) => api(`/api/jobs/${id}/decline`, { method: 'POST' }),
+    mutationFn: (id: string) => api(`/api/jobs/${id}/decline`, { method: 'POST', role: 'driver' }),
     onSuccess: invalidate,
     onError,
   });
   const pickup = useMutation({
-    mutationFn: (id: string) => api(`/api/jobs/${id}/pickup`, { method: 'POST' }),
+    mutationFn: (id: string) => api(`/api/jobs/${id}/pickup`, { method: 'POST', role: 'driver' }),
     onSuccess: invalidate,
     onError,
   });

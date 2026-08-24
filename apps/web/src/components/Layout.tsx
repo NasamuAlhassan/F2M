@@ -1,7 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
-import { api, dateTime, getRole, setToken, type LocaleInfo, type MarketLot, type Me } from '../api';
+import {
+  activeRole,
+  api,
+  dateTime,
+  loginPathFor,
+  rememberTabRole,
+  setToken,
+  type LocaleInfo,
+  type MarketLot,
+  type Me,
+  type Role,
+} from '../api';
 import { POLL } from '../poll';
 import { F2MSeal, Glyph } from './engrave';
 
@@ -165,10 +176,18 @@ const initials = (name: string): string =>
 const prettyRegion = (code: string | null): string =>
   code ? code.toLowerCase().split('_').map((w) => w[0]!.toUpperCase() + w.slice(1)).join(' ') : '';
 
-export function Layout() {
+export function Layout({ role: routeRole }: { role?: Role }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const role = getRole() ?? 'buyer';
+  // The route declares which identity this tab is wearing. Only the shared
+  // surfaces (/prices) leave it open, falling back to the token actually held.
+  const role = activeRole(routeRole) ?? 'buyer';
+
+  // Remember it, so navigating on to a shared surface keeps this tab's chrome
+  // instead of resolving to whichever role sorts first.
+  useEffect(() => {
+    if (routeRole) rememberTabRole(routeRole);
+  }, [routeRole]);
 
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -223,7 +242,7 @@ export function Layout() {
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ink-4)]"
               />
               <input
-                className="w-full rounded-[2px] border border-[var(--ink-7)] bg-[var(--paper-lift)] py-2 pl-9 pr-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
+                className="w-full rounded-lg border border-[var(--ink-7)] bg-[var(--paper-lift)] py-2 pl-9 pr-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
                 placeholder="Search crops, regions…"
                 value={searchParams.get('q') ?? ''}
                 onChange={(e) => {
@@ -298,8 +317,9 @@ export function Layout() {
               <button
                 className="smallcaps text-[var(--ink-3)] transition-colors hover:text-[var(--paper)]"
                 onClick={() => {
-                  setToken(null);
-                  navigate(role === 'driver' ? '/driver/login' : role === 'farmer' ? '/farmer/login' : '/login');
+                  // Sign out only this tab's identity; the other roles stay live.
+                  setToken(null, role);
+                  navigate(loginPathFor(role));
                 }}
               >
                 Log out

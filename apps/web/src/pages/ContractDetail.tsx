@@ -333,7 +333,7 @@ export function ContractDetailPage() {
                     </p>
                   </div>
                   <button
-                    className="flex flex-shrink-0 items-center gap-1.5 rounded-[2px] border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
                     onClick={() => callFarmer.mutate()}
                     disabled={callFarmer.isPending}
                   >
@@ -394,7 +394,7 @@ export function ContractDetailPage() {
                   </p>
                   <div className="flex flex-col gap-1">
                     <button
-                      className="rounded-[2px] border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
+                      className="rounded-lg border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
                       onClick={() => {
                         navigator.clipboard.writeText(publicUrl).then(() => {
                           setCopied(true);
@@ -408,13 +408,13 @@ export function ContractDetailPage() {
                       <Link
                         to={`/t/${lot.id}`}
                         target="_blank"
-                        className="flex-1 rounded-[2px] bg-[var(--ink)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--paper)] hover:bg-[var(--ink-8)]"
+                        className="flex-1 rounded-lg bg-[var(--ink)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--paper)] hover:bg-[var(--ink-8)]"
                       >
                         Public page
                       </Link>
                       <Link
                         to={`/lots/${lot.id}/trace`}
-                        className="flex-1 rounded-[2px] border border-[var(--ink-4)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
+                        className="flex-1 rounded-lg border border-[var(--ink-4)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
                       >
                         Full trace
                       </Link>
@@ -579,7 +579,7 @@ function TransportSection({
               released on your delivery confirmation.
             </p>
             <button
-              className="rounded-[2px] border border-[var(--ink-4)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+              className="rounded-lg border border-[var(--ink-4)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
               onClick={() => setShowDrivers((v) => !v)}
             >
               {showDrivers ? 'Hide drivers' : 'Choose a driver'}
@@ -609,12 +609,12 @@ function TransportSection({
                     </div>
                     <a
                       href={`tel:${d.phone}`}
-                      className="flex items-center gap-1 rounded-[2px] border border-[var(--ink-4)] px-2.5 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
+                      className="flex items-center gap-1 rounded-lg border border-[var(--ink-4)] px-2.5 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
                     >
                       <Glyph name="phone" className="h-3 w-3" /> Call
                     </a>
                     <button
-                      className="rounded-[2px] bg-[var(--ink)] px-3 py-1 text-xs font-semibold text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-lg bg-[var(--ink)] px-3 py-1 text-xs font-semibold text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={d.busy || request.isPending}
                       onClick={() => request.mutate({ preferredDriverId: d.id })}
                     >

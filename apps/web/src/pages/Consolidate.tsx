@@ -171,7 +171,7 @@ export function PoolBuilder() {
             <button
               disabled={chosen.length === 0 || overload || poolBid.isPending}
               onClick={() => poolBid.mutate()}
-              className={`rounded-[2px] py-2.5 text-sm font-semibold transition-colors ${
+              className={`rounded-lg py-2.5 text-sm font-semibold transition-colors ${
                 chosen.length && !overload
                   ? 'bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--ink-8)]'
                   : 'cursor-not-allowed bg-[var(--ink-2)] text-[var(--ink-6)]'

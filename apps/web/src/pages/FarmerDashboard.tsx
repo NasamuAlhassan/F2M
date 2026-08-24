@@ -16,7 +16,7 @@ interface PriceRow {
 // separate surfaces; the button is an ink chip on paper.
 const filePickerCls =
   'block w-full text-xs text-[var(--ink-6)] ' +
-  'file:mr-2 file:rounded-[2px] file:border-0 file:bg-[var(--ink)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--paper)] hover:file:bg-[var(--ink-8)]';
+  'file:mr-2 file:rounded-lg file:border-0 file:bg-[var(--ink)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--paper)] hover:file:bg-[var(--ink-8)]';
 
 /** The manifest desk: "List a New Lot". Same registerLot the USSD tree calls. */
 function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoMsisdn: string }) {
@@ -313,7 +313,7 @@ export function FarmerDashboardPage() {
                   </div>
                   {c.state === 'FUNDS_HELD' && (
                     <button
-                      className={`rounded-[2px] px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                         suggested.has(c.id)
                           ? 'bg-[var(--gold-wash)] text-[var(--ink)]'
                           : 'border border-[var(--ink-5)] text-[var(--ink)] hover:bg-[var(--paper-deep)]'
@@ -347,12 +347,12 @@ export function FarmerDashboardPage() {
               .map((l) => (
                 <div key={l.id} className="certificate flex flex-wrap items-center gap-4 bg-[var(--paper-lift)] p-4">
                   {l.photoUrl ? (
-                    <span className="border border-[var(--ink-3)] p-0.5">
-                      <img src={l.photoUrl} alt="" loading="lazy" decoding="async" className="h-11 w-11 object-cover" />
+                    <span className="block h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg">
+                      <img src={l.photoUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                     </span>
                   ) : (
-                    <span className="hatch flex h-12 w-12 flex-shrink-0 items-center justify-center border border-[var(--ink-2)]">
-                      <CropMark code={l.commodityCode} className="h-7 w-7 text-[var(--ink-7)]" />
+                    <span className="hatch flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg">
+                      <CropMark code={l.commodityCode} className="h-7 w-7 text-[var(--forest)]" />
                     </span>
                   )}
                   <div className="min-w-44 flex-1">

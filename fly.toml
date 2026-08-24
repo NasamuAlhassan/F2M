@@ -1,0 +1,90 @@
+# Farm to Market — Fly.io deployment.
+#
+# Run `fly launch --no-deploy` once to claim the app name and create the
+# volume, then `fly deploy`. Secrets are set separately (see docs/DEPLOY.md);
+# nothing sensitive belongs in this file — it is committed.
+
+app = "farm-to-market"
+
+# London, not Johannesburg — deliberately, against the intuition.
+#
+# Africa's Talking allows 10 seconds for a USSD callback, so latency has ample
+# headroom either way. And geographic proximity is not network proximity here:
+# West African submarine cable (WACS, MainOne, SAT-3) runs north to Europe, so
+# Accra→Johannesburg often transits Europe regardless. lhr is also ~$3/month
+# cheaper, largely because African egress bills at $0.12/GB against $0.02/GB.
+#
+# jnb is Fly's only African region and remains a one-line switch if measuring
+# from Accra proves it faster. Measure before moving; don't assume. (docs/COSTS.md §4)
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+
+  # Both live on the mounted volume so a redeploy never wipes the pilot's
+  # database, produce photos, or cached IVR audio.
+  DATABASE_PATH = "/data/ftm.db"
+  STORAGE_DIR = "/data/storage"
+
+  # English-only pilot. The D-040 gate already resolves every unreviewed
+  # locale to English on SMS/USSD/IVR; this keeps drafts off farmer surfaces.
+  I18N_DRAFT_LOCALES_LIVE = "false"
+
+  # Every provider starts mocked so the FIRST deploy proves the container,
+  # the volume, migrations and the portal on their own — with nothing external
+  # able to muddy the result. Flip these one at a time afterwards; each flip is
+  # an edit here plus `fly deploy`, never a code change (D-013).
+  #
+  # Flip only when its prerequisite actually exists — config.ts fails fast at
+  # boot otherwise, and some prerequisites cost money or need approval:
+  #   GRADING_PROVIDER = "hf"  needs HF_TOKEN               (free)
+  #   NOTIFY_PROVIDER  = "at"  needs AT_API_KEY + an approved Ghana sender ID
+  #                            (free to register; nothing sends without it)
+  #   VOICE_PROVIDER   = "at"  needs AT_API_KEY + AT_VOICE_NUMBER — a PAID
+  #                            live Ghana number; AT's voice sandbox is
+  #                            non-operational, so there is no free path
+  # See docs/DEPLOY.md for the full sequence and current costs.
+  GRADING_PROVIDER = "mock"
+  NOTIFY_PROVIDER = "mock"
+  VOICE_PROVIDER = "mock"
+  PAYMENT_PROVIDER = "mock"
+  ASR_PROVIDER = "mock"
+  MT_PROVIDER = "mock"
+  TTS_PROVIDER = "mock"
+
+[[mounts]]
+  source = "ftm_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+
+  # The server MUST stay awake. The sweep loops (apps/server/src/jobs/sweep.ts)
+  # are setInterval timers that deliver SMS, place outbound voice calls, poll
+  # payment status, expire offers and refund missed pickups. A machine that
+  # sleeps when idle silently stops all of it — so no autostop, one always on.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  # SQLite on a single attached volume: this app runs ONE machine. Scaling to
+  # two would give each its own volume and silently fork the pilot's data.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 400
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

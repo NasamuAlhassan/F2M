@@ -104,5 +104,24 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   await app.register(publicRoutes, { prefix: '/api' });
   await app.register(devRoutes, { prefix: '/api' });
 
+  // In production the built portal ships inside public/ (see Dockerfile), so
+  // client-side routes must survive a hard refresh — a buyer scanning a QR
+  // lands on /t/:lotId directly, with no SPA loaded to route it. Anything that
+  // isn't an API call, a provider webhook, or a static asset falls back to
+  // index.html. Locally that file is absent (Vite serves the portal on :5173)
+  // and the honest 404 stands instead.
+  const portalIndex = path.join(SERVER_ROOT, 'public', 'index.html');
+  const hasPortal = fs.existsSync(portalIndex);
+  const WIRE_PREFIXES = ['/api', '/ussd', '/voice', '/callbacks', '/photos', '/tts', '/health'];
+  app.setNotFoundHandler((req, reply) => {
+    const isPageRequest =
+      (req.method === 'GET' || req.method === 'HEAD') &&
+      !WIRE_PREFIXES.some((p) => req.url === p || req.url.startsWith(`${p}/`) || req.url.startsWith(`${p}?`));
+    if (hasPortal && isPageRequest) {
+      return reply.type('text/html').send(fs.createReadStream(portalIndex));
+    }
+    return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Not found' } });
+  });
+
   return app;
 }

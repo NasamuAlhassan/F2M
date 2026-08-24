@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import { Glyph } from './engrave';
 
-// The Trade Instrument design system (D-039, seed 222cf785). Component APIs
-// frozen through the redesign — this file is the skin, pages are the layout.
+// The market redesign — photo-led, warm, not paper. Component APIs stay
+// frozen through the change (same discipline as D-028→D-030→D-039): this
+// file is the skin, pages are the layout, and most of it below needed no
+// edits at all — the token rename in index.css did the reskin for free.
 
-/** A framed certificate panel with a ledger-rule title. */
+/** A raised white card with a soft shadow. */
 export function Card({ title, children, actions }: { title?: string; children: ReactNode; actions?: ReactNode }) {
   return (
     <section className="certificate mb-4 bg-[var(--paper-lift)] p-4">
@@ -19,60 +21,67 @@ export function Card({ title, children, actions }: { title?: string; children: R
   );
 }
 
-// Every state is a stamped ticket. Families share an ink: settled money is
-// intaglio green, live states burn gold, refusals and disputes are oxide red,
-// dormant states fade into the ramp.
-const STATE_STYLE: Record<string, { tone: 'ink' | 'gold' | 'red' | 'faded'; label?: string; live?: boolean }> = {
+// Six tones instead of the paper world's four: "ink" used to double as
+// every positive/final state because ink WAS the brand green — now that
+// --ink is a neutral charcoal ramp (not the brand color), positive states
+// need their own real green, and the richer state vocabulary (assigned vs.
+// en route vs. escrow-held vs. settled) is worth telling apart at a glance.
+const STATE_STYLE: Record<
+  string,
+  { tone: 'gold' | 'info' | 'transit' | 'success' | 'alert' | 'faded'; label?: string; live?: boolean }
+> = {
   // contracts
   OFFERED: { tone: 'gold', live: true },
-  ACCEPTED: { tone: 'gold' },
+  ACCEPTED: { tone: 'info' },
   FUNDS_HELD: { tone: 'gold', label: 'Escrow Held' },
-  PICKUP_CONFIRMED: { tone: 'gold', label: 'Picked Up' },
-  GRADED: { tone: 'ink' },
-  DISPUTED: { tone: 'red' },
-  SETTLED: { tone: 'ink' },
+  PICKUP_CONFIRMED: { tone: 'transit', label: 'Picked Up' },
+  GRADED: { tone: 'info' },
+  DISPUTED: { tone: 'alert' },
+  SETTLED: { tone: 'success' },
   DECLINED: { tone: 'faded' },
   EXPIRED: { tone: 'faded' },
-  CANCELLED: { tone: 'red' },
-  CANCELLED_REFUNDED: { tone: 'red', label: 'Refunded' },
-  FUNDING_FAILED: { tone: 'red' },
+  CANCELLED: { tone: 'alert' },
+  CANCELLED_REFUNDED: { tone: 'alert', label: 'Refunded' },
+  FUNDING_FAILED: { tone: 'alert' },
   // delivery jobs
   REQUESTED: { tone: 'gold', live: true },
-  NO_DRIVER: { tone: 'red' },
-  ASSIGNED: { tone: 'gold' },
-  PICKED_UP: { tone: 'gold', label: 'En Route' },
-  DELIVERED: { tone: 'ink' },
-  PAID: { tone: 'ink' },
+  NO_DRIVER: { tone: 'alert' },
+  ASSIGNED: { tone: 'info' },
+  PICKED_UP: { tone: 'transit', label: 'En Route' },
+  DELIVERED: { tone: 'success' },
+  PAID: { tone: 'success' },
   // demands / matches / payments / gradings / notifications
   open: { tone: 'gold', live: true },
-  partially_matched: { tone: 'gold', label: 'Partly Matched' },
-  fulfilled: { tone: 'ink' },
+  partially_matched: { tone: 'info', label: 'Partly Matched' },
+  fulfilled: { tone: 'success' },
   offered: { tone: 'gold' },
-  accepted: { tone: 'ink' },
+  accepted: { tone: 'success' },
   declined: { tone: 'faded' },
   expired: { tone: 'faded' },
   superseded: { tone: 'faded' },
   withdrawn: { tone: 'faded' },
   pending: { tone: 'gold', live: true },
-  successful: { tone: 'ink' },
-  failed: { tone: 'red' },
-  completed: { tone: 'ink' },
-  resolved: { tone: 'ink' },
-  disputed: { tone: 'red' },
-  sent: { tone: 'ink' },
-  delivered: { tone: 'ink' },
+  successful: { tone: 'success' },
+  failed: { tone: 'alert' },
+  completed: { tone: 'success' },
+  resolved: { tone: 'success' },
+  disputed: { tone: 'alert' },
+  sent: { tone: 'success' },
+  delivered: { tone: 'success' },
   placing: { tone: 'gold', live: true },
-  in_progress: { tone: 'gold' },
+  in_progress: { tone: 'info' },
   no_answer: { tone: 'faded' },
-  cancelled: { tone: 'red' },
+  cancelled: { tone: 'alert' },
   registered: { tone: 'gold', label: 'Listed', live: true },
   matched: { tone: 'gold' },
 };
 
-const TONE_CLS: Record<'ink' | 'gold' | 'red' | 'faded', string> = {
-  ink: 'text-[var(--ink)] bg-[var(--paper)]',
+const TONE_CLS: Record<'gold' | 'info' | 'transit' | 'success' | 'alert' | 'faded', string> = {
   gold: 'text-[var(--gold-ink)] bg-[var(--gold-wash)]',
-  red: 'text-[var(--stamp-deep)] bg-[var(--stamp-wash)]',
+  info: 'text-[var(--info)] bg-[var(--info-wash)]',
+  transit: 'text-[var(--transit)] bg-[var(--transit-wash)]',
+  success: 'text-[var(--success)] bg-[var(--success-wash)]',
+  alert: 'text-[var(--stamp-deep)] bg-[var(--stamp-wash)]',
   faded: 'text-[var(--ink-6)] bg-[var(--paper)]',
 };
 
@@ -136,13 +145,15 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 }
 
 // text-base below sm: a 16px input is the line iOS Safari respects — smaller
-// zooms the whole page on focus, which wrecks the certificate framing.
+// zooms the whole page on focus. Rounded-xl/full instead of the paper
+// world's 2px-max square corners — the other clearest "not paper" signal
+// alongside the card shadow.
 export const inputCls =
-  'w-full rounded-[2px] border border-[var(--ink-3)] bg-[var(--paper-lift)] px-3 py-2 text-base text-[var(--ink)] focus:border-[var(--ink-6)] focus:outline-none sm:text-sm';
+  'w-full rounded-xl border border-[var(--ink-3)] bg-[var(--paper-lift)] px-3 py-2 text-base text-[var(--ink)] focus:border-[var(--ink-6)] focus:outline-none sm:text-sm';
 export const btnCls =
-  'min-h-11 rounded-[2px] bg-[var(--ink)] px-4 py-2 text-sm font-semibold tracking-[0.02em] text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-0';
+  'min-h-11 rounded-xl bg-[var(--ink)] px-4 py-2 text-sm font-semibold tracking-[0.02em] text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-0';
 export const btnGhostCls =
-  'min-h-11 rounded-[2px] border border-[var(--ink-5)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)] disabled:opacity-40 lg:min-h-0';
+  'min-h-11 rounded-xl border border-[var(--ink-5)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)] disabled:opacity-40 lg:min-h-0';
 
 /**
  * A dismissible error, stamped in oxide. role="alert" announces it to screen

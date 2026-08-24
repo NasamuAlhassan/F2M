@@ -1,99 +1,83 @@
 @import 'tailwindcss';
 
-/* Self-hosted faces (fix 8): the world's voice must not ride the network —
-   the offline demo and pitch scenes keep Cinzel/Public Sans/Courier Prime. */
+/* Self-hosted (fix 8): the world's voice must not ride the network — the
+   offline demo and pitch scenes keep their face regardless of connectivity.
+   Hanken Grotesk ships as one variable file covering weight 400–800, so one
+   @font-face with a weight range replaces what used to be five static cuts. */
 @font-face {
-  font-family: 'Cinzel';
+  font-family: 'Hanken Grotesk';
   font-style: normal;
-  font-weight: 600;
+  font-weight: 400 800;
   font-display: swap;
-  src: url('/fonts/Cinzel-600.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Cinzel';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/Cinzel-700.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Public Sans';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/PublicSans-400.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Public Sans';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/fonts/PublicSans-500.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Public Sans';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/fonts/PublicSans-600.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Public Sans';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/PublicSans-700.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Courier Prime';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/CourierPrime-400.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Courier Prime';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/CourierPrime-700.woff2') format('woff2');
+  src: url('/fonts/HankenGrotesk-variable.woff2') format('woff2');
 }
 
 /* ============================================================
-   THE TRADE INSTRUMENT (seed 222cf785) — security-print world.
-   Tinted banknote paper under intaglio-green ink; bronze-gold
-   value figures; oxide-red stamps. A fixed 9-step ink-on-paper
-   ramp is the ONLY neutral scale. Engraving lives at frames.
+   THE MARKET WORLD (retires D-039's paper world, seed pinned to
+   the owner's own Figma prototype, D-030's photographic register).
+   Deep forest green as a bold brand color, not a neutral; white
+   cards on a soft green-tinted ground; warm amber accent; a full
+   named palette for state so a scan reads status at a glance.
    ============================================================ */
 
 :root {
-  --paper: #efebdd;
-  --paper-deep: #e7e1cd; /* tint zones, alternating ledger rows */
-  --paper-lift: #f4f1e6; /* raised panels (inputs, certificate media wells) */
+  /* Page ground / recessed zones / raised card white. Kept the --paper*
+     names on purpose: they're internal CSS variables, never user-visible,
+     and ~130 call sites across every page already read them — repointing
+     the values here reskins the whole app without an error-prone sweep. */
+  --paper: #f5f8f3;
+  --paper-deep: #eaf0e6; /* tint zones, alternating rows, recessed wells */
+  --paper-lift: #ffffff; /* cards, inputs — literally raised off the ground */
 
-  /* The ink ramp — intaglio green diluting into paper. The only neutrals. */
-  --ink: #14322b;
-  --ink-8: #2b463d;
-  --ink-7: #425a4f;
-  --ink-6: #596d61;
-  --ink-5: #718074;
-  --ink-4: #8d998a;
-  --ink-3: #aab2a0;
-  --ink-2: #c8cbb6;
-  --ink-1: #dcd9c4;
+  /* Neutral text/border ramp — recalibrated light-to-dark for white cards
+     instead of tinted paper, with a faint green bias so the neutrals still
+     feel chosen rather than defaulted to. */
+  --ink: #16241e;
+  --ink-8: #2a3d34;
+  --ink-7: #3e544a;
+  --ink-6: #58705f;
+  --ink-5: #748b7a;
+  --ink-4: #93a696;
+  --ink-3: #b3c2b3;
+  --ink-2: #d2ddcf;
+  --ink-1: #e6ede3;
 
-  --gold: #a87b23;
-  --gold-deep: #8a6318;
-  --gold-ink: #6e4e12; /* small gold type on washes — contrast-safe */
-  --gold-wash: #e9ddbe;
+  /* The bold brand green — masthead, primary actions, live accents.
+     Distinct from --ink: that ramp is neutral text, this is a saturated
+     brand color used deliberately, not diluted into a text ramp. */
+  --forest: #163c2f;
+  --forest-deep: #0f2c22;
+  --forest-wash: #e2ede5;
 
-  --stamp: #9e3b2c;
-  --stamp-deep: #7e2e22;
-  --stamp-wash: #ecdcd0;
+  /* Amber accent — money, live states, calls to action. More saturated
+     than the old muted security-print gold. */
+  --gold: #d97a1f;
+  --gold-deep: #b3620f;
+  --gold-ink: #8a4c0c; /* small gold type on washes — contrast-safe */
+  --gold-wash: #fbe9d3;
+
+  /* Failed / disputed / refused. Kept the --stamp* names for the same
+     reason as --paper — internal only, and widely referenced already. */
+  --stamp: #c0392b;
+  --stamp-deep: #962c21;
+  --stamp-wash: #f8dcd7;
+
+  /* Assigned / in progress. */
+  --info: #1d5fd9;
+  --info-wash: #dbe7fb;
+
+  /* En route / picked up. */
+  --transit: #6d3fc4;
+  --transit-wash: #e7ddf7;
+
+  /* Settled / delivered / confirmed. A true green distinct from the
+     brand --forest, so "the money landed" reads unambiguously. */
+  --success: #1f8a4c;
+  --success-wash: #dcf0e2;
 }
 
 * {
-  font-family: 'Public Sans', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Hanken Grotesk', 'Segoe UI', system-ui, sans-serif;
   box-sizing: border-box;
 }
 
@@ -104,29 +88,34 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Engraved display capitals — mastheads, seals, certificate wordmarks. */
+/* Confident display weight — mastheads, big money, brand wordmarks.
+   One face, one extra-bold cut, instead of switching families. */
 .display {
-  font-family: 'Cinzel', 'Times New Roman', serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
-/* Serial numbers, money, timestamps — the typed-receipt voice. */
+/* Money, lot codes, timestamps, phone numbers — tabular figures so columns
+   of numbers actually line up. No dedicated mono face any more: one voice,
+   carried by weight and spacing instead of a family switch. */
 .serial {
-  font-family: 'Courier Prime', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
-/* Small tracked capitals — ledger column heads, document furniture.
+/* Small tracked capitals — ledger column heads, field labels, captions.
    11px floor: functional text never drops below it (sunlight legibility). */
 .smallcaps {
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 /* ── Browser surfaces carry the design too ─────────────────── */
 ::selection {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--forest);
+  color: var(--paper-lift);
 }
 input,
 textarea,
@@ -147,93 +136,72 @@ select {
 ::-webkit-scrollbar-thumb {
   background: var(--ink-3);
   border: 3px solid var(--paper-deep);
-  border-radius: 3px; /* the stamp radius — the scale's largest */
+  border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-5);
 }
 ::placeholder {
-  color: var(--ink-6);
+  color: var(--ink-5);
   opacity: 1;
 }
 
-/* ── Print furniture ───────────────────────────────────────── */
+/* ── Card furniture ─────────────────────────────────────────
+   The two clearest reversals of the paper world: generous rounding
+   instead of "2px max, square security-print corners," and a soft
+   cast shadow instead of "no drop shadows, depth is printed." */
 
-/* Certificate frame: outer rule + inset hairline, square corners. */
+/* Kept the class name (internal, not user-visible) to cascade through every
+   page that already reads it — redefined the shape entirely: a raised
+   white card instead of a doubled-hairline paper frame. */
 .certificate {
   position: relative;
-  background: var(--paper);
-  border: 1px solid var(--ink-7);
-  border-radius: 2px;
-}
-.certificate::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border: 1px solid var(--ink-2);
-  border-radius: 1px;
-  pointer-events: none;
+  background: var(--paper-lift);
+  border: 1px solid var(--ink-1);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(22, 36, 30, 0.04), 0 8px 24px -12px rgba(22, 36, 30, 0.12);
 }
 
-/* Ink plate: a printed field of solid ink with a hairline inset. */
+/* Solid brand-green field — masthead, modal headers, dark accents. */
 .plate {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--forest);
+  color: var(--paper-lift);
   position: relative;
 }
 .plate-inset {
-  box-shadow: inset 0 0 0 1px var(--ink), inset 0 0 0 2px color-mix(in srgb, var(--paper) 35%, transparent);
+  box-shadow: inset 0 0 0 1px var(--forest), inset 0 0 0 2px color-mix(in srgb, var(--paper-lift) 25%, transparent);
 }
 
-/* Double ledger rule under column heads. */
+/* Header rule under column heads / card titles — one soft line, not a
+   doubled ledger rule (that discipline was paper's signature, not this
+   world's). */
 .rule-double {
-  border-bottom: 1px solid var(--ink-7);
-  box-shadow: 0 2px 0 -1px var(--ink-2);
+  border-bottom: 1px solid var(--ink-2);
 }
 
-/* Guilloché band — interlaced engraved sines, tiled. */
-.guilloche {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='12' viewBox='0 0 56 12'%3E%3Cpath d='M0 6 C 7 0, 14 0, 21 6 S 35 12, 42 6 S 56 0, 63 6' fill='none' stroke='%23A87B23' stroke-opacity='0.55' stroke-width='0.8'/%3E%3Cpath d='M0 6 C 7 12, 14 12, 21 6 S 35 0, 42 6 S 56 12, 63 6' fill='none' stroke='%23A87B23' stroke-opacity='0.55' stroke-width='0.8'/%3E%3C/svg%3E");
-  background-size: 56px 12px;
-  background-repeat: repeat-x;
-}
-.guilloche-ink {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='12' viewBox='0 0 56 12'%3E%3Cpath d='M0 6 C 7 0, 14 0, 21 6 S 35 12, 42 6 S 56 0, 63 6' fill='none' stroke='%2314322B' stroke-opacity='0.35' stroke-width='0.8'/%3E%3Cpath d='M0 6 C 7 12, 14 12, 21 6 S 35 0, 42 6 S 56 12, 63 6' fill='none' stroke='%2314322B' stroke-opacity='0.35' stroke-width='0.8'/%3E%3C/svg%3E");
-  background-size: 56px 12px;
-  background-repeat: repeat-x;
-}
-
-/* Engraved hatch ground for media wells without a photograph. */
+/* No-photo panel for a lot that genuinely has none (every USSD/voice
+   listing, by construction — see photos.ts). Never a stand-in photo:
+   a considered brand-colored ground carrying the crop's line icon. */
 .hatch {
-  background-color: var(--paper-lift);
-  background-image: repeating-linear-gradient(
-    45deg,
-    color-mix(in srgb, var(--ink) 7%, transparent) 0px,
-    color-mix(in srgb, var(--ink) 7%, transparent) 1px,
-    transparent 1px,
-    transparent 5px
-  );
+  background: var(--forest-wash);
 }
 
-/* Rubber stamp: typed capitals in a doubled border, faintly inked. */
+/* State pill — a solid rounded chip instead of a doubled rubber-stamp
+   border. Kept the class name; the whole shape underneath changed. */
 .stamp {
-  font-family: 'Courier Prime', 'Courier New', monospace;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 0.5px currentColor;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
 }
 
-/* ── The one authored motion: the seal lands ───────────────── */
+/* ── Motion — unchanged grammar, new palette underneath ─────── */
 @keyframes seal-land {
   0% {
-    transform: scale(1.45) rotate(-9deg);
+    transform: scale(1.35) rotate(-6deg);
     opacity: 0;
   }
   55% {
-    transform: scale(0.94) rotate(1.5deg);
+    transform: scale(0.96) rotate(1deg);
     opacity: 1;
   }
   100% {
@@ -242,10 +210,10 @@ select {
   }
 }
 .seal-land {
-  animation: seal-land 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: seal-land 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Route legs ink themselves in — the spine's application of the same grammar. */
+/* Route legs draw themselves in — the spine's own motion. */
 @keyframes route-ink {
   from {
     stroke-dashoffset: var(--route-len, 120);
@@ -258,7 +226,7 @@ select {
   animation: route-ink 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* A live ember — gold, damped, for states in motion. */
+/* A live pulse — gold, damped, for states in motion. */
 @keyframes ember {
   0%,
   100% {
@@ -272,10 +240,67 @@ select {
   animation: ember 1.8s ease-in-out infinite;
 }
 
+/* ── The handset ───────────────────────────────────────────────
+   A ringing phone is the one moment the world moves on its own:
+   the shell shivers and the LCD backlight pulses with the tone. */
+@keyframes handset-ring {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  10%,
+  30%,
+  50% {
+    transform: translateX(-3px) rotate(-0.5deg);
+  }
+  20%,
+  40%,
+  60% {
+    transform: translateX(3px) rotate(0.5deg);
+  }
+  70% {
+    transform: translateX(0) rotate(0deg);
+  }
+}
+.handset-ring {
+  animation: handset-ring 1.4s ease-in-out infinite;
+}
+
+/* Backlight surge under the ring, and the idle glow of a live screen. */
+@keyframes lcd-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.28);
+  }
+}
+.lcd-pulse {
+  animation: lcd-pulse 1.4s ease-in-out infinite;
+}
+
+/* Speaking indicator — the four-bar waveform while the IVR talks. */
+@keyframes wave-bar {
+  0%,
+  100% {
+    height: 4px;
+  }
+  50% {
+    height: 15px;
+  }
+}
+.wave-bar {
+  animation: wave-bar 0.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .seal-land,
   .route-ink,
-  .ember {
+  .ember,
+  .handset-ring,
+  .lcd-pulse,
+  .wave-bar {
     animation: none;
   }
 }

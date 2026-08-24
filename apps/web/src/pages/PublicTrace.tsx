@@ -45,8 +45,8 @@ export function PublicTracePage() {
           <>
             <div className="certificate mb-4 bg-[var(--paper-lift)]">
               <div className="flex flex-wrap items-center gap-5 p-5">
-                <div className="hatch flex h-20 w-20 flex-shrink-0 items-center justify-center border border-[var(--ink-2)]">
-                  <CropMark code={data.lot.commodityCode} className="h-12 w-12 text-[var(--ink-7)]" />
+                <div className="hatch flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-lg">
+                  <CropMark code={data.lot.commodityCode} className="h-12 w-12 text-[var(--forest)]" />
                 </div>
                 <div className="min-w-44 flex-1">
                   <div className="flex items-center gap-2.5">
