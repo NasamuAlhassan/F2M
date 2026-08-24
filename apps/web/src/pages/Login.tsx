@@ -1,5 +1,5 @@
-﻿import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, setToken } from '../api';
 import { btnCls, Field, inputCls } from '../components/ui';
 
@@ -29,11 +29,18 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-green-950">
-      <form onSubmit={submit} className="w-80 rounded-xl bg-white p-6 shadow-2xl">
-        <h1 className="mb-1 text-xl font-bold text-green-900">Farm to Market</h1>
-        <p className="mb-5 text-sm text-stone-500">Buyer portal</p>
-        <div className="space-y-3">
+    <div className="flex min-h-screen items-center justify-center bg-[#1B4332] px-4">
+      <form onSubmit={submit} className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center gap-3 bg-[#1B4332] px-6 py-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#D97706] text-sm font-extrabold text-white">
+            F2M
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white">Farm to Market</div>
+            <div className="text-[11px] text-green-300">Buyer Portal · Agritech Marketplace Ghana</div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-4 p-6">
           <Field label="Email">
             <input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </Field>
@@ -46,11 +53,18 @@ export function LoginPage() {
               autoComplete="current-password"
             />
           </Field>
-          {error && <p className="text-sm text-red-700">{error}</p>}
-          <button className={`${btnCls} w-full`} disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
+          {error && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>
+          )}
+          <button className={`${btnCls} w-full py-2.5`} disabled={busy}>
+            {busy ? 'Signing in…' : 'Sign In'}
           </button>
-          <p className="text-xs text-stone-400">Demo account: buyer@demo.ftm (password printed by the seed script)</p>
+          <p className="text-center text-[11px] text-gray-400">
+            Demo account: buyer@demo.ftm ·{' '}
+            <Link to="/driver/login" className="font-semibold text-[#1B4332] hover:underline">
+              Driver login →
+            </Link>
+          </p>
         </div>
       </form>
     </div>

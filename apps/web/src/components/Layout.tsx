@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { api, dateTime, getRole, setToken } from '../api';
 
 interface NotificationRow {
@@ -29,21 +29,26 @@ function NotificationBell() {
   return (
     <div className="relative">
       <button
-        className={`rounded px-3 py-1 hover:bg-green-700 ${open ? 'bg-green-700' : 'bg-green-800'}`}
+        className={`flex items-center gap-1.5 font-medium transition-colors ${open ? 'text-white' : 'text-green-400 hover:text-white'}`}
         onClick={() => setOpen((v) => !v)}
       >
         Alerts
         {unread > 0 && (
-          <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-xs font-bold text-green-950">{unread}</span>
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#D97706] px-1 text-[9px] font-bold text-white">
+            {unread}
+          </span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-96 rounded-lg border border-stone-200 bg-white text-stone-900 shadow-xl">
-          <div className="flex items-center justify-between border-b border-stone-100 px-3 py-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Notifications</span>
+        <div className="absolute right-0 z-30 mt-2 w-96 overflow-hidden rounded-2xl border border-gray-100 bg-white text-gray-900 shadow-2xl">
+          <div className="flex items-center justify-between bg-[#1B4332] px-5 py-3">
+            <div>
+              <div className="text-sm font-bold text-white">Notifications</div>
+              <div className="text-[11px] text-green-300">The engine, reporting in</div>
+            </div>
             {unread > 0 && (
               <button
-                className="rounded border border-stone-300 px-2 py-0.5 text-xs font-medium hover:bg-stone-100"
+                className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold text-white hover:bg-white/20"
                 onClick={() => markRead.mutate()}
               >
                 Mark all read
@@ -52,23 +57,23 @@ function NotificationBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {!data?.notifications.length ? (
-              <p className="px-3 py-2 text-sm text-stone-500">Nothing yet — alerts appear as the engine works.</p>
+              <p className="px-5 py-4 text-sm text-gray-400">Nothing yet — alerts appear as the engine works.</p>
             ) : (
               data.notifications.map((n) => (
                 <div
                   key={n.id}
-                  className={`border-b border-stone-100 px-3 py-2 text-sm last:border-b-0 ${n.readAt ? 'text-stone-400' : ''}`}
+                  className={`border-b border-gray-50 px-5 py-3 text-sm last:border-b-0 ${n.readAt ? 'text-gray-400' : 'text-gray-700'}`}
                 >
-                  <p>{n.message}</p>
-                  <p className="mt-0.5 flex items-baseline justify-between text-xs text-stone-400">
+                  <p className="leading-snug">{n.message}</p>
+                  <p className="mono mt-1 flex items-baseline justify-between text-[10px] text-gray-400">
                     <span>{dateTime(n.createdAt)}</span>
                     {n.contractId && (
                       <Link
                         to={`/contracts/${n.contractId}`}
-                        className="text-green-700 hover:underline"
+                        className="font-semibold text-[#1B4332] hover:underline"
                         onClick={() => setOpen(false)}
                       >
-                        Contract →
+                        View contract →
                       </Link>
                     )}
                   </p>
@@ -82,37 +87,58 @@ function NotificationBell() {
   );
 }
 
+function subNavCls({ isActive }: { isActive: boolean }): string {
+  return `font-medium transition-colors ${isActive ? 'border-b-2 border-[#D97706] pb-0.5 text-[#D97706]' : 'text-green-400 hover:text-white'}`;
+}
+
 export function Layout() {
   const navigate = useNavigate();
   const role = getRole() ?? 'buyer';
   return (
-    <div className="min-h-screen">
-      <header className="bg-green-900 text-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <Link to={role === 'driver' ? '/driver/jobs' : '/demands'} className="text-lg font-semibold tracking-tight">
-            Farm to Market <span className="font-normal text-green-300">· {role === 'driver' ? 'Driver' : 'Buyer'}</span>
+    <div className="min-h-screen bg-[#F3F4F6]">
+      <header className="flex-shrink-0 bg-[#1B4332] text-white shadow-lg">
+        <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-4 px-6">
+          <Link to={role === 'driver' ? '/driver/jobs' : '/demands'} className="flex flex-shrink-0 items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#D97706] text-sm font-extrabold text-white">
+              F2M
+            </div>
+            <div>
+              <div className="text-base font-extrabold leading-tight">Farm to Market</div>
+              <div className="text-[10px] leading-tight text-green-300">Agritech Marketplace · Ghana</div>
+            </div>
           </Link>
-          <nav className="flex items-center gap-4 text-sm">
+          <div className="flex flex-shrink-0 items-center gap-3">
+            <div className="text-right">
+              <div className="text-xs font-semibold">{role === 'driver' ? 'Driver Portal' : 'Buyer Portal'}</div>
+              <div className="text-[10px] text-green-400">{role === 'driver' ? 'Verified Driver' : 'Verified Buyer'}</div>
+            </div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D97706] text-sm font-bold">
+              {role === 'driver' ? 'DR' : 'BY'}
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-green-900 bg-[#14532d]">
+          <div className="mx-auto flex h-10 max-w-[1440px] items-center gap-6 px-6 text-sm">
             {role === 'driver' ? (
-              <Link to="/driver/jobs" className="hover:text-green-200">
-                Jobs
-              </Link>
+              <NavLink to="/driver/jobs" className={subNavCls}>
+                Dispatch Board
+              </NavLink>
             ) : (
               <>
-                <Link to="/demands" className="hover:text-green-200">
+                <NavLink to="/demands" className={subNavCls}>
                   Demands
-                </Link>
-                <Link to="/engine" className="hover:text-green-200">
-                  Engine
-                </Link>
-                <Link to="/prices" className="hover:text-green-200">
-                  Market prices
-                </Link>
+                </NavLink>
+                <NavLink to="/engine" className={subNavCls}>
+                  Intent Engine
+                </NavLink>
+                <NavLink to="/prices" className={subNavCls}>
+                  Price Intelligence
+                </NavLink>
                 <NotificationBell />
               </>
             )}
             <button
-              className="rounded bg-green-800 px-3 py-1 hover:bg-green-700"
+              className="ml-auto font-medium text-green-400 transition-colors hover:text-white"
               onClick={() => {
                 setToken(null);
                 navigate(role === 'driver' ? '/driver/login' : '/login');
@@ -120,10 +146,10 @@ export function Layout() {
             >
               Log out
             </button>
-          </nav>
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className="mx-auto max-w-[1440px] px-6 py-6">
         <Outlet />
       </main>
     </div>

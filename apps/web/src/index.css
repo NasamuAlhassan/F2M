@@ -1,5 +1,58 @@
-﻿@import 'tailwindcss';
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+/* Design system adopted from the user's Figma prototype (D-030):
+   #1B4332 deep forest green primary · #D97706 amber accent · #F3F4F6 ground,
+   Inter + JetBrains Mono, rounded-xl cards, pill badges, pulse dots. */
+
+:root {
+  --f2m-green: #1b4332;
+  --f2m-green-dark: #14532d;
+  --f2m-amber: #d97706;
+}
+
+* {
+  font-family: 'Inter', system-ui, sans-serif;
+  box-sizing: border-box;
+}
 
 body {
-  @apply bg-stone-100 text-stone-900 antialiased;
+  background-color: #f3f4f6;
+  color: #111827;
+  margin: 0;
 }
+
+/* Slim scrollbars */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Pulsing live-indicator dot */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+/* Voice waveform bars */
+@keyframes waveBar {
+  0%, 100% { height: 4px; }
+  50% { height: 20px; }
+}
+.wave-bar { animation: waveBar 0.6s ease-in-out infinite; }
+
+/* Active timeline step glow */
+@keyframes stepGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(27, 67, 50, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(27, 67, 50, 0); }
+}
+.step-active { animation: stepGlow 2s ease-in-out infinite; }
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.slide-in { animation: slideInRight 0.25s ease-out forwards; }

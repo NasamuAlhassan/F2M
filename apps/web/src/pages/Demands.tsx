@@ -1,8 +1,8 @@
-﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type Demand, type PriceTerms, type Registries } from '../api';
-import { btnCls, btnGhostCls, Card, Field, inputCls, StateBadge } from '../components/ui';
+import { btnCls, btnGhostCls, Card, CROP_EMOJI, Field, inputCls, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
 const MULTIPLIERS: Record<'A' | 'B' | 'C', number> = { A: 1.0, B: 0.88, C: 0.7 };
 
@@ -21,57 +21,74 @@ export function DemandsPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold">Demands</h1>
+      <div className="mb-5 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-extrabold text-gray-900">My Demands</h1>
+          <p className="mt-0.5 text-sm text-gray-500">Post buy orders — the engine matches them the moment they land</p>
+        </div>
         <button className={btnCls} onClick={() => setShowForm((v) => !v)}>
-          {showForm ? 'Close' : 'New demand'}
+          {showForm ? 'Close' : '+ New Demand'}
         </button>
       </div>
 
       {showForm && registries && <NewDemandForm registries={registries} onDone={() => setShowForm(false)} />}
 
-      <Card>
+      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
         {!data?.demands.length ? (
-          <p className="text-sm text-stone-500">No demands yet. Post one — matching runs the moment it lands.</p>
+          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+            <div className="mb-2 text-4xl">🌾</div>
+            <div className="font-semibold text-gray-500">No demands yet</div>
+            <div className="mt-1 text-sm">Post one — matching runs the moment it lands</div>
+          </div>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase text-stone-400">
+          <table className={tableCls}>
+            <thead className="border-b border-gray-100">
               <tr>
-                <th className="py-2">Commodity</th>
-                <th>Quantity</th>
-                <th>Remaining</th>
-                <th>Min band</th>
-                <th>Price (min band)</th>
-                <th>Window</th>
-                <th>Status</th>
-                <th />
+                <th className={thCls}>Commodity</th>
+                <th className={thCls}>Quantity</th>
+                <th className={thCls}>Remaining</th>
+                <th className={thCls}>Min Grade</th>
+                <th className={thCls}>Price (min band)</th>
+                <th className={thCls}>Window</th>
+                <th className={thCls}>Status</th>
+                <th className={thCls} />
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-100">
-              {data.demands.map((d) => (
-                <tr key={d.id}>
-                  <td className="py-2 font-medium">{commodityById.get(d.commodityId)?.name ?? '—'}</td>
-                  <td>{d.quantityKg}kg</td>
-                  <td>{d.remainingKg}kg</td>
-                  <td>{d.minBand}</td>
-                  <td>{ghs(d.priceTerms[d.minBand as 'A' | 'B' | 'C'] ?? 0)}/kg</td>
-                  <td>
-                    {shortDate(d.windowStart)} – {shortDate(d.windowEnd)}
-                  </td>
-                  <td>
-                    <StateBadge state={d.status} />
-                  </td>
-                  <td className="text-right">
-                    <Link className="text-green-700 hover:underline" to={`/demands/${d.id}`}>
-                      Matches →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-gray-50">
+              {data.demands.map((d) => {
+                const commodity = commodityById.get(d.commodityId);
+                return (
+                  <tr key={d.id} className="hover:bg-gray-50">
+                    <td className={`${tdCls} font-bold text-gray-900`}>
+                      {CROP_EMOJI[commodity?.code ?? ''] ?? '📦'} {commodity?.name ?? '—'}
+                    </td>
+                    <td className={`${tdCls} ${numCls} text-xs`}>{d.quantityKg}kg</td>
+                    <td className={`${tdCls} ${numCls} text-xs`}>{d.remainingKg}kg</td>
+                    <td className={tdCls}>
+                      <span className="font-bold">{d.minBand}</span>
+                    </td>
+                    <td className={`${tdCls} font-extrabold text-[#1B4332]`}>{ghs(d.priceTerms[d.minBand as 'A' | 'B' | 'C'] ?? 0)}<span className="text-[10px] font-medium text-gray-400">/kg</span></td>
+                    <td className={`${tdCls} text-xs text-gray-500`}>
+                      {shortDate(d.windowStart)} – {shortDate(d.windowEnd)}
+                    </td>
+                    <td className={tdCls}>
+                      <StateBadge state={d.status} />
+                    </td>
+                    <td className={`${tdCls} text-right`}>
+                      <Link
+                        className="rounded-lg border border-[#1B4332] px-3 py-1.5 text-xs font-semibold text-[#1B4332] transition-colors hover:bg-green-50"
+                        to={`/demands/${d.id}`}
+                      >
+                        View Matches
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
-      </Card>
+      </div>
     </div>
   );
 }
@@ -134,8 +151,8 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
   const kg = activeUnit ? Math.round(activeUnit.kgPerUnit * Number(unitQty) * 10) / 10 : 0;
 
   return (
-    <Card title="New demand">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <Card title="Post a New Demand">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Field label="Commodity">
           <select
             className={inputCls}
@@ -147,7 +164,7 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
           >
             {registries.commodities.map((c) => (
               <option key={c.code} value={c.code}>
-                {c.name} {c.clockType === 'perishable' ? '(perishable)' : ''}
+                {CROP_EMOJI[c.code] ?? ''} {c.name} {c.clockType === 'perishable' ? '· perishable' : ''}
               </option>
             ))}
           </select>
@@ -163,30 +180,45 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
               ))}
             </select>
           </div>
-          <span className="mt-1 block text-xs text-stone-400">= {kg}kg</span>
+          <span className="mono mt-1 block text-[10px] text-gray-400">= {kg} kg</span>
         </Field>
-        <Field label="Minimum band">
-          <select className={inputCls} value={minBand} onChange={(e) => setMinBand(e.target.value as 'A' | 'B' | 'C')}>
-            <option value="A">Grade A</option>
-            <option value="B">Grade B</option>
-            <option value="C">Grade C</option>
-          </select>
+        <Field label="Minimum Grade">
+          <div className="flex gap-2">
+            {(['A', 'B', 'C'] as const).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setMinBand(g)}
+                className={`flex-1 rounded-lg border-2 py-1.5 text-sm font-bold transition-colors ${
+                  minBand === g
+                    ? g === 'A'
+                      ? 'border-green-700 bg-green-700 text-white'
+                      : g === 'B'
+                        ? 'border-amber-600 bg-amber-600 text-white'
+                        : 'border-red-600 bg-red-600 text-white'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-400'
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
         </Field>
-        <Field label={`Base price GHS/kg (band ${minBand})`}>
+        <Field label={`Base Price GHS/kg (grade ${minBand})`}>
           <input className={inputCls} type="number" step="0.01" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} />
         </Field>
-        <Field label="Window start">
+        <Field label="Window Start">
           <input className={inputCls} type="date" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} />
         </Field>
-        <Field label="Window end">
+        <Field label="Window End">
           <input className={inputCls} type="date" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} />
           {commodity?.clockType === 'perishable' && (
-            <span className="mt-1 block text-xs text-amber-600">
-              Perishable: window limited to {commodity.clock.maxWindowDays} days
+            <span className="mt-1 block text-[10px] font-semibold text-[#D97706]">
+              ⚡ Perishable — window limited to {commodity.clock.maxWindowDays} days
             </span>
           )}
         </Field>
-        <Field label="Delivery region">
+        <Field label="Delivery Region">
           <select className={inputCls} value={regionCode} onChange={(e) => setRegionCode(e.target.value)}>
             {registries.regions.map((r) => (
               <option key={r.code} value={r.code}>
@@ -197,34 +229,42 @@ function NewDemandForm({ registries, onDone }: { registries: Registries; onDone:
         </Field>
       </div>
 
-      <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase text-stone-500">
+      <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-gray-400">
           Price per grade — this full schedule is what the farmer accepts
         </p>
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           {(['A', 'B', 'C'] as const).map((band) => (
             <label key={band} className="flex items-center gap-2 text-sm">
-              <span className="font-semibold">{band}</span>
+              <span
+                className={`flex h-6 w-6 items-center justify-center rounded text-[11px] font-extrabold text-white ${
+                  band === 'A' ? 'bg-green-700' : band === 'B' ? 'bg-amber-600' : 'bg-red-600'
+                }`}
+              >
+                {band}
+              </span>
               <input
-                className={`${inputCls} w-24`}
+                className={`${inputCls} mono w-24`}
                 type="number"
                 step="0.01"
                 value={terms[band] ?? (derived[band] / 100).toFixed(2)}
                 onChange={(e) => setTerms((t) => ({ ...t, [band]: e.target.value }))}
               />
-              <span className="text-xs text-stone-400">/kg</span>
+              <span className="text-[10px] text-gray-400">/kg</span>
             </label>
           ))}
-          <span className="flex items-center text-sm text-stone-400">REJECT pays 0</span>
+          <span className="ml-auto text-[10px] font-semibold uppercase text-gray-400">Reject pays 0</span>
         </div>
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
-      <div className="mt-4 flex gap-2">
-        <button className={btnCls} onClick={() => create.mutate()} disabled={create.isPending}>
-          {create.isPending ? 'Posting…' : 'Post demand'}
+      {error && (
+        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>
+      )}
+      <div className="mt-4 flex gap-3">
+        <button className={`${btnCls} flex-1 py-2.5`} onClick={() => create.mutate()} disabled={create.isPending}>
+          {create.isPending ? 'Posting…' : 'Post Demand'}
         </button>
-        <button className={btnGhostCls} onClick={onDone}>
+        <button className={`${btnGhostCls} flex-1 py-2.5`} onClick={onDone}>
           Cancel
         </button>
       </div>

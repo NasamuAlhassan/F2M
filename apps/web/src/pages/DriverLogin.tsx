@@ -29,19 +29,27 @@ export function DriverLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-green-950">
-      <form onSubmit={submit} className="w-80 rounded-xl bg-white p-6 shadow-2xl">
-        <h1 className="mb-1 text-xl font-bold text-green-900">Farm to Market</h1>
-        <p className="mb-5 text-sm text-stone-500">Driver portal</p>
-        <div className="space-y-3">
-          <Field label="Phone number">
-            <input
-              className={inputCls}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="024 000 0000"
-              autoComplete="tel"
-            />
+    <div className="flex min-h-screen items-center justify-center bg-[#1B4332] px-4">
+      <form onSubmit={submit} className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center gap-3 bg-[#1B4332] px-6 py-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#D97706] text-lg">🚛</div>
+          <div>
+            <div className="text-sm font-bold text-white">Farm to Market — Driver</div>
+            <div className="text-[11px] text-green-300">Logistics Dispatch · Middle-Mile Bridge</div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-4 p-6">
+          <Field label="Phone Number">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">🇬🇭</span>
+              <input
+                className={`${inputCls} pl-9`}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="024 000 0000"
+                autoComplete="tel"
+              />
+            </div>
           </Field>
           <Field label="PIN (set during USSD registration)">
             <input
@@ -51,16 +59,19 @@ export function DriverLoginPage() {
               maxLength={4}
               value={pin}
               onChange={(e) => setPin(e.target.value)}
+              placeholder="••••"
             />
           </Field>
-          {error && <p className="text-sm text-red-700">{error}</p>}
-          <button className={`${btnCls} w-full`} disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
+          {error && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>
+          )}
+          <button className={`${btnCls} w-full py-2.5`} disabled={busy}>
+            {busy ? 'Signing in…' : 'Sign In'}
           </button>
-          <p className="text-xs text-stone-400">
+          <p className="text-center text-[11px] text-gray-400">
             No account? Dial the USSD code and choose “Register as a driver”.{' '}
-            <Link to="/login" className="text-green-700 hover:underline">
-              Buyer login
+            <Link to="/login" className="font-semibold text-[#1B4332] hover:underline">
+              Buyer login →
             </Link>
           </p>
         </div>
