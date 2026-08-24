@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, dateTime, ghs, type JobView, type Registries } from '../api';
-import { btnCls, btnGhostCls, Card, CROP_EMOJI, numCls, Stat, StateBadge, tableCls, tdCls, thCls, VEHICLE_EMOJI } from '../components/ui';
+import { btnCls, btnGhostCls, Card, CROP_EMOJI, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, tdCls, thCls, VEHICLE_EMOJI } from '../components/ui';
 
 interface OfferView extends JobView {
   jobId: string;
@@ -121,7 +121,7 @@ function ProfileSidebar() {
                   <label
                     key={r.code}
                     className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors ${
-                      on ? 'bg-green-50 font-semibold text-[#1B4332]' : 'text-gray-500 hover:bg-gray-50'
+                      on ? rowOnCls : rowOffCls
                     }`}
                   >
                     <input

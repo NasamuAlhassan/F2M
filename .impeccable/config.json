@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [
+      "apps/server/public/ussd-tester.html",
+      "apps/server/public/ivr-tester.html"
+    ],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-08-24T02:09:02.426Z",
+        "reason": "Owner's Figma design system uses Inter (D-030)"
+      }
+    ]
+  }
+}

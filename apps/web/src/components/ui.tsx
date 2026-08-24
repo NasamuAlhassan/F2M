@@ -119,6 +119,11 @@ export const btnCls =
 export const btnGhostCls =
   'rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-40';
 
+// Selectable list rows (filter checkboxes, route lists): the active state is a
+// green tint with brand-green text; the idle state is quiet gray on white.
+export const rowOnCls = 'bg-green-50 font-semibold text-[#1B4332]';
+export const rowOffCls = 'text-gray-600 hover:bg-gray-100';
+
 // Table helpers — the prototype's gray-50 header band style.
 export const tableCls = 'w-full text-left text-sm';
 export const thCls = 'bg-gray-50 px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500';

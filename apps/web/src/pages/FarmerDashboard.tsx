@@ -9,6 +9,12 @@ interface PriceRow {
   pricePerKg: number;
 }
 
+// The picker's "No file chosen" text (gray, on white) and its button
+// pseudo-element (brand green chip) are separate surfaces.
+const filePickerCls =
+  'block w-full text-xs text-gray-500 ' +
+  'file:mr-2 file:rounded-lg file:border-0 file:bg-green-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[#1B4332] hover:file:bg-green-100';
+
 /** Frame 07's sidebar: "List a New Lot". Same registerLot the USSD tree calls. */
 function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoMsisdn: string }) {
   const queryClient = useQueryClient();
@@ -151,7 +157,7 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
               type="file"
               accept="image/*"
               multiple
-              className="block w-full text-xs text-gray-500 file:mr-2 file:rounded-lg file:border-0 file:bg-green-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[#1B4332] hover:file:bg-green-100"
+              className={filePickerCls}
               onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 3))}
             />
             {files.length > 0 && (

@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ghs, shortDate, type MarketLot, type Registries } from '../api';
 import { NewDemandForm } from '../components/DemandForm';
-import { btnCls, CROP_EMOJI, GradeBadge, inputCls } from '../components/ui';
+import { btnCls, CROP_EMOJI, GradeBadge, inputCls, rowOffCls, rowOnCls } from '../components/ui';
 import { PoolBuilder } from './Consolidate';
 
 // Hero gradients per crop — we have no lot photos (farmers list over USSD from
@@ -15,7 +15,7 @@ const CROP_GRADIENT: Record<string, string> = {
   RICE: 'from-stone-100 to-yellow-100',
   GROUNDNUT: 'from-amber-100 to-orange-200',
   PEPPER: 'from-red-100 to-orange-200',
-  ONION: 'from-purple-100 to-fuchsia-200',
+  ONION: 'from-amber-100 to-rose-200', // papery red-onion skin, not the AI-purple tell
   PLANTAIN: 'from-lime-100 to-green-200',
 };
 
@@ -116,7 +116,7 @@ export function MarketplacePage() {
                 <label
                   key={c.code}
                   className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors ${
-                    crops.has(c.code) ? 'bg-green-50 font-semibold text-[#1B4332]' : 'text-gray-600 hover:bg-gray-100'
+                    crops.has(c.code) ? rowOnCls : rowOffCls
                   }`}
                 >
                   <input
@@ -144,7 +144,7 @@ export function MarketplacePage() {
                 <label
                   key={value}
                   className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors ${
-                    perish === value ? 'bg-green-50 font-semibold text-[#1B4332]' : 'text-gray-600 hover:bg-gray-100'
+                    perish === value ? rowOnCls : rowOffCls
                   }`}
                 >
                   <input
