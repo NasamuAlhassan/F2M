@@ -1,8 +1,17 @@
 import { eq } from 'drizzle-orm';
+import { config } from '../config';
 import { db } from '../db/client';
 import { farmers, type Farmer } from '../db/schema';
-import { DomainError } from './errors';
+import { AVAILABLE_LOCALES } from '../i18n';
+import { DomainError, notFound } from './errors';
+import { queueSms } from './notifications';
 import { getRegion } from './registries';
+
+export function assertLocale(code: string): void {
+  if (!AVAILABLE_LOCALES.some((l) => l.code === code)) {
+    throw new DomainError(`Unknown locale: ${code}`, 'INVALID_LOCALE');
+  }
+}
 
 /**
  * Normalize a Ghanaian phone number to E.164 (+233...).
@@ -35,9 +44,10 @@ export function registerFarmer(input: RegisterFarmerInput): Farmer {
   const phone = normalizePhone(input.phone);
   getRegion(input.regionCode); // throws on unknown region
   if (!input.name.trim()) throw new DomainError('Name is required', 'INVALID_NAME');
+  if (input.locale !== undefined) assertLocale(input.locale);
   const existing = getFarmerByPhone(phone);
   if (existing) throw new DomainError('This phone number is already registered', 'FARMER_EXISTS', 409);
-  return db
+  const farmer = db
     .insert(farmers)
     .values({
       phone,
@@ -51,6 +61,31 @@ export function registerFarmer(input: RegisterFarmerInput): Farmer {
     })
     .returning()
     .get();
+  // The USSD END screen evaporates when the session closes; the SMS receipt is
+  // the farmer's written record — and the first proof their chosen language works.
+  queueSms({
+    phone: farmer.phone,
+    locale: farmer.locale,
+    templateKey: 'sms.registered',
+    params: { name: farmer.name, code: config.USSD_SHORTCODE },
+  });
+  return farmer;
+}
+
+export interface UpdateFarmerProfileInput {
+  locale?: string;
+}
+
+export function updateFarmerProfile(farmerId: string, input: UpdateFarmerProfileInput): Farmer {
+  const farmer = getFarmerById(farmerId);
+  if (!farmer) throw notFound('farmer');
+  const updates: Partial<typeof farmers.$inferInsert> = {};
+  if (input.locale !== undefined) {
+    assertLocale(input.locale);
+    updates.locale = input.locale;
+  }
+  if (Object.keys(updates).length === 0) return farmer;
+  return db.update(farmers).set(updates).where(eq(farmers.id, farmerId)).returning().get()!;
 }
 
 export function getFarmerByPhone(rawPhone: string): Farmer | undefined {

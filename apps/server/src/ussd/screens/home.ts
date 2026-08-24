@@ -15,6 +15,7 @@ export const home: UssdScreen = {
       { key: 'ussd.home.payments' },
       { key: 'ussd.home.prices' },
       { key: 'ussd.home.help' },
+      { key: 'ussd.home.language' },
     ];
     return lines;
   },
@@ -34,6 +35,8 @@ export const home: UssdScreen = {
         return { next: 'prices_commodity' };
       case '6':
         return { end: [{ key: 'ussd.help' }] };
+      case '7':
+        return { next: 'lang_settings' };
       default:
         return invalid();
     }

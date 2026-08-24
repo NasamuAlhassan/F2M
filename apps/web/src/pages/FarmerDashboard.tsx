@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type FarmerDashboard, type Registries } from '../api';
 import { CropMark, Glyph } from '../components/engrave';
+import { LanguageSection } from '../components/LanguageSection';
 import { btnCls, btnGhostCls, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
 interface PriceRow {
@@ -74,7 +75,7 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
   const kg = activeUnit ? Math.round(activeUnit.kgPerUnit * Number(unitQty) * 10) / 10 : 0;
 
   return (
-    <aside className="w-full flex-shrink-0 lg:w-72">
+    <aside>
       <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
         <div className="plate px-5 py-4">
           <div className="display text-base font-semibold tracking-[0.08em]">LIST A NEW LOT</div>
@@ -209,13 +210,23 @@ export function FarmerDashboardPage() {
     onSuccess: (_data, id) => setSuggested((prev) => new Set(prev).add(id)),
     onError,
   });
+  const setLocale = useMutation({
+    mutationFn: (locale: string) => api('/api/farmer/profile', { method: 'PATCH', body: JSON.stringify({ locale }) }),
+    onSuccess: invalidate,
+    onError,
+  });
 
   if (!data || !registries) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
   const { stats, offers, contracts, lots, payouts, profile } = data;
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
-      <ListLotForm registries={registries} momoMsisdn={profile.momoMsisdn} />
+      <div className="w-full flex-shrink-0 space-y-4 lg:w-72">
+        <ListLotForm registries={registries} momoMsisdn={profile.momoMsisdn} />
+        <div className="certificate bg-[var(--paper-lift)] p-5">
+          <LanguageSection current={profile.locale} saving={setLocale.isPending} onPick={(code) => setLocale.mutate(code)} />
+        </div>
+      </div>
 
       <div className="min-w-0 flex-1">
         {error && (

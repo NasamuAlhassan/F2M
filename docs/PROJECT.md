@@ -97,6 +97,7 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M27 — listing channel, produce photos, call-to-negotiate (D-036) | **done** |
 | M28 — driver directory, direct hire, seller-arranged delivery (D-037) | **done** |
 | M29 — open-ended voice listing pipeline, mock-first ASR/MT (D-038) | **done** |
+| M30 — language day: 6 locales, review gate in t(), Khaya MT drafting + TTS (D-040) | **done** |
 
 **MVP:** criteria 1 and 3 met (offline scripted demo to SETTLED; two-tab manual demo verified live in a browser). Criterion 2 — the same demo on real HF grading + MoMo sandbox — is code-complete and waits only on external accounts (HF token, MoMo sandbox subscriptions, Africa's Talking sandbox + ngrok).
 

@@ -1,4 +1,4 @@
-import { db, getLot, listNotificationsForPhone, parseListingText, registerFarmer, schema } from '@ftm/core';
+import { db, getLot, listNotificationsForPhone, parseListingText, registerFarmer, schema, setTtsProvider } from '@ftm/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -48,6 +48,20 @@ describe('voice listing pipeline (M29, D-038)', () => {
     expect(parseListingText('some corn, three bags')).toMatchObject({ commodityCode: 'MAIZE', unitQty: 3 }); // synonym
     expect(parseListingText('I have plenty cassava to sell')).toBeNull(); // crop we don't carry
     expect(parseListingText('maize, no amount said')).toBeNull(); // no quantity
+  });
+
+  it('the listing prompt rides <Play> before <Record> when TTS yields audio (M30)', async () => {
+    const phone = '+233207470102';
+    registerFarmer({ phone, name: 'Play Farmer', regionCode: 'NORTHERN' });
+    setTtsProvider({ name: 'mock', synthesize: async () => ({ url: 'http://localhost:3000/tts/en/rec.mp3' }) });
+    try {
+      const xml = await callListingLine(phone);
+      expect(xml).toContain('<Play url="http://localhost:3000/tts/en/rec.mp3"/>');
+      expect(xml.indexOf('<Play')).toBeLessThan(xml.indexOf('<Record'));
+      expect(xml).not.toContain('<Say');
+    } finally {
+      setTtsProvider(null);
+    }
   });
 
   it('an unregistered caller hears register-first and no lot is created', async () => {

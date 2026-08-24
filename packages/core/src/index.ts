@@ -61,9 +61,23 @@ export * from './domain/logistics';
 export { transitionJob, type JobActor, type JobTransitionExtra } from './state/deliveryJobMachine';
 export * from './providers/asr/index';
 export * from './providers/mt/index';
+export * from './providers/tts/index';
+export { LOCALE_TO_KHAYA, khayaLang } from './providers/khaya';
 export * from './providers/notify/index';
 export * from './providers/payment/index';
 export * from './providers/grading/index';
 export { transitionContract, type Actor, type TransitionExtra } from './state/contractMachine';
-export { t, resolveText, hasKey, AVAILABLE_LOCALES, type I18nText } from './i18n';
+export {
+  t,
+  tDraft,
+  resolveText,
+  hasKey,
+  AVAILABLE_LOCALES,
+  isLocaleReviewed,
+  isLocaleLive,
+  liveLocales,
+  speechLocale,
+  setDraftLocalesLive,
+  type I18nText,
+} from './i18n';
 export { seed, DEMO_BUYER } from './db/seed';

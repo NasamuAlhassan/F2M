@@ -3,7 +3,6 @@
   "band.B": "Grade B",
   "band.C": "Grade C",
   "band.REJECT": "Rejected",
-
   "region.AHAFO": "Ahafo",
   "region.ASHANTI": "Ashanti",
   "region.BONO": "Bono",
@@ -20,7 +19,6 @@
   "region.VOLTA": "Volta",
   "region.WESTERN": "Western",
   "region.WESTERN_NORTH": "Western North",
-
   "commodity.MAIZE": "Maize",
   "commodity.TOMATO": "Tomato",
   "commodity.YAM": "Yam",
@@ -29,7 +27,6 @@
   "commodity.PEPPER": "Pepper",
   "commodity.ONION": "Onion",
   "commodity.PLANTAIN": "Plantain",
-
   "unit.BAG_50KG": "50kg bag",
   "unit.BAG_100KG": "100kg bag",
   "unit.BAG_25KG": "25kg bag",
@@ -41,7 +38,6 @@
   "unit.TUBER": "Tuber",
   "unit.HUNDRED": "Hundred (100 tubers)",
   "unit.BUNCH": "Bunch",
-
   "rubric.maize.moisture": "Moisture",
   "rubric.maize.broken_kernels": "Broken kernels",
   "rubric.maize.foreign_matter": "Foreign matter",
@@ -77,7 +73,6 @@
   "rubric.plantain.finger_fill": "Finger fill",
   "rubric.plantain.bruising": "Bruising",
   "rubric.plantain.rot": "Rot",
-
   "ussd.listItem": "{n}. {label}",
   "ussd.common.back": "0. Back",
   "ussd.common.more": "9. More",
@@ -86,12 +81,10 @@
   "ussd.common.cancelled": "Cancelled. Dial again anytime.",
   "ussd.common.invalid": "Invalid choice, try again.",
   "ussd.common.error": "Sorry, something went wrong: {message}",
-
   "ussd.welcome.title": "Welcome to Farm to Market",
   "ussd.welcome.register": "1. Register as a farmer",
   "ussd.welcome.registerDriver": "2. Register as a driver",
   "ussd.welcome.prices": "3. Market prices",
-
   "ussd.driver.reg.name": "Enter your full name:",
   "ussd.driver.reg.region": "Select your home region:",
   "ussd.driver.reg.vehicle": "What do you drive?",
@@ -100,12 +93,12 @@
   "ussd.driver.reg.confirm": "Register {name}, {vehicle}, {region}?",
   "ussd.driver.reg.done": "Welcome, {name}. We will text you when a delivery job is nearby.",
   "ussd.driver.reg.exists": "This phone number is already registered.",
-
   "ussd.driver.home.title": "Farm to Market Driver",
   "ussd.driver.home.hello": "Hello {name}",
   "ussd.driver.home.offers": "1. Job offers{badge}",
   "ussd.driver.home.job": "2. My job",
   "ussd.driver.home.payments": "3. Payments",
+  "ussd.driver.home.language": "4. Language",
   "ussd.driver.offers.title": "Job offers:",
   "ussd.driver.offers.none": "No job offers right now. We will text you.",
   "ussd.driver.offers.item": "{code} {kg}kg, {km}km, {fee}",
@@ -123,14 +116,12 @@
   "ussd.jobstatus.FUNDS_HELD": "Fee secured - go to pickup",
   "ussd.jobstatus.PICKED_UP": "In transit",
   "ussd.jobstatus.DELIVERED": "Delivered - payout on the way",
-
   "ussd.reg.name": "Enter your full name:",
   "ussd.reg.region": "Select your region:",
   "ussd.reg.district": "Enter your district (0 to skip):",
   "ussd.reg.confirm": "Register as {name}, {region}?",
   "ussd.reg.done": "Welcome to Farm to Market, {name}. Dial again to sell your produce.",
   "ussd.reg.exists": "This phone number is already registered. Dial again to use your account.",
-
   "ussd.home.title": "Farm to Market",
   "ussd.home.hello": "Hello {name}",
   "ussd.home.sell": "1. Sell produce",
@@ -139,8 +130,11 @@
   "ussd.home.payments": "4. Payments",
   "ussd.home.prices": "5. Market prices",
   "ussd.home.help": "6. Help",
+  "ussd.home.language": "7. Language",
+  "ussd.lang.title": "Choose your language:",
+  "ussd.lang.settings": "Language for SMS and calls:",
+  "ussd.lang.done": "Language updated to {language}. Your SMS and calls will use it.",
   "ussd.help": "Farm to Market connects farmers to buyers. List your produce, receive offers with clear prices per grade, and get paid on MoMo after pickup.",
-
   "ussd.sell.commodity": "What are you selling?",
   "ussd.sell.unit": "How do you measure it?",
   "ussd.sell.qty": "How many {unit}?",
@@ -158,7 +152,6 @@
   "ussd.sell.readyMonth": "In 1 month",
   "ussd.sell.confirm": "{qty} {unit} of {commodity}, {band}. List it?",
   "ussd.sell.done": "Lot {lotCode} listed: {qty} {unit} of {commodity}. We will text you when a buyer sends an offer.",
-
   "ussd.lots.title": "My lots:",
   "ussd.lots.none": "You have no lots yet. Dial again and choose Sell produce.",
   "ussd.lots.item": "{code} {kg}kg {commodity} - {status}",
@@ -179,7 +172,6 @@
   "ussd.lotstatus.settled": "Paid",
   "ussd.lotstatus.expired": "Expired",
   "ussd.lotstatus.withdrawn": "Withdrawn",
-
   "ussd.offers.title": "Your offers:",
   "ussd.offers.none": "No offers yet. We will text you when a buyer wants your produce.",
   "ussd.offers.item": "{kg}kg {commodity}",
@@ -194,28 +186,23 @@
   "ussd.offer.accepted": "Accepted. Up to {amount} is being held for you and pays out after pickup and grading.",
   "ussd.offer.declined": "Offer declined. Your lot stays listed for other buyers.",
   "ussd.offer.expired": "Sorry, this offer has expired. Your lot stays listed.",
-
   "ussd.prices.commodity": "Prices for which crop?",
   "ussd.prices.title": "Latest {commodity} prices:",
   "ussd.prices.item": "{market}: {price}/kg",
   "ussd.prices.none": "No price data yet for {commodity}.",
-
   "ussd.pay.title": "Recent payments:",
   "ussd.pay.none": "No payments yet.",
   "ussd.pay.item": "{amount} - {status}",
   "ussd.paystatus.pending": "On the way",
   "ussd.paystatus.successful": "Paid",
   "ussd.paystatus.failed": "Failed",
-
   "vehicle.tricycle": "Motor Tricycle",
   "vehicle.van": "1.5T Truck",
   "vehicle.light_truck": "5T Truck",
-
   "sms.jobOffer": "Farm to Market: Delivery job {code} - {kg}kg over {km}km, pays {fee}. Dial {ussd} and choose Job offers.",
   "sms.jobAssigned": "Farm to Market: {driver} ({vehicle}, {phone}) will collect your produce. Job {code}.",
   "sms.jobPaid": "Farm to Market: {amount} for delivery job {code} has been sent to your MoMo.",
   "sms.jobCancelled": "Farm to Market: Delivery job {code} was cancelled. You are available for new jobs.",
-
   "sms.newOffer": "Farm to Market: New offer - {kg}kg {commodity} at up to {price}/kg. Dial {code} and choose My offers.",
   "sms.funded": "Farm to Market: {amount} is secured for your {commodity}. Pickup {start} - {end}.",
   "sms.graded": "Farm to Market: Your {commodity} graded {band}, pays {amount}. Reason: {reason}. Dial {code}, My lots, to agree or dispute.",
@@ -224,7 +211,8 @@
   "sms.loginCode": "Farm to Market: Your web login code is {code}. It expires in 10 minutes. Never share this code.",
   "sms.listingCreated": "Farm to Market: Your {commodity} is listed - {kg}kg, grade {band}, lot {lotCode}. Buyers may call you directly. Dial {code} to manage it.",
   "sms.listingFailed": "Farm to Market: Sorry, we could not create your listing from that call. Please try again, or dial {code} to list step by step.",
-
+  "sms.registered": "Farm to Market: Welcome {name}! Your farmer account is ready. Dial {code} to sell your produce.",
+  "sms.lotListed": "Farm to Market: Lot {lotCode} listed - {qty} {unit} of {commodity}. We will text you when a buyer sends an offer.",
   "notif.offerAccepted": "{farmer} accepted your offer for {kg}kg {commodity}. The hold is being secured.",
   "notif.offerDeclined": "{farmer} declined the offer for {kg}kg {commodity}. Freed quantity re-matches automatically.",
   "notif.offerExpired": "Your offer to {farmer} for {kg}kg {commodity} expired unanswered. Re-matching.",
@@ -237,7 +225,6 @@
   "notif.transportSuggested": "{farmer} requests a driver for {lotCode} — est. fee {fee}. Approve from the contract page.",
   "notif.noDriver": "No driver available for job {jobCode}. Retry dispatch from the contract page.",
   "notif.driverPaid": "Job {jobCode}: {fee} released to {driver}.",
-
   "voice.list.prompt": "Welcome to Farm to Market. After the beep, tell us everything you want to sell: the crop, how many bags or baskets, and the quality. Press the hash key when you finish.",
   "voice.list.confirm": "Thank you. We listed your {commodity}: about {kg} kilos, grade {band}. Buyers can see it now and may call you. You will receive an SMS receipt. Goodbye.",
   "voice.list.failed": "Sorry, we could not understand your listing. Please call again and speak slowly, or dial {code} to list step by step. Goodbye.",

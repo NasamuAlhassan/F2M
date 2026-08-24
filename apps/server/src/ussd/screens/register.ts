@@ -92,6 +92,7 @@ export const regConfirm: UssdScreen = {
         name: String(ctx.data.regName),
         regionCode: String(ctx.data.regRegion),
         district: (ctx.data.regDistrict as string | null) ?? undefined,
+        locale: typeof ctx.data.locale === 'string' ? ctx.data.locale : undefined, // the lang_welcome choice persists here
       });
       return { end: [{ key: 'ussd.reg.done', params: { name: farmer.name } }] };
     } catch (err) {

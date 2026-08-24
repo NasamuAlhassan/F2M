@@ -8,6 +8,7 @@ import {
   type I18nText,
   type VoiceCall,
 } from '@ftm/core';
+import { gatherResponse, sayResponse } from './xml';
 
 /**
  * IVR node — the voice twin of UssdScreen (D-027). say() returns i18n
@@ -43,23 +44,6 @@ export function registerFlow(flowName: string, flow: IvrFlow): void {
   entries.set(flowName, flow.entry);
 }
 
-function xmlEscape(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-}
-
-function sayXml(text: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="woman">${xmlEscape(text)}</Say></Response>`;
-}
-
-function gatherXml(text: string, callbackUrl: string): string {
-  return (
-    `<?xml version="1.0" encoding="UTF-8"?><Response>` +
-    `<GetDigits timeout="12" numDigits="1" callbackUrl="${xmlEscape(callbackUrl)}">` +
-    `<Say voice="woman">${xmlEscape(text)}</Say>` +
-    `</GetDigits></Response>`
-  );
-}
-
 export interface VoiceAnswerRequest {
   callId?: string; // from our callback URL query
   phone: string; // gateway's callerNumber/phoneNumber
@@ -75,12 +59,13 @@ export interface VoiceAnswerRequest {
 export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string> {
   const call = (req.callId ? getVoiceCall(req.callId) : undefined) ?? getActiveCallForPhone(req.phone);
   if (!call || ['completed', 'failed', 'no_answer'].includes(call.status)) {
-    return sayXml(resolveText('en', { key: 'voice.common.goodbye' }));
+    // No live call → no locale to speak in; English is the only honest choice.
+    return sayResponse(resolveText('en', { key: 'voice.common.goodbye' }), 'en');
   }
 
   const flowNodes = flows.get(call.flow);
   const entry = entries.get(call.flow);
-  if (!flowNodes || !entry) return sayXml(resolveText(call.locale, { key: 'voice.common.goodbye' }));
+  if (!flowNodes || !entry) return sayResponse(resolveText(call.locale, { key: 'voice.common.goodbye' }), call.locale);
 
   const ctx: IvrCtx = { call, locale: call.locale };
 
@@ -88,10 +73,10 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
     const gate = node.guard?.(ctx);
     if (gate) {
       finishVoiceCall(call.id, 'completed', { result: 'gone' });
-      return sayXml(gate.map((l) => resolveText(call.locale, l)).join(' '));
+      return sayResponse(gate.map((l) => resolveText(call.locale, l)).join(' '), call.locale);
     }
     const text = (await node.say(ctx)).map((l) => resolveText(call.locale, l)).join(' ');
-    return gatherXml(text, req.callbackUrl);
+    return gatherResponse(text, call.locale, req.callbackUrl);
   };
 
   // First leg: answered — mark in progress, play the entry prompt.
@@ -110,7 +95,7 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
   const result = await node.onDigits(req.dtmfDigits.trim(), ctx);
   if ('end' in result) {
     finishVoiceCall(call.id, 'completed', { digits: req.dtmfDigits.trim(), ...(result.outcome ?? {}) });
-    return sayXml(result.end.map((l) => resolveText(call.locale, l)).join(' '));
+    return sayResponse(result.end.map((l) => resolveText(call.locale, l)).join(' '), call.locale);
   }
   setCallNode(call.id, result.next);
   return promptOrHangup(flowNodes.get(result.next)!);

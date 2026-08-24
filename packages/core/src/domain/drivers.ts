@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { drivers, vehicleClasses, type Driver, type VehicleClass } from '../db/schema';
 import { DomainError, notFound } from './errors';
-import { getFarmerByPhone, normalizePhone, toMsisdn } from './farmers';
+import { assertLocale, getFarmerByPhone, normalizePhone, toMsisdn } from './farmers';
 import { getRegion } from './registries';
 
 export function listVehicleClasses(): VehicleClass[] {
@@ -33,6 +33,7 @@ export function registerDriver(input: RegisterDriverInput): Driver {
   getVehicleClass(input.vehicleClassCode);
   if (!input.name.trim()) throw new DomainError('Name is required', 'INVALID_NAME');
   if (!/^\d{4}$/.test(input.pin)) throw new DomainError('PIN must be 4 digits', 'INVALID_PIN');
+  if (input.locale !== undefined) assertLocale(input.locale);
   if (getDriverByPhone(phone)) {
     throw new DomainError('This phone number is already registered as a driver', 'DRIVER_EXISTS', 409);
   }
@@ -94,6 +95,7 @@ export interface UpdateDriverProfileInput {
   vehicleClassCode?: string;
   active?: boolean; // online/offline
   routeRegions?: string[]; // region codes; empty array = serve anywhere
+  locale?: string; // SMS + call language (D-040)
 }
 
 export function updateDriverProfile(driverId: string, input: UpdateDriverProfileInput): Driver {
@@ -108,6 +110,10 @@ export function updateDriverProfile(driverId: string, input: UpdateDriverProfile
   if (input.routeRegions !== undefined) {
     for (const code of input.routeRegions) getRegion(code); // throws on unknown
     updates.routeRegions = JSON.stringify([...new Set(input.routeRegions)]);
+  }
+  if (input.locale !== undefined) {
+    assertLocale(input.locale);
+    updates.locale = input.locale;
   }
   if (Object.keys(updates).length === 0) return driver;
   return db.update(drivers).set(updates).where(eq(drivers.id, driverId)).returning().get()!;

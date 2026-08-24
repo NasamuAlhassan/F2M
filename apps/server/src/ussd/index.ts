@@ -12,6 +12,7 @@ import {
   driverRegVehicle,
 } from './screens/driver';
 import { home } from './screens/home';
+import { langSettings, langWelcome } from './screens/language';
 import { lotDetail, lotsList } from './screens/lots';
 import { offerDetail, offersList } from './screens/offers';
 import { paymentsScreen } from './screens/payments';
@@ -20,6 +21,8 @@ import { regConfirm, regDistrict, regName, regRegion, welcome } from './screens/
 import { sellBand, sellCommodity, sellConfirm, sellQty, sellReady, sellUnit } from './screens/sell';
 
 registerScreens(
+  langWelcome,
+  langSettings,
   welcome,
   regName,
   regRegion,

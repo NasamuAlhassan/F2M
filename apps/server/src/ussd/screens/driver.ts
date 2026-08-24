@@ -110,6 +110,7 @@ export const driverRegConfirm: UssdScreen = {
         regionCode: String(ctx.data.drvRegion),
         vehicleClassCode: String(ctx.data.drvVehicle),
         pin: String(ctx.data.drvPin),
+        locale: typeof ctx.data.locale === 'string' ? ctx.data.locale : undefined,
       });
       return { end: [{ key: 'ussd.driver.reg.done', params: { name: driver.name } }] };
     } catch (err) {
@@ -133,6 +134,7 @@ export const driverHome: UssdScreen = {
       { key: 'ussd.driver.home.offers', params: { badge: offers > 0 ? ` (${offers})` : '' } },
       { key: 'ussd.driver.home.job' },
       { key: 'ussd.driver.home.payments' },
+      { key: 'ussd.driver.home.language' }, // fills the menu's dead key 4
       { key: 'ussd.home.prices' },
     ];
     return lines;
@@ -145,6 +147,8 @@ export const driverHome: UssdScreen = {
         return { next: 'driver_active' };
       case '3':
         return { next: 'driver_payments' };
+      case '4':
+        return { next: 'lang_settings' };
       case '5':
         ctx.data.pricesPage = 0;
         return { next: 'prices_commodity' };

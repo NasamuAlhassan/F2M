@@ -40,6 +40,13 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     prefix: '/photos/',
     decorateReply: false,
   });
+  // Cached Khaya TTS audio for IVR <Play> (D-040) — synthesized once per phrase.
+  fs.mkdirSync(path.join(config.storageDir, 'tts'), { recursive: true });
+  await app.register(fastifyStatic, {
+    root: path.join(config.storageDir, 'tts'),
+    prefix: '/tts/',
+    decorateReply: false,
+  });
 
   // Role-checked guards — a valid JWT of the WRONG kind must not pass (D-021).
   app.decorate('authBuyer', async (req, reply) => {

@@ -1,4 +1,4 @@
-import { db, getDriverByPhone, getFarmerByPhone, resolveText, schema, type Driver, type Farmer, type I18nText } from '@ftm/core';
+import { db, getDriverByPhone, getFarmerByPhone, liveLocales, resolveText, schema, type Driver, type Farmer, type I18nText } from '@ftm/core';
 import { eq } from 'drizzle-orm';
 
 const SESSION_TTL_MS = 5 * 60 * 1000; // a stale session restarts at home on re-dial
@@ -43,7 +43,9 @@ export interface UssdRequest {
 function entryScreen(ctx: UssdCtx): string {
   if (ctx.farmer) return 'home';
   if (ctx.driver) return 'driver_home';
-  return 'welcome';
+  // A brand-new caller picks a language first — but only when more than
+  // English is actually live (D-040), so the default flow is untouched.
+  return liveLocales().length > 1 ? 'lang_welcome' : 'welcome';
 }
 
 export async function handleUssdRequest(req: UssdRequest): Promise<string> {
@@ -80,6 +82,9 @@ export async function handleUssdRequest(req: UssdRequest): Promise<string> {
   }
 
   ctx.data = JSON.parse(session.ctx) as Record<string, unknown>;
+  // A pre-registration language choice lives in the session blob (D-040) and
+  // outranks the (nonexistent) profile row until registration persists it.
+  if (typeof ctx.data.locale === 'string') ctx.locale = ctx.data.locale;
   const screen = registry.get(session.screen) ?? registry.get(entryScreen(ctx))!;
 
   let result: ScreenResult;

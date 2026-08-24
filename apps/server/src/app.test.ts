@@ -176,3 +176,23 @@ describe('API spine (M1)', () => {
     expect(res.json().error.code).toBe('WINDOW_TOO_FAR');
   });
 });
+
+describe('locale registry endpoint (M30, D-040)', () => {
+  it('lists all six locales with honest reviewed/live flags', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/i18n/locales' });
+    expect(res.statusCode).toBe(200);
+    const { locales } = res.json() as {
+      locales: Array<{ code: string; label: string; endonym: string; reviewed: boolean; live: boolean }>;
+    };
+    expect(locales.map((l) => l.code)).toEqual(['en', 'tw', 'ee', 'dag', 'ha', 'kus']);
+    const en = locales.find((l) => l.code === 'en')!;
+    expect(en.reviewed).toBe(true);
+    expect(en.live).toBe(true);
+    // Default config: nothing reviewed, draft-live off — only English is live.
+    for (const l of locales.filter((x) => x.code !== 'en')) {
+      expect(l.reviewed).toBe(false);
+      expect(l.live).toBe(false);
+    }
+    expect(locales.find((l) => l.code === 'kus')!.endonym).toBe('Kʋsaal');
+  });
+});

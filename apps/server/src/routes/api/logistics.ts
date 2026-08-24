@@ -31,6 +31,7 @@ const profileSchema = z.object({
   vehicleClassCode: z.string().optional(),
   active: z.boolean().optional(),
   routeRegions: z.array(z.string()).max(16).optional(),
+  locale: z.string().optional(), // SMS + call language (D-040)
 });
 
 function jobView(job: DeliveryJob) {
@@ -152,6 +153,7 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
         vehicleClassCode: driver.vehicleClassCode,
         active: driver.active,
         routeRegions: driverRouteRegions(driver),
+        locale: driver.locale,
       },
     };
   });
@@ -167,6 +169,7 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
         vehicleClassCode: driver.vehicleClassCode,
         active: driver.active,
         routeRegions: driverRouteRegions(driver),
+        locale: driver.locale,
       },
     };
   });

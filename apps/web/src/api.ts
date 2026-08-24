@@ -118,8 +118,16 @@ export interface TraceEvent {
 
 export type Role = 'buyer' | 'driver' | 'farmer';
 
+export interface LocaleInfo {
+  code: string;
+  label: string;
+  endonym: string;
+  reviewed: boolean; // native speaker signed off
+  live: boolean; // allowed on real farmer-facing surfaces (D-040)
+}
+
 export interface FarmerDashboard {
-  profile: { name: string; phone: string; regionCode: string; district: string | null; momoMsisdn: string };
+  profile: { name: string; phone: string; regionCode: string; district: string | null; momoMsisdn: string; locale: string };
   stats: { activeListings: number; matchedContracts: number; totalEarned: number };
   offers: FarmerContractRow[];
   contracts: FarmerContractRow[];

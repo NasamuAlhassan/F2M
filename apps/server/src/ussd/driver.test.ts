@@ -11,6 +11,7 @@ import {
   registerLot,
   requestTransport,
   schema,
+  setDraftLocalesLive,
   setPaymentProvider,
   verifyBuyerLogin,
   db,
@@ -179,5 +180,22 @@ describe('driver surfaces (M14)', () => {
     await pollPaymentsOnce();
     expect(getJob(job.id).state).toBe('PAID');
     expect(getJobForContract(job.contractId)!.state).toBe('PAID');
+  });
+});
+
+describe('driver language menu (M30, D-040)', () => {
+  it('key 4 fills the dead slot and persists drivers.locale', async () => {
+    setDraftLocalesLive(true);
+    try {
+      const [home, menu, done] = await dial(DRIVER_PHONE, ['4', '2']);
+      expect(home).toContain('4. Language');
+      expect(menu).toContain('Language for SMS and calls:');
+      expect(done).toMatch(/^END/);
+      expect(getDriverByPhone(DRIVER_PHONE)!.locale).toBe('tw');
+      await dial(DRIVER_PHONE, ['4', '1']); // back to English
+      expect(getDriverByPhone(DRIVER_PHONE)!.locale).toBe('en');
+    } finally {
+      setDraftLocalesLive(null);
+    }
   });
 });

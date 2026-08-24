@@ -241,11 +241,11 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
             <span className="serial text-xs text-[var(--ink-6)]">{data?.farmerPhone}</span> is alerted instantly:
           </p>
 
-          <div className="mb-4 flex border border-[var(--ink-3)]">
+          <div className="mb-4 flex flex-wrap border border-[var(--ink-3)]">
             {(data?.locales ?? [{ code: 'tw', label: 'Twi' }]).map((l) => (
               <button
                 key={l.code}
-                className={`smallcaps flex-1 py-1.5 transition-colors ${
+                className={`smallcaps min-w-[72px] flex-1 py-1.5 transition-colors ${
                   locale === l.code
                     ? 'bg-[var(--ink)] text-[var(--paper)]'
                     : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'

@@ -15,7 +15,9 @@ import {
   quoteTransportOptions,
   schema,
   scoreBreakdownSchema,
+  isLocaleReviewed,
   t,
+  tDraft,
 } from '@ftm/core';
 import { desc, eq, gt, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -129,22 +131,24 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
     const commodity = getCommodityById(contract.commodityId);
     const buyer = db.select().from(schema.buyers).where(eq(schema.buyers.id, contract.buyerId)).get();
     const terms = contractPriceTerms(contract);
-    const commodityName = t(locale, commodity.nameKey);
+    // tDraft: this drawer is the sanctioned PREVIEW surface (D-040) — it shows
+    // machine-drafted text the review gate keeps off real farmer channels.
+    const commodityName = tDraft(locale, commodity.nameKey);
 
-    const sms = t(locale, 'sms.newOffer', {
+    const sms = tDraft(locale, 'sms.newOffer', {
       kg: contract.quantityKg,
       commodity: commodityName,
       price: formatGhs(terms[bestBand(terms)] ?? 0),
       code: config.USSD_SHORTCODE,
     });
     const voice = [
-      t(locale, 'voice.offer.intro', {
+      tDraft(locale, 'voice.offer.intro', {
         kg: contract.quantityKg,
         commodity: commodityName,
         buyer: buyer?.company ?? buyer?.name ?? '',
         amount: formatGhs(contract.holdAmount),
       }),
-      t(locale, 'voice.offer.menu'),
+      tDraft(locale, 'voice.offer.menu'),
     ];
 
     const smsRecord = farmer
@@ -155,9 +159,9 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
       : undefined;
 
     return {
-      locales: AVAILABLE_LOCALES,
+      locales: AVAILABLE_LOCALES.map((l) => ({ ...l, reviewed: isLocaleReviewed(l.code) })),
       locale,
-      reviewNote: locale !== 'en',
+      reviewNote: !isLocaleReviewed(locale),
       farmerName: farmer?.name ?? null,
       farmerPhone: farmer?.phone ?? null,
       sms,

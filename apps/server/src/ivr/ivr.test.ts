@@ -14,6 +14,7 @@ import {
   registerLot,
   schema,
   setPaymentProvider,
+  setTtsProvider,
   verifyBuyerLogin,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -144,6 +145,24 @@ describe('voice/IVR (M16)', () => {
     const gone = await voiceLeg(call.id, phone, 's3');
     expect(gone).not.toContain('<GetDigits');
     expect(gone).toContain('no longer available');
+  });
+
+  it('speaks via <Play> when the TTS provider yields audio, on prompt and hangup legs alike (M30)', async () => {
+    const phone = '+233207770306';
+    const { farmer } = await offeredContract(phone);
+    await placePendingVoiceCalls();
+    const call = listVoiceCallsForPhone(farmer.phone)[0]!;
+    setTtsProvider({ name: 'mock', synthesize: async () => ({ url: 'http://localhost:3000/tts/en/abc.mp3' }) });
+    try {
+      const prompt = await voiceLeg(call.id, phone, 's6');
+      expect(prompt).toContain('<GetDigits');
+      expect(prompt).toContain('<Play url="http://localhost:3000/tts/en/abc.mp3"/>');
+      expect(prompt).not.toContain('<Say');
+      const accepted = await voiceLeg(call.id, phone, 's6', '1');
+      expect(accepted).toContain('<Play');
+    } finally {
+      setTtsProvider(null);
+    }
   });
 
   it('retries an unanswered call once, then records no_answer with SMS already out', async () => {

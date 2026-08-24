@@ -19,6 +19,7 @@ import {
   schema,
   suggestTransport,
   t,
+  updateFarmerProfile,
 } from '@ftm/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -111,6 +112,7 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
         regionCode: farmer.regionCode,
         district: farmer.district,
         momoMsisdn: farmer.momoMsisdn,
+        locale: farmer.locale,
       },
       stats: {
         activeListings: lots.filter((l) => ['registered', 'matched'].includes(l.status) && l.remainingKg > 0).length,
@@ -122,6 +124,13 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
       lots,
       payouts,
     };
+  });
+
+  // SMS & call language (D-040) — the one profile field a farmer can change.
+  app.patch('/farmer/profile', { preHandler: [app.authFarmer] }, async (req) => {
+    const input = z.object({ locale: z.string() }).parse(req.body ?? {});
+    const farmer = updateFarmerProfile(req.user.sub, { locale: input.locale });
+    return { profile: { locale: farmer.locale } };
   });
 
   // "List a New Lot" — same registerLot the USSD tree calls, now with the web

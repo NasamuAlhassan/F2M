@@ -1,10 +1,12 @@
 import { desc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { lots, type Lot } from '../db/schema';
+import { t } from '../i18n';
 import { DomainError, notFound } from './errors';
 import { getFarmerById } from './farmers';
 import { generateLotCode } from './ids';
 import { runMatching } from './matching';
+import { queueSms } from './notifications';
 import { convertToKg, getCommodityByCode, getUnit } from './registries';
 import { appendLotEvent } from './trace';
 import { gradeBandSchema, type GradeBand } from './types';
@@ -94,6 +96,23 @@ export function registerLot(input: RegisterLotInput): Lot {
     });
     return lot;
   });
+
+  // The USSD END confirmation evaporates with the session — the SMS receipt is
+  // the basic-phone farmer's only written record (the voice path already sends
+  // sms.listingCreated; web sellers see their dashboard).
+  if ((input.channel ?? 'ussd') === 'ussd') {
+    queueSms({
+      phone: farmer.phone,
+      locale: farmer.locale,
+      templateKey: 'sms.lotListed',
+      params: {
+        lotCode: lot.lotCode,
+        qty: input.unitQty,
+        unit: t(farmer.locale, unit.nameKey),
+        commodity: t(farmer.locale, commodity.nameKey),
+      },
+    });
+  }
 
   // A fresh lot may satisfy demand posted last night — match immediately.
   runMatching({ lotId: lot.id });

@@ -72,6 +72,18 @@ function ussdSession(phone: string) {
       payload: new URLSearchParams({ sessionId, phoneNumber: phone, text: history.join('*') }).toString(),
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
     });
+    // Once a catalog is reviewed (D-040), new callers pick a language first —
+    // the demo answers "1. English" so its scripted digits keep working.
+    if (input === undefined && res.body.startsWith('CON Choose your language')) {
+      history.push('1');
+      const after = await app.inject({
+        method: 'POST',
+        url: '/ussd',
+        payload: new URLSearchParams({ sessionId, phoneNumber: phone, text: history.join('*') }).toString(),
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      });
+      return after.body;
+    }
     return res.body;
   };
 }

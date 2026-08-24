@@ -10,6 +10,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { handleVoiceAnswer } from '../ivr/index';
+import { recordResponse, sayResponse } from '../ivr/xml';
 
 // Africa's Talking Voice wire format: form-encoded POSTs, XML replies.
 const answerSchema = z.object({
@@ -22,21 +23,6 @@ const answerSchema = z.object({
   // Mock-mode stand-in for the recording (the IVR tester types the speech).
   transcript: z.string().optional(),
 });
-
-function xmlEscape(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-function sayXml(text: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="woman">${xmlEscape(text)}</Say></Response>`;
-}
-function recordXml(prompt: string, callbackUrl: string): string {
-  return (
-    `<?xml version="1.0" encoding="UTF-8"?><Response>` +
-    `<Say voice="woman">${xmlEscape(prompt)}</Say>` +
-    `<Record finishOnKey="#" maxLength="90" trimSilence="true" playBeep="true" callbackUrl="${xmlEscape(callbackUrl)}"/>` +
-    `</Response>`
-  );
-}
 
 export async function voiceRoutes(app: FastifyInstance): Promise<void> {
   app.post('/voice/answer', async (req, reply) => {
@@ -53,11 +39,11 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
         if (!farmer) {
           return reply
             .type('application/xml')
-            .send(sayXml(t(locale, 'voice.list.notRegistered', { code: config.USSD_SHORTCODE })));
+            .send(await sayResponse(t(locale, 'voice.list.notRegistered', { code: config.USSD_SHORTCODE }), locale));
         }
         return reply
           .type('application/xml')
-          .send(recordXml(t(locale, 'voice.list.prompt'), `${config.PUBLIC_BASE_URL}/voice/answer`));
+          .send(await recordResponse(t(locale, 'voice.list.prompt'), locale, `${config.PUBLIC_BASE_URL}/voice/answer`));
       }
 
       const result = await processVoiceListing({
@@ -69,17 +55,18 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
         const lot = getLot(result.lotId);
         const parsed = JSON.parse(result.parsed) as { commodityCode: string; declaredBand: string };
         return reply.type('application/xml').send(
-          sayXml(
+          await sayResponse(
             t(locale, 'voice.list.confirm', {
               commodity: t(locale, `commodity.${parsed.commodityCode}`),
               kg: lot.quantityKg,
               band: parsed.declaredBand,
             }),
+            locale,
           ),
         );
       }
       const failKey = result.error === 'not_registered' ? 'voice.list.notRegistered' : 'voice.list.failed';
-      return reply.type('application/xml').send(sayXml(t(locale, failKey, { code: config.USSD_SHORTCODE })));
+      return reply.type('application/xml').send(await sayResponse(t(locale, failKey, { code: config.USSD_SHORTCODE }), locale));
     }
 
     const xml = await handleVoiceAnswer({

@@ -1,6 +1,7 @@
 {
   "_note": "Dagbani — MACHINE-DRAFTED for the simulation drawer. Requires native-speaker review before any farmer-facing use. Missing keys fall back to English.",
-
+  "_machineDrafted": "pre-M30 hand-drafted subset",
+  "_reviewed": "",
   "commodity.MAIZE": "Kawana",
   "commodity.TOMATO": "Kamantɔ",
   "commodity.YAM": "Nyuya",
@@ -9,13 +10,10 @@
   "commodity.PEPPER": "Naanzua",
   "commodity.ONION": "Alibasa",
   "commodity.PLANTAIN": "Ayaba",
-
   "band.A": "Zaɣa A",
   "band.B": "Zaɣa B",
   "band.C": "Zaɣa C",
-
   "sms.newOffer": "Farm to Market: Daabo palli - a {commodity} kilo {kg}, di yɔri hal ni {price}/kg. Buɣisi {code} ka pii My offers.",
-
   "voice.offer.intro": "Dasiba, Farm to Market m-bɔhira. A mali daabo palli: a {commodity} kilo {kg} n-ti {buyer}, di yɔri hal ni {amount} ka di nyɛla zaɣa maa zuɣu.",
   "voice.offer.menu": "Nyaɣisi 1 ka a saɣi. Nyaɣisi 2 ka a zaɣisi.",
   "voice.offer.accepted": "Ni a yaa. A saɣiya. Ti gbibi {amount} n-guli a; a ni deei a liɣiri mobile money zuɣu pickup mini grading nyaaŋa. Naawuni ni a.",

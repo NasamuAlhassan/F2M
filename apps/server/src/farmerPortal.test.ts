@@ -228,3 +228,35 @@ describe('public trace (M24, D-033)', () => {
     expect(missing.statusCode).toBe(404);
   });
 });
+
+describe('farmer language profile (M30, D-040)', () => {
+  it('PATCH /farmer/profile sets the locale, the dashboard exposes it, and junk is refused', async () => {
+    const phone = '+233207460505';
+    registerFarmer({ phone, name: 'Lang Farmer', regionCode: 'NORTHERN' });
+    const token = await farmerToken(phone);
+
+    let dash = await app.inject({ method: 'GET', url: '/api/farmer/dashboard', headers: { authorization: `Bearer ${token}` } });
+    expect(dash.json().profile.locale).toBe('en');
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: '/api/farmer/profile',
+      payload: JSON.stringify({ locale: 'dag' }),
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().profile.locale).toBe('dag');
+
+    dash = await app.inject({ method: 'GET', url: '/api/farmer/dashboard', headers: { authorization: `Bearer ${token}` } });
+    expect(dash.json().profile.locale).toBe('dag');
+
+    const bad = await app.inject({
+      method: 'PATCH',
+      url: '/api/farmer/profile',
+      payload: JSON.stringify({ locale: 'xx' }),
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.code).toBe('INVALID_LOCALE');
+  });
+});

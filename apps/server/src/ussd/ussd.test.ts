@@ -5,9 +5,11 @@
   getFarmerByPhone,
   listContractsForFarmer,
   listLotsByFarmer,
+  listNotificationsForPhone,
   MockPaymentProvider,
   pollPaymentsOnce,
   runGrading,
+  setDraftLocalesLive,
   setGradingProvider,
   setPaymentProvider,
   verifyBuyerLogin,
@@ -99,7 +101,7 @@ describe('USSD flows (M2)', () => {
   });
 
   it('re-renders with an error line on invalid input', async () => {
-    const [, bad] = await dial(PHONE, ['7']);
+    const [, bad] = await dial(PHONE, ['9']); // 7 became the language menu (M30)
     expect(bad).toContain('Invalid choice');
     expect(bad).toContain('1. Sell produce'); // same screen re-rendered
   });
@@ -194,5 +196,57 @@ describe('USSD flows (M2)', () => {
     // And the payments screen now shows it.
     const [, payScreen] = await dial(PHONE, ['4']);
     expect(payScreen).toContain('GHS 2200.00 - Paid');
+  });
+});
+
+describe('USSD language flows (M30, D-040)', () => {
+  beforeAll(() => setDraftLocalesLive(true));
+  afterAll(() => setDraftLocalesLive(null));
+
+  it('a brand-new caller picks a language first, and the menu names each language in itself', async () => {
+    const [first] = await dial('+233209990401', []);
+    expect(first).toMatch(/^CON Choose your language/);
+    expect(first).toContain('1. English');
+    expect(first).toContain('2. Twi');
+    expect(first).toContain('3. Eʋegbe');
+    expect(first).toContain('4. Dagbanli');
+  });
+
+  it('a Twi choice renders the rest of the session in draft Twi and registration persists it', async () => {
+    const phone = '+233209990402';
+    // 2 = Twi → welcome (Twi has no ussd.* drafts yet, so welcome falls back per-key
+    // to English — the locale itself must still stick) → register.
+    const responses = await dial(phone, ['2', '1', 'Yaw Mensah', '9', '2', 'Tolon', '1']);
+    expect(responses[1]).toContain('Welcome to Farm to Market'); // en fallback, session now tw
+    expect(responses[7]).toMatch(/^END/);
+    const farmer = getFarmerByPhone(phone)!;
+    expect(farmer.locale).toBe('tw');
+    // The registration receipt rode the chosen locale (Twi catalog lacks
+    // sms.registered → resolved from English under the per-key fallback).
+    expect(listNotificationsForPhone(phone).some((n) => n.templateKey === 'sms.registered')).toBe(true);
+  });
+
+  it('home menu 7 changes a farmer language and confirms in the NEW language', async () => {
+    const phone = '+233209990403';
+    await dial(phone, ['1', '1', 'Ama Lang', '9', '2', 'Tolon', '1']); // register in English
+    const [home, menu, done] = await dial(phone, ['7', '2']);
+    expect(home).toContain('7. Language');
+    expect(menu).toContain('Language for SMS and calls:');
+    expect(done).toMatch(/^END/);
+    expect(done).toContain('Twi'); // the endonym names the choice
+    expect(getFarmerByPhone(phone)!.locale).toBe('tw');
+    // Round-trip back to English.
+    const [, , back] = await dial(phone, ['7', '1']);
+    expect(back).toMatch(/^END/);
+    expect(getFarmerByPhone(phone)!.locale).toBe('en');
+  });
+
+  it('with the gate closed, new callers see the plain welcome and no language menu', async () => {
+    setDraftLocalesLive(null); // back to config default: only en is live
+    const [first] = await dial('+233209990404', []);
+    expect(first).toMatch(/^CON Welcome to Farm to Market/);
+    const [home] = await dial(PHONE, []);
+    expect(home).toContain('7. Language'); // the settings item stays, listing only English
+    setDraftLocalesLive(true);
   });
 });

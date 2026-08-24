@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, dateTime, ghs, type JobView, type Registries } from '../api';
 import { CropMark, VehicleMark } from '../components/engrave';
+import { LanguageSection } from '../components/LanguageSection';
 import { btnCls, btnGhostCls, Card, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
 interface OfferView extends JobView {
@@ -16,6 +17,7 @@ interface DriverProfile {
   vehicleClassCode: string;
   active: boolean;
   routeRegions: string[];
+  locale: string;
 }
 
 /** The driver's book: identity, availability lever, vehicle, route checklist. */
@@ -143,6 +145,8 @@ function ProfileSidebar() {
             </div>
             <p className="mt-1.5 text-[11px] text-[var(--ink-6)]">None selected = serve anywhere</p>
           </div>
+
+          <LanguageSection current={profile.locale} saving={save.isPending} onPick={(locale) => save.mutate({ locale })} />
 
           {saved && <p className="text-xs font-bold text-[var(--ink)]">Saved ✓</p>}
         </div>

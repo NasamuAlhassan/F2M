@@ -59,10 +59,13 @@ describe('SMS outbox (M11)', () => {
       regionCode: 'WESTERN',
     });
 
-    // Offer created → sms.newOffer queued with real figures.
+    // Registration and the USSD listing each queued a receipt (M30), then the
+    // offer → sms.newOffer with real figures, newest first.
     let inbox = listNotificationsForPhone(farmer.phone);
-    expect(inbox).toHaveLength(1);
-    expect(inbox[0]!.templateKey).toBe('sms.newOffer');
+    expect(inbox).toHaveLength(3);
+    expect(inbox.map((n) => n.templateKey)).toEqual(['sms.newOffer', 'sms.lotListed', 'sms.registered']);
+    expect(inbox[1]!.message).toContain('2 Hundred (100 tubers) of Yam');
+    expect(inbox[2]!.message).toContain('Welcome Sms Flow!');
     expect(inbox[0]!.message).toContain('500kg Yam at up to GHS 4.55/kg');
     expect(inbox[0]!.message).toContain('*384*7247#');
     expect(inbox[0]!.status).toBe('pending');

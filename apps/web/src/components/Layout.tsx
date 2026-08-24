@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
-import { api, dateTime, getRole, setToken, type MarketLot, type Me } from '../api';
+import { api, dateTime, getRole, setToken, type LocaleInfo, type MarketLot, type Me } from '../api';
 import { F2MSeal, Glyph } from './engrave';
 
 interface NotificationRow {
@@ -12,15 +12,36 @@ interface NotificationRow {
   createdAt: number;
 }
 
-// The language switcher. Only English is farmer/buyer-ready today (D-029);
-// the rest stay visibly present but disabled until native review.
-const LANGS: Array<{ code: string; label: string; ready: boolean }> = [
-  { code: 'en', label: 'English', ready: true },
-  { code: 'tw', label: 'Twi', ready: false },
-  { code: 'ee', label: 'Ewe', ready: false },
-  { code: 'dag', label: 'Dagbani', ready: false },
-  { code: 'ha', label: 'Hausa', ready: false },
-];
+// The language legend, driven by the server's locale registry (D-040): a
+// language lights up the moment its catalog is reviewed (or the owner's
+// draft-live flag is on); the rest stay visibly present but disabled — the
+// D-029 convention. The buyer product itself remains English.
+function LangLegend() {
+  const { data } = useQuery({
+    queryKey: ['locales'],
+    queryFn: () => api<{ locales: LocaleInfo[] }>('/api/i18n/locales'),
+    staleTime: 60_000,
+  });
+  return (
+    <div className="hidden items-center gap-3 lg:flex">
+      {(data?.locales ?? [{ code: 'en', label: 'English', endonym: 'English', reviewed: true, live: true }]).map((l) =>
+        l.live ? (
+          <span key={l.code} className="smallcaps border-b-2 border-[var(--gold)] pb-0.5 text-[var(--paper)]">
+            {l.label}
+          </span>
+        ) : (
+          <span
+            key={l.code}
+            className="smallcaps cursor-not-allowed text-[var(--ink-4)]"
+            title="Machine-drafted only — awaiting native-speaker review (Khaya AI)"
+          >
+            {l.label}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
 
 /** The engine's alerts, filed like incoming correspondence. */
 function NotificationBell() {
@@ -192,25 +213,7 @@ export function Layout() {
           )}
 
           <div className="ml-auto flex flex-shrink-0 items-center gap-5">
-            {role === 'buyer' && (
-              <div className="hidden items-center gap-3 lg:flex">
-                {LANGS.map((l) =>
-                  l.ready ? (
-                    <span key={l.code} className="smallcaps border-b-2 border-[var(--gold)] pb-0.5 text-[var(--paper)]">
-                      {l.label}
-                    </span>
-                  ) : (
-                    <span
-                      key={l.code}
-                      className="smallcaps cursor-not-allowed text-[var(--ink-4)]"
-                      title="Machine-drafted only — awaiting native-speaker review (Khaya AI integration)"
-                    >
-                      {l.label}
-                    </span>
-                  ),
-                )}
-              </div>
-            )}
+            {role === 'buyer' && <LangLegend />}
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
                 <div className="text-sm font-semibold text-[var(--paper)]">{displayName}</div>

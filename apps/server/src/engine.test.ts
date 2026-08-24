@@ -9,6 +9,7 @@ import {
   schema,
   setPaymentProvider,
   t,
+  tDraft,
   verifyBuyerLogin,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -105,20 +106,23 @@ describe('AI engine section (M19)', () => {
     }
 
     const en = await get<Preview>(`/api/engine/alert-preview?contractId=${contract.id}&locale=en`);
-    expect(en.locales.map((l) => l.code)).toEqual(['en', 'tw', 'ee', 'dag']);
+    expect(en.locales.map((l) => l.code)).toEqual(['en', 'tw', 'ee', 'dag', 'ha', 'kus']);
     expect(en.reviewNote).toBe(false);
     expect(en.sms).toContain('500kg Yam');
 
+    // The drawer is the sanctioned PREVIEW surface (D-040): it shows drafts via
+    // tDraft even while the gated t() still resolves these locales to English.
     const tw = await get<Preview>(`/api/engine/alert-preview?contractId=${contract.id}&locale=tw`);
     expect(tw.reviewNote).toBe(true);
-    expect(tw.sms).toContain(t('tw', 'commodity.YAM')); // Bayerɛ
-    expect(tw.voice[1]).toBe(t('tw', 'voice.offer.menu'));
+    expect(tw.sms).toContain(tDraft('tw', 'commodity.YAM')); // Bayerɛ
+    expect(tw.voice[1]).toBe(tDraft('tw', 'voice.offer.menu'));
+    expect(t('tw', 'commodity.YAM')).toBe('Yam'); // the gate, closed
 
     const ee = await get<Preview>(`/api/engine/alert-preview?contractId=${contract.id}&locale=ee`);
-    expect(ee.sms).toContain(t('ee', 'commodity.YAM')); // Te
+    expect(ee.sms).toContain(tDraft('ee', 'commodity.YAM')); // Te
 
     const dag = await get<Preview>(`/api/engine/alert-preview?contractId=${contract.id}&locale=dag`);
-    expect(dag.sms).toContain(t('dag', 'commodity.YAM')); // Nyuya
+    expect(dag.sms).toContain(tDraft('dag', 'commodity.YAM')); // Nyuya
     // Params interpolate in every locale — no raw {placeholders} left behind.
     for (const p of [tw, ee, dag]) expect(p.sms).not.toMatch(/\{\w+\}/);
   });

@@ -1,10 +1,13 @@
 import {
+  AVAILABLE_LOCALES,
   db,
   getCommodityById,
   getFarmerById,
   getLot,
   getRegion,
   getTrace,
+  isLocaleLive,
+  isLocaleReviewed,
   schema,
   t,
 } from '@ftm/core';
@@ -28,6 +31,16 @@ const PUBLIC_PAYLOAD_FIELDS: Record<string, string[]> = {
  * reads this — no login. Lot ids are unguessable UUIDs (capability URLs).
  */
 export async function publicRoutes(app: FastifyInstance): Promise<void> {
+  // The locale registry with its honest gate status (D-040): reviewed = a
+  // native speaker signed off; live = allowed on real farmer-facing surfaces.
+  app.get('/i18n/locales', async () => ({
+    locales: AVAILABLE_LOCALES.map((l) => ({
+      ...l,
+      reviewed: isLocaleReviewed(l.code),
+      live: isLocaleLive(l.code),
+    })),
+  }));
+
   app.get('/public/trace/:lotId', async (req) => {
     const { lotId } = req.params as { lotId: string };
     const lot = getLot(lotId); // 404s on unknown
