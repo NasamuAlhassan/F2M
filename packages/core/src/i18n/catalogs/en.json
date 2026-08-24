@@ -232,6 +232,7 @@
   "notif.settled": "Contract settled. {amount} released to the farmer; {refunded} refunded to you.",
   "notif.driverAssigned": "{driver} ({vehicle}) took delivery job {jobCode}.",
   "notif.inTransit": "Job {jobCode} picked up - goods are in transit.",
+  "notif.transportSuggested": "{farmer} requests a driver for {lotCode} — est. fee {fee}. Approve from the contract page.",
   "notif.noDriver": "No driver available for job {jobCode}. Retry dispatch from the contract page.",
   "notif.driverPaid": "Job {jobCode}: {fee} released to {driver}.",
 

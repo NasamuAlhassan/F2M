@@ -17,6 +17,7 @@ import {
   listPaymentsForFarmer,
   registerLot,
   schema,
+  suggestTransport,
   t,
 } from '@ftm/core';
 import { eq } from 'drizzle-orm';
@@ -150,5 +151,12 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const contract = declineOffer(id, req.user.sub);
     return { contract: { id: contract.id, state: contract.state } };
+  });
+
+  // "Arrange delivery" (D-037): the farmer asks; the buyer approves and funds.
+  app.post('/farmer/contracts/:id/suggest-transport', { preHandler: [app.authFarmer] }, async (req) => {
+    const { id } = req.params as { id: string };
+    suggestTransport(id, req.user.sub);
+    return { ok: true };
   });
 }

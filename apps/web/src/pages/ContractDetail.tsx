@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, dateTime, ghs, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
+import { api, dateTime, ghs, type AvailableDriver, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
 import { QrImage } from '../components/QrImage';
 import { btnCls, btnGhostCls, Card, CROP_EMOJI, GradeBadge, numCls, Stat, StateBadge, tableCls, tdCls, thCls, VEHICLE_EMOJI } from '../components/ui';
 
@@ -278,7 +278,17 @@ export function ContractDetailPage() {
           )}
 
           {['FUNDS_HELD', 'PICKUP_CONFIRMED', 'GRADED', 'DISPUTED', 'SETTLED'].includes(contract.state) && (
-            <TransportSection contractId={contract.id} contractState={contract.state} onError={onError} />
+            <TransportSection
+              contractId={contract.id}
+              contractState={contract.state}
+              farmerSuggested={(() => {
+                const suggest = [...data.trace].reverse().find((e) => e.type === 'TRANSPORT_SUGGESTED');
+                const request = [...data.trace].reverse().find((e) => e.type === 'TRANSPORT_REQUESTED');
+                return !!suggest && (!request || suggest.seq > request.seq);
+              })()}
+              farmerName={farmer?.name ?? 'The farmer'}
+              onError={onError}
+            />
           )}
 
           <Card
@@ -486,17 +496,22 @@ export function ContractDetailPage() {
   );
 }
 
-/** The middle-mile bridge: quote → request → live job status → confirm delivery. */
+/** The middle-mile bridge: quote → request or direct-hire → live job → confirm delivery. */
 function TransportSection({
   contractId,
   contractState,
+  farmerSuggested,
+  farmerName,
   onError,
 }: {
   contractId: string;
   contractState: string;
+  farmerSuggested: boolean;
+  farmerName: string;
   onError: (err: unknown) => void;
 }) {
   const queryClient = useQueryClient();
+  const [showDrivers, setShowDrivers] = useState(false);
   const { data: jobData } = useQuery({
     queryKey: ['transport', contractId],
     queryFn: () => api<{ job: JobView | null }>(`/api/contracts/${contractId}/transport`),
@@ -509,11 +524,17 @@ function TransportSection({
     queryFn: () => api<{ quotes: TransportQuoteView[] }>(`/api/contracts/${contractId}/transport-quote`),
     enabled: canRequest,
   });
+  const { data: driverData } = useQuery({
+    queryKey: ['drivers-available'],
+    queryFn: () => api<{ drivers: AvailableDriver[] }>('/api/drivers/available'),
+    enabled: canRequest && showDrivers,
+    refetchInterval: 10000,
+  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['transport', contractId] });
   const request = useMutation({
-    mutationFn: (vehicleClassCode?: string) =>
-      api(`/api/contracts/${contractId}/transport`, { method: 'POST', body: JSON.stringify({ vehicleClassCode }) }),
+    mutationFn: (body: { vehicleClassCode?: string; preferredDriverId?: string }) =>
+      api(`/api/contracts/${contractId}/transport`, { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: invalidate,
     onError,
   });
@@ -562,10 +583,73 @@ function TransportSection({
         </div>
       ) : canRequest && quoteData ? (
         <div>
-          <p className="mb-3 text-sm text-gray-500">
-            Instant quotes for every vehicle that fits the load. The fee is held in escrow when a driver accepts and
-            released on your delivery confirmation.
-          </p>
+          {farmerSuggested && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
+              <span className="pulse-dot inline-block h-2 w-2 rounded-full bg-amber-500" />
+              <p className="text-sm font-semibold text-amber-900">
+                {farmerName} has asked for a driver — approve by requesting one below; the fee escrows from your
+                account.
+              </p>
+            </div>
+          )}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-gray-500">
+              Instant quotes for every vehicle that fits the load. The fee is held in escrow when a driver accepts and
+              released on your delivery confirmation.
+            </p>
+            <button
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-600 transition-colors hover:bg-gray-50"
+              onClick={() => setShowDrivers((v) => !v)}
+            >
+              {showDrivers ? 'Hide drivers' : '🧑🏾‍✈️ Choose a driver'}
+            </button>
+          </div>
+          {showDrivers && (
+            <div className="mb-3 space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-3">
+              {!driverData ? (
+                <p className="text-sm text-gray-400">Loading drivers…</p>
+              ) : driverData.drivers.length === 0 ? (
+                <p className="text-sm text-gray-400">No drivers are online right now — auto-dispatch below still works.</p>
+              ) : (
+                driverData.drivers.map((d) => (
+                  <div key={d.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-white p-2.5 shadow-sm">
+                    <span className="text-xl">{VEHICLE_EMOJI[d.vehicleClassCode] ?? '🚚'}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-gray-900">
+                        {d.name}
+                        {d.busy && (
+                          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-bold uppercase text-gray-500">
+                            on a job
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        {d.vehicleClassName} · ≤{d.capacityKg}kg ·{' '}
+                        {d.routeRegions.length ? `${d.routeRegions.length} route region${d.routeRegions.length > 1 ? 's' : ''}` : 'serves anywhere'}
+                      </p>
+                    </div>
+                    <a
+                      href={`tel:${d.phone}`}
+                      className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                    >
+                      📞 Call
+                    </a>
+                    <button
+                      className="rounded-lg bg-[#1B4332] px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={d.busy || request.isPending}
+                      onClick={() => request.mutate({ preferredDriverId: d.id })}
+                    >
+                      Hire
+                    </button>
+                  </div>
+                ))
+              )}
+              <p className="text-[10px] text-gray-400">
+                Hiring offers the job to your chosen driver first at their vehicle's rate — if they decline, dispatch
+                falls back to nearest-first.
+              </p>
+            </div>
+          )}
           <table className={tableCls}>
             <thead>
               <tr>
@@ -598,7 +682,7 @@ function TransportSection({
                   <td className={`${tdCls} text-right`}>
                     <button
                       className={btnCls}
-                      onClick={() => request.mutate(q.vehicleClassCode)}
+                      onClick={() => request.mutate({ vehicleClassCode: q.vehicleClassCode })}
                       disabled={request.isPending}
                     >
                       {request.isPending ? 'Requesting…' : 'Request Driver'}

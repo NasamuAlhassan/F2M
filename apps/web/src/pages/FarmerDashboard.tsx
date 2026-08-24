@@ -207,6 +207,12 @@ export function FarmerDashboardPage() {
     onSuccess: invalidate,
     onError,
   });
+  const [suggested, setSuggested] = useState<Set<string>>(new Set());
+  const suggest = useMutation({
+    mutationFn: (id: string) => api(`/api/farmer/contracts/${id}/suggest-transport`, { method: 'POST' }),
+    onSuccess: (_data, id) => setSuggested((prev) => new Set(prev).add(id)),
+    onError,
+  });
 
   if (!data || !registries) return <p className="text-sm text-gray-400">Loading…</p>;
   const { stats, offers, contracts, lots, payouts, profile } = data;
@@ -303,6 +309,20 @@ export function FarmerDashboardPage() {
                     </div>
                     <div className="text-[10px] text-gray-400">{c.finalAmount !== null ? 'final payout' : 'escrow hold'}</div>
                   </div>
+                  {c.state === 'FUNDS_HELD' && (
+                    <button
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                        suggested.has(c.id)
+                          ? 'bg-green-50 text-green-700'
+                          : 'border border-[#1B4332] text-[#1B4332] hover:bg-green-50'
+                      }`}
+                      disabled={suggested.has(c.id) || suggest.isPending}
+                      onClick={() => suggest.mutate(c.id)}
+                      title="Ask the buyer to send a driver — they approve and the fee escrows from their account"
+                    >
+                      {suggested.has(c.id) ? '✓ Buyer asked to approve' : '🚚 Arrange delivery'}
+                    </button>
+                  )}
                   <Link to={`/t/${c.lotId}`} className="text-xs font-semibold text-[#1B4332] hover:underline">
                     Trace →
                   </Link>

@@ -9,9 +9,11 @@ import {
   getDriverById,
   getJobForContract,
   jobSummary,
+  listAvailableDrivers,
   listJobsForDriver,
   listOffersForDriver,
   listOpenRequestsForDriver,
+  listVehicleClasses,
   quoteTransportOptions,
   requestTransport,
   retryDispatch,
@@ -22,7 +24,9 @@ import {
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-const requestTransportSchema = z.object({ vehicleClassCode: z.string().optional() }).default({});
+const requestTransportSchema = z
+  .object({ vehicleClassCode: z.string().optional(), preferredDriverId: z.string().optional() })
+  .default({});
 const profileSchema = z.object({
   vehicleClassCode: z.string().optional(),
   active: z.boolean().optional(),
@@ -75,9 +79,31 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/contracts/:id/transport', { preHandler: [app.authBuyer] }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { vehicleClassCode } = requestTransportSchema.parse(req.body ?? {});
-    const job = requestTransport(id, req.user.sub, vehicleClassCode);
+    const { vehicleClassCode, preferredDriverId } = requestTransportSchema.parse(req.body ?? {});
+    const job = requestTransport(id, req.user.sub, vehicleClassCode, preferredDriverId);
     return reply.code(201).send({ job: jobView(job) });
+  });
+
+  // The side-hustle directory (D-037): online drivers, browsable by buyers AND
+  // sellers — call to inquire, or hire directly on a funded contract.
+  app.get('/drivers/available', async (req, reply) => {
+    try {
+      await req.jwtVerify();
+      if (req.user.kind !== 'buyer' && req.user.kind !== 'farmer') throw new Error('wrong role');
+    } catch {
+      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Login required' } });
+    }
+    const classes = new Map(listVehicleClasses().map((v) => [v.code, v]));
+    return {
+      drivers: listAvailableDrivers().map((d) => {
+        const vc = classes.get(d.vehicleClassCode);
+        return {
+          ...d,
+          vehicleClassName: vc ? t('en', vc.nameKey) : d.vehicleClassCode,
+          capacityKg: vc?.capacityKg ?? 0,
+        };
+      }),
+    };
   });
 
   app.get('/contracts/:id/transport', { preHandler: [app.authBuyer] }, async (req) => {

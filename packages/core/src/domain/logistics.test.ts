@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '../db/client';
-import { deliveryJobOffers, demands, drivers as driversTable, lots } from '../db/schema';
+import { buyerNotifications, deliveryJobOffers, demands, drivers as driversTable, lots } from '../db/schema';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
 import { verifyBuyerLogin } from './buyers';
 import { getContract, listContractsForFarmer } from './contracts';
@@ -19,11 +19,13 @@ import {
   expireJobOffers,
   getJob,
   getJobForContract,
+  listAvailableDrivers,
   listOpenRequestsForDriver,
   quoteTransport,
   quoteTransportOptions,
   requestTransport,
   retryDispatch,
+  suggestTransport,
 } from './logistics';
 import { registerLot } from './lots';
 import { acceptOfferAndHold, pollPaymentsOnce, refundHold, refundMissedPickups } from './paymentFlow';
@@ -291,5 +293,78 @@ describe('logistics (M13)', () => {
     // No driver accepted yet → no fee payment exists.
     expect(getJobForContract(contractId)!.state).toBe('NO_DRIVER'); // no active drivers
     expect(jobEscrowBalance(job.id)).toBe(0);
+  });
+});
+
+describe('driver directory & direct hire (M28, D-037)', () => {
+  it('a hired driver jumps the ladder for the first offer, then dispatch falls back to nearest-first', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('ASHANTI');
+    const near = vanDriver('ASHANTI', 'Nearest Driver');
+    const hired = vanDriver('NORTHERN', 'Hired Driver'); // farther away — would never win nearest-first
+
+    const job = requestTransport(contractId, buyer.id, undefined, hired.id);
+    const first = db
+      .select()
+      .from(deliveryJobOffers)
+      .where(and(eq(deliveryJobOffers.jobId, job.id), eq(deliveryJobOffers.status, 'offered')))
+      .get();
+    expect(first!.driverId).toBe(hired.id);
+    expect(job.vehicleClassCode).toBe('van'); // priced on the hired driver's vehicle
+
+    declineJob(job.id, hired.id);
+    const fallback = db
+      .select()
+      .from(deliveryJobOffers)
+      .where(and(eq(deliveryJobOffers.jobId, job.id), eq(deliveryJobOffers.status, 'offered')))
+      .get();
+    expect(fallback!.driverId).toBe(near.id); // ladder resumes without the preference
+  });
+
+  it('refuses to hire an offline or busy driver', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('ASHANTI');
+    const offline = vanDriver('ASHANTI', 'Offline Driver');
+    updateDriverProfile(offline.id, { active: false });
+    expect(() => requestTransport(contractId, buyer.id, undefined, offline.id)).toThrow(/not available/);
+  });
+
+  it('the directory lists online drivers with live busy flags', async () => {
+    parkAllDrivers();
+    const { contractId, buyer } = await fundedContract('ASHANTI');
+    const working = vanDriver('ASHANTI', 'Working Driver');
+    const idle = vanDriver('ASHANTI', 'Idle Driver');
+    const parked = vanDriver('ASHANTI', 'Parked Driver');
+    updateDriverProfile(parked.id, { active: false });
+
+    const job = requestTransport(contractId, buyer.id, undefined, working.id);
+    acceptJob(job.id, working.id); // ASSIGNED → busy
+
+    const list = listAvailableDrivers();
+    expect(list.find((d) => d.id === working.id)!.busy).toBe(true);
+    expect(list.find((d) => d.id === idle.id)!.busy).toBe(false);
+    expect(list.find((d) => d.id === parked.id)).toBeUndefined(); // offline drivers are not in the directory
+  });
+
+  it('a farmer suggestion appends the trace event and alerts the buyer — no job, no money', async () => {
+    parkAllDrivers();
+    const { contractId, farmer, lot, buyer } = await fundedContract();
+    suggestTransport(contractId, farmer.id);
+
+    expect(getTrace(lot.id).map((e) => e.type)).toContain('TRANSPORT_SUGGESTED');
+    expect(getJobForContract(contractId)).toBeUndefined(); // nothing dispatched, nothing escrowed
+
+    const notif = db
+      .select()
+      .from(buyerNotifications)
+      .where(eq(buyerNotifications.contractId, contractId))
+      .all()
+      .find((n) => n.templateKey === 'notif.transportSuggested');
+    expect(notif).toBeDefined();
+    expect(notif!.buyerId).toBe(buyer.id);
+    expect(notif!.message).toContain('Logistics Farmer');
+    expect(notif!.message).toContain(lot.lotCode);
+
+    expect(() => suggestTransport(contractId, 'not-the-farmer')).toThrow(/Not your contract/);
   });
 });

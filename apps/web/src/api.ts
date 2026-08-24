@@ -273,6 +273,18 @@ export interface Me {
   regionCode: string | null;
 }
 
+export interface AvailableDriver {
+  id: string;
+  name: string;
+  phone: string;
+  regionCode: string;
+  vehicleClassCode: string;
+  vehicleClassName: string;
+  capacityKg: number;
+  routeRegions: string[];
+  busy: boolean;
+}
+
 export interface TransportQuoteView {
   vehicleClassCode: string;
   vehicleClassName: string;

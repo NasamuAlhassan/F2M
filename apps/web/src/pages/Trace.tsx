@@ -21,6 +21,7 @@ const EVENT_STYLE: Record<string, { dot: string; label: string; icon?: string }>
   REFUNDED: { dot: 'bg-red-500', label: 'Hold refunded to buyer' },
   CANCELLED: { dot: 'bg-red-500', label: 'Cancelled' },
   SETTLED: { dot: 'bg-green-700', label: 'Settled — farmer paid', icon: '🏁' },
+  TRANSPORT_SUGGESTED: { dot: 'bg-amber-500', label: 'Farmer requested a driver', icon: '🙋🏾' },
   TRANSPORT_REQUESTED: { dot: 'bg-sky-500', label: 'Transport requested', icon: '🚚' },
   DRIVER_ASSIGNED: { dot: 'bg-sky-600', label: 'Driver assigned', icon: '🧑🏾‍✈️' },
   TRANSPORT_FUNDED: { dot: 'bg-indigo-600', label: 'Transport fee held in escrow', icon: '🔒' },

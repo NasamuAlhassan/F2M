@@ -94,8 +94,17 @@ export function quoteTransportOptions(contractId: string): TransportQuote[] {
     .map((v) => quoteTransport(contractId, v.code));
 }
 
-/** Buyer requests a verified pickup for a funded contract. Quote freezes here. */
-export function requestTransport(contractId: string, buyerId: string, vehicleClassCode?: string): DeliveryJob {
+/**
+ * Buyer requests a verified pickup for a funded contract. Quote freezes here.
+ * With `preferredDriverId` (D-037 direct hire), the quote prices that driver's
+ * vehicle and dispatch offers them first; decline/TTL falls back to the ladder.
+ */
+export function requestTransport(
+  contractId: string,
+  buyerId: string,
+  vehicleClassCode?: string,
+  preferredDriverId?: string,
+): DeliveryJob {
   const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
   if (!contract) throw notFound('contract');
   if (contract.buyerId !== buyerId) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
@@ -107,6 +116,12 @@ export function requestTransport(contractId: string, buyerId: string, vehicleCla
     throw new DomainError('A transport job already exists for this contract', 'JOB_EXISTS', 409);
   }
 
+  if (preferredDriverId) {
+    const driver = getDriverById(preferredDriverId);
+    if (!driver || !driver.active) throw new DomainError('This driver is not available right now', 'DRIVER_UNAVAILABLE', 409);
+    if (busyDriverIds().has(driver.id)) throw new DomainError('This driver is on another job', 'DRIVER_BUSY', 409);
+    vehicleClassCode = driver.vehicleClassCode; // hire prices the driver's own vehicle (capacity-guarded below)
+  }
   const quote = quoteTransport(contractId, vehicleClassCode);
   const job = db.transaction((tx) => {
     let jobCode = generateJobCode();
@@ -144,7 +159,7 @@ export function requestTransport(contractId: string, buyerId: string, vehicleCla
     });
     return inserted;
   });
-  dispatchJob(job.id);
+  dispatchJob(job.id, preferredDriverId);
   return getJob(job.id);
 }
 
@@ -172,7 +187,7 @@ function busyDriverIds(): Set<string> {
  * TTL; declined/expired offers stay blocked (one shot per job+driver) and the
  * next-nearest candidate gets the job. No broadcast — no double-accept races.
  */
-export function dispatchJob(jobId: string): DeliveryJobOffer | null {
+export function dispatchJob(jobId: string, preferredDriverId?: string): DeliveryJobOffer | null {
   const job = getJob(jobId);
   if (job.state !== 'REQUESTED') return null;
   const live = db
@@ -208,6 +223,13 @@ export function dispatchJob(jobId: string): DeliveryJobOffer | null {
     })
     .map((d) => ({ driver: d, km: haversineKm(resolvePoint(d.gpsLat, d.gpsLng, d.regionCode), pickup) }))
     .sort((a, b) => a.km - b.km);
+
+  // Direct hire (D-037): the chosen driver jumps the ladder for the FIRST
+  // offer only — declines and expiries fall back to nearest-first.
+  if (preferredDriverId) {
+    const idx = candidates.findIndex((c) => c.driver.id === preferredDriverId);
+    if (idx > 0) candidates.unshift(candidates.splice(idx, 1)[0]!);
+  }
 
   const next = candidates[0];
   if (!next) {
@@ -672,4 +694,80 @@ export function jobSummary(job: DeliveryJob): {
 } {
   const contract = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get()!;
   return { commodityCode: getCommodityById(contract.commodityId).code, quantityKg: contract.quantityKg };
+}
+
+/**
+ * The side-hustle directory (D-037): every ONLINE driver with vehicle, routes,
+ * and whether they're currently on a job — buyers and sellers browse this to
+ * call or hire directly.
+ */
+export function listAvailableDrivers(): Array<{
+  id: string;
+  name: string;
+  phone: string;
+  regionCode: string;
+  vehicleClassCode: string;
+  routeRegions: string[];
+  busy: boolean;
+}> {
+  const busy = busyDriverIds();
+  return db
+    .select()
+    .from(drivers)
+    .where(eq(drivers.active, true))
+    .all()
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      phone: d.phone,
+      regionCode: d.regionCode,
+      vehicleClassCode: d.vehicleClassCode,
+      routeRegions: driverRouteRegions(d),
+      busy: busy.has(d.id),
+    }))
+    .sort((a, b) => Number(a.busy) - Number(b.busy) || a.name.localeCompare(b.name));
+}
+
+/**
+ * Seller-arranged delivery (D-037): the FARMER asks for a driver; nothing moves
+ * until the buyer approves and funds it. A trace event + a buyer alert with the
+ * cheapest quote — no schema, no money.
+ */
+export function suggestTransport(contractId: string, farmerId: string): void {
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) throw notFound('contract');
+  if (contract.farmerId !== farmerId) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
+  if (contract.state !== 'FUNDS_HELD') {
+    throw new DomainError('Delivery can be arranged once the buyer hold is secured', 'INVALID_STATE', 409);
+  }
+  const existing = getJobForContract(contractId);
+  if (existing && (LIVE_JOB_STATES as readonly string[]).includes(existing.state)) {
+    throw new DomainError('A transport job already exists for this contract', 'JOB_EXISTS', 409);
+  }
+
+  const farmer = getFarmerById(farmerId);
+  const lot = db.select().from(lots).where(eq(lots.id, contract.lotId)).get()!;
+  const cheapest = quoteTransportOptions(contractId)[0];
+  db.transaction((tx) => {
+    appendLotEvent(tx, {
+      lotId: contract.lotId,
+      type: 'TRANSPORT_SUGGESTED',
+      actorType: 'farmer',
+      actorId: farmerId,
+      payload: cheapest
+        ? { vehicleClass: cheapest.vehicleClass.code, distanceKm: cheapest.distanceKm, quoteAmount: cheapest.quoteAmount }
+        : {},
+    });
+  });
+  queueBuyerNotification({
+    buyerId: contract.buyerId,
+    templateKey: 'notif.transportSuggested',
+    params: {
+      farmer: farmer?.name ?? 'The farmer',
+      lotCode: lot.lotCode,
+      fee: cheapest ? formatGhs(cheapest.quoteAmount) : '—',
+    },
+    contractId,
+    lotId: contract.lotId,
+  });
 }

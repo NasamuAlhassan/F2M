@@ -367,6 +367,7 @@ export const LOT_EVENT_TYPES = [
   'REFUNDED',
   'CANCELLED',
   'SETTLED',
+  'TRANSPORT_SUGGESTED', // farmer asked for a driver — buyer approves (D-037)
   'TRANSPORT_REQUESTED',
   'DRIVER_ASSIGNED',
   'TRANSPORT_FUNDED',
