@@ -147,7 +147,7 @@ select {
 ::-webkit-scrollbar-thumb {
   background: var(--ink-3);
   border: 3px solid var(--paper-deep);
-  border-radius: 5px;
+  border-radius: 3px; /* the stamp radius — the scale's largest */
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-5);

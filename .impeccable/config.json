@@ -3,7 +3,8 @@
     "ignoreRules": [],
     "ignoreFiles": [
       "apps/server/public/ussd-tester.html",
-      "apps/server/public/ivr-tester.html"
+      "apps/server/public/ivr-tester.html",
+      "apps/web/public/probe.html"
     ],
     "ignoreValues": [
       {

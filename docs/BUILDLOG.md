@@ -296,3 +296,11 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **Named transitions**: the stepper progress fill and pool capacity meter animate `width`/`background-color` explicitly; the driver duty toggle's knob moved from animating `left` (layout) to `transform: translateX` — the one genuinely layout-bound animation in the app.
 - **One polling knob**: all fourteen `refetchInterval` literals now read from `src/poll.ts` (live 4s · active 5s · ambient 8s · slow 15s) — the ambient tier eased from 6/10s to 8s, and the whole refresh appetite tunes in one file before a data-billed pilot.
 - Verified: tsc + build clean, chunk table measured before/after, smoke captures of the lazy login and marketplace routes at 390px.
+
+## 2026-08-24 · Polish pass — detector zero, the tab wears the seal (audit closed out)
+
+- **QrImage joined the world**: QR modules print in intaglio ink on banknote paper (the token literals, documented — canvas can't read CSS vars) and the loading state is the engraved hatch, square-cornered. The last Figma-era colors in the app are gone.
+- **Scrollbar thumb radius** settled onto the documented scale (3px, the stamp radius).
+- **The phone pilot gets its identity**: authored `favicon.svg` (the F2M rosette seal — ink disc, paper petals), Cinzel-lettered PNG icons at 512/192/180 rendered from the real self-hosted face, `manifest.webmanifest` (standalone, paper background, ink theme), `theme-color`, and apple-touch-icon — browser chrome and Add-to-Home-Screen now carry the Trade Instrument.
+- **Detector: exit 0, zero findings** across the whole repo — the dev capture probe is an honest config ignore (`apps/web/public/probe.html`) beside the two Nokia tester pages.
+- Verified: tsc + build clean, the in-world QR captured on the contract rail, icon renders inspected at 512px.
