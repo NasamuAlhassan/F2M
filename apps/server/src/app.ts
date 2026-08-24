@@ -17,7 +17,9 @@ import { devRoutes } from './routes/api/dev';
 import { engineRoutes } from './routes/api/engine';
 import { logisticsRoutes } from './routes/api/logistics';
 import { marketRoutes } from './routes/api/market';
+import { farmerPortalRoutes } from './routes/api/farmerPortal';
 import { notificationRoutes } from './routes/api/notifications';
+import { publicRoutes } from './routes/api/public';
 import { registryRoutes } from './routes/api/registries';
 import { momoCallbackRoutes } from './routes/momoCallbacks';
 import { ussdRoutes } from './routes/ussd';
@@ -56,6 +58,14 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
       await reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Driver login required' } });
     }
   });
+  app.decorate('authFarmer', async (req, reply) => {
+    try {
+      await req.jwtVerify();
+      if (req.user.kind !== 'farmer') throw new Error('wrong role');
+    } catch {
+      await reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Farmer login required' } });
+    }
+  });
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof DomainError) {
@@ -83,6 +93,8 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   await app.register(notificationRoutes, { prefix: '/api' });
   await app.register(engineRoutes, { prefix: '/api' });
   await app.register(marketRoutes, { prefix: '/api' });
+  await app.register(farmerPortalRoutes, { prefix: '/api' });
+  await app.register(publicRoutes, { prefix: '/api' });
   await app.register(devRoutes, { prefix: '/api' });
 
   return app;

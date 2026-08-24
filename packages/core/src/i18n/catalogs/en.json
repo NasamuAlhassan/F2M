@@ -221,6 +221,7 @@
   "sms.graded": "Farm to Market: Your {commodity} graded {band}, pays {amount}. Reason: {reason}. Dial {code}, My lots, to agree or dispute.",
   "sms.rejected": "Farm to Market: Sorry, your {commodity} was rejected at grading: {reason}. The buyer hold was refunded and your lot is listed again.",
   "sms.paid": "Farm to Market: {amount} has been sent to your MoMo. Thank you for selling on Farm to Market.",
+  "sms.loginCode": "Farm to Market: Your web login code is {code}. It expires in 10 minutes. Never share this code.",
 
   "notif.offerAccepted": "{farmer} accepted your offer for {kg}kg {commodity}. The hold is being secured.",
   "notif.offerDeclined": "{farmer} declined the offer for {kg}kg {commodity}. Freed quantity re-matches automatically.",

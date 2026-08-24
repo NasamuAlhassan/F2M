@@ -31,7 +31,21 @@ function ownedContract(req: FastifyRequest, id: string): Contract {
 
 export async function contractRoutes(app: FastifyInstance): Promise<void> {
   app.get('/contracts', { preHandler: [app.authBuyer] }, async (req) => {
-    return { contracts: listContractsForBuyer(req.user.sub).map((c) => ({ ...c, priceTerms: contractPriceTerms(c) })) };
+    return {
+      contracts: listContractsForBuyer(req.user.sub).map((c) => {
+        const lot = getLot(c.lotId);
+        const commodity = getCommodityById(c.commodityId);
+        const farmer = getFarmerById(c.farmerId);
+        return {
+          ...c,
+          priceTerms: contractPriceTerms(c),
+          lotCode: lot.lotCode,
+          commodityCode: commodity.code,
+          commodityName: t('en', commodity.nameKey),
+          farmerName: farmer?.name ?? null,
+        };
+      }),
+    };
   });
 
   app.get('/contracts/:id', { preHandler: [app.authBuyer] }, async (req) => {

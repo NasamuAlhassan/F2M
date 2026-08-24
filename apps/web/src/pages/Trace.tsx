@@ -41,6 +41,81 @@ const SPINE: { label: string; icon: string; doneWhen: string[] }[] = [
   { label: 'Trace', icon: '🔗', doneWhen: ['SETTLED'] },
 ];
 
+/** The six-step transaction-spine stepper — shared by the portal and public trace pages. */
+export function SpineStepper({ events }: { events: TraceEvent[] }) {
+  const seen = new Set(events.map((e) => e.type));
+  const doneFlags = SPINE.map((s) => s.doneWhen.some((t) => seen.has(t)));
+  const activeIdx = doneFlags.findIndex((d) => !d);
+  return (
+    <div className="flex items-center overflow-x-auto pb-1">
+      {SPINE.map((step, i) => {
+        const done = doneFlags[i];
+        const active = i === activeIdx;
+        return (
+          <div key={step.label} className="flex flex-1 items-center" style={{ minWidth: 90 }}>
+            <div className="flex flex-1 flex-col items-center gap-1.5">
+              <div
+                className={`flex h-11 w-11 items-center justify-center rounded-full border-2 text-lg transition-colors ${
+                  done
+                    ? 'border-[#1B4332] bg-[#1B4332]'
+                    : active
+                      ? 'step-active border-[#D97706] bg-amber-50'
+                      : 'border-gray-200 bg-white grayscale'
+                }`}
+              >
+                {done ? <span className="text-sm font-extrabold text-white">✓</span> : step.icon}
+              </div>
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wide ${
+                  done ? 'text-[#1B4332]' : active ? 'text-[#D97706]' : 'text-gray-300'
+                }`}
+              >
+                {step.label}
+              </span>
+            </div>
+            {i < SPINE.length - 1 && (
+              <div className={`h-0.5 flex-1 -translate-y-2.5 ${done ? 'bg-[#1B4332]' : 'bg-gray-200'}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The append-only event list — shared by the portal and public trace pages. */
+export function TraceEventLog({ events }: { events: TraceEvent[] }) {
+  return (
+    <ol className="relative ml-3 border-l-2 border-gray-100">
+      {events.map((e) => {
+        const style = EVENT_STYLE[e.type] ?? { dot: 'bg-gray-400', label: e.type };
+        return (
+          <li key={e.id} className="mb-5 ml-5 last:mb-1">
+            <span className={`absolute -left-[7px] mt-1.5 h-3 w-3 rounded-full ${style.dot}`} />
+            <div className="flex flex-wrap items-baseline gap-2">
+              <p className="text-sm font-bold text-gray-900">
+                {style.icon && <span className="mr-1">{style.icon}</span>}
+                {style.label}
+              </p>
+              <span className="mono text-[10px] text-gray-400">
+                #{e.seq} · {e.actorType} · {dateTime(e.createdAt)}
+              </span>
+            </div>
+            {e.payload && (
+              <p className="mono mt-0.5 max-w-2xl text-[11px] text-gray-500">
+                {Object.entries(e.payload)
+                  .filter(([k, v]) => v !== null && typeof v !== 'object' && k !== 'contractId')
+                  .map(([k, v]) => `${k}: ${String(v)}`)
+                  .join(' · ')}
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export function TracePage() {
   const { id } = useParams<{ id: string }>();
   const { data } = useQuery({
@@ -50,10 +125,6 @@ export function TracePage() {
   });
   if (!data) return <p className="text-sm text-gray-400">Loading…</p>;
 
-  const seen = new Set(data.events.map((e) => e.type));
-  const doneFlags = SPINE.map((s) => s.doneWhen.some((t) => seen.has(t)));
-  const activeIdx = doneFlags.findIndex((d) => !d);
-
   return (
     <div>
       <h1 className="text-xl font-extrabold text-gray-900">Lot Trace</h1>
@@ -62,69 +133,11 @@ export function TracePage() {
       </p>
 
       <Card title="Transaction Spine">
-        <div className="flex items-center overflow-x-auto pb-1">
-          {SPINE.map((step, i) => {
-            const done = doneFlags[i];
-            const active = i === activeIdx;
-            return (
-              <div key={step.label} className="flex flex-1 items-center" style={{ minWidth: 90 }}>
-                <div className="flex flex-1 flex-col items-center gap-1.5">
-                  <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-full border-2 text-lg transition-colors ${
-                      done
-                        ? 'border-[#1B4332] bg-[#1B4332]'
-                        : active
-                          ? 'step-active border-[#D97706] bg-amber-50'
-                          : 'border-gray-200 bg-white grayscale'
-                    }`}
-                  >
-                    {done ? <span className="text-sm font-extrabold text-white">✓</span> : step.icon}
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wide ${
-                      done ? 'text-[#1B4332]' : active ? 'text-[#D97706]' : 'text-gray-300'
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                </div>
-                {i < SPINE.length - 1 && (
-                  <div className={`h-0.5 flex-1 -translate-y-2.5 ${done ? 'bg-[#1B4332]' : 'bg-gray-200'}`} />
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <SpineStepper events={data.events} />
       </Card>
 
       <Card title={`Event Log (${data.events.length})`}>
-        <ol className="relative ml-3 border-l-2 border-gray-100">
-          {data.events.map((e) => {
-            const style = EVENT_STYLE[e.type] ?? { dot: 'bg-gray-400', label: e.type };
-            return (
-              <li key={e.id} className="mb-5 ml-5 last:mb-1">
-                <span className={`absolute -left-[7px] mt-1.5 h-3 w-3 rounded-full ${style.dot}`} />
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <p className="text-sm font-bold text-gray-900">
-                    {style.icon && <span className="mr-1">{style.icon}</span>}
-                    {style.label}
-                  </p>
-                  <span className="mono text-[10px] text-gray-400">
-                    #{e.seq} · {e.actorType} · {dateTime(e.createdAt)}
-                  </span>
-                </div>
-                {e.payload && (
-                  <p className="mono mt-0.5 max-w-2xl text-[11px] text-gray-500">
-                    {Object.entries(e.payload)
-                      .filter(([k, v]) => v !== null && typeof v !== 'object' && k !== 'contractId')
-                      .map(([k, v]) => `${k}: ${String(v)}`)
-                      .join(' · ')}
-                  </p>
-                )}
-              </li>
-            );
-          })}
-        </ol>
+        <TraceEventLog events={data.events} />
       </Card>
     </div>
   );

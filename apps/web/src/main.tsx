@@ -8,12 +8,17 @@ import './index.css';
 import { ContractDetailPage } from './pages/ContractDetail';
 import { DemandDetailPage } from './pages/DemandDetail';
 import { DemandsPage } from './pages/Demands';
+import { ConsolidatePage } from './pages/Consolidate';
 import { DriverJobsPage } from './pages/DriverJobs';
 import { DriverLoginPage } from './pages/DriverLogin';
 import { EnginePage } from './pages/Engine';
+import { FarmerDashboardPage } from './pages/FarmerDashboard';
+import { FarmerLoginPage } from './pages/FarmerLogin';
 import { LoginPage } from './pages/Login';
 import { MarketplacePage } from './pages/Marketplace';
 import { PricesPage } from './pages/Prices';
+import { PublicTracePage } from './pages/PublicTrace';
+import { TraceabilityPage } from './pages/Traceability';
 import { TracePage } from './pages/Trace';
 
 const queryClient = new QueryClient({
@@ -27,6 +32,9 @@ function RequireAuth() {
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/driver/login', element: <DriverLoginPage /> },
+  { path: '/farmer/login', element: <FarmerLoginPage /> },
+  // The QR destination — public by design (D-033), no auth wrapper.
+  { path: '/t/:lotId', element: <PublicTracePage /> },
   {
     element: <RequireAuth />,
     children: [
@@ -39,6 +47,9 @@ const router = createBrowserRouter([
           { path: '/engine', element: <EnginePage /> },
           { path: '/prices', element: <PricesPage /> },
           { path: '/driver/jobs', element: <DriverJobsPage /> },
+          { path: '/farmer/dashboard', element: <FarmerDashboardPage /> },
+          { path: '/traceability', element: <TraceabilityPage /> },
+          { path: '/consolidate', element: <ConsolidatePage /> },
           { path: '/demands/:id', element: <DemandDetailPage /> },
           { path: '/contracts/:id', element: <ContractDetailPage /> },
           { path: '/lots/:id/trace', element: <TracePage /> },

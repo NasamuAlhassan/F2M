@@ -61,8 +61,12 @@ export function LoginPage() {
           </button>
           <p className="text-center text-[11px] text-gray-400">
             Demo account: buyer@demo.ftm ·{' '}
+            <Link to="/farmer/login" className="font-semibold text-[#1B4332] hover:underline">
+              Farmer login
+            </Link>{' '}
+            ·{' '}
             <Link to="/driver/login" className="font-semibold text-[#1B4332] hover:underline">
-              Driver login →
+              Driver login
             </Link>
           </p>
         </div>

@@ -595,6 +595,21 @@ export const buyerNotifications = sqliteTable(
   (t) => [index('buyer_notifications_buyer_idx').on(t.buyerId, t.readAt)],
 );
 
+// Farmer web-login OTPs (D-032): the code travels over the same SMS outbox as
+// every other farmer message — mock-visible offline, real SMS when AT keys land.
+export const loginOtps = sqliteTable(
+  'login_otps',
+  {
+    id: id(),
+    phone: text('phone').notNull(), // E.164, one live code per phone
+    codeHash: text('code_hash').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('login_otps_phone_idx').on(t.phone)],
+);
+
 export const ussdSessions = sqliteTable('ussd_sessions', {
   sessionId: text('session_id').primaryKey(), // the gateway's sessionId
   phone: text('phone').notNull(),

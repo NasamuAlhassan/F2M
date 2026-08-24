@@ -130,6 +130,12 @@ export function Layout() {
     enabled: role === 'driver',
     staleTime: 5 * 60 * 1000,
   });
+  const { data: farmerDash } = useQuery({
+    queryKey: ['farmer-dashboard'],
+    queryFn: () => api<{ profile: { name: string } }>('/api/farmer/dashboard'),
+    enabled: role === 'farmer',
+    staleTime: 60 * 1000,
+  });
   const { data: market } = useQuery({
     queryKey: ['market-lots'],
     queryFn: () => api<{ lots: MarketLot[] }>('/api/market/lots'),
@@ -137,14 +143,20 @@ export function Layout() {
     refetchInterval: 15000,
   });
 
-  const displayName = role === 'driver' ? (driverProfile?.profile.name ?? 'Driver') : (me?.name ?? 'Buyer');
+  const displayName =
+    role === 'driver'
+      ? (driverProfile?.profile.name ?? 'Driver')
+      : role === 'farmer'
+        ? (farmerDash?.profile.name ?? 'Farmer')
+        : (me?.name ?? 'Buyer');
   const lotCount = market?.lots.length ?? null;
+  const homePath = role === 'driver' ? '/driver/jobs' : role === 'farmer' ? '/farmer/dashboard' : '/market';
 
   return (
     <div className="min-h-screen bg-[#F3F4F6]">
       <header className="flex-shrink-0 bg-[#1B4332] text-white shadow-lg">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-5 px-6">
-          <Link to={role === 'driver' ? '/driver/jobs' : '/market'} className="flex flex-shrink-0 items-center gap-3">
+          <Link to={homePath} className="flex flex-shrink-0 items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#D97706] text-sm font-extrabold text-white">
               F2M
             </div>
@@ -195,7 +207,9 @@ export function Layout() {
                 <div className="text-[10px] text-green-400">
                   {role === 'driver'
                     ? 'Verified Driver'
-                    : `Verified Buyer${me?.regionCode ? ` · ${prettyRegion(me.regionCode)}` : ''}`}
+                    : role === 'farmer'
+                      ? 'Verified Farmer'
+                      : `Verified Buyer${me?.regionCode ? ` · ${prettyRegion(me.regionCode)}` : ''}`}
                 </div>
               </div>
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D97706] text-sm font-bold">
@@ -211,6 +225,15 @@ export function Layout() {
               <NavLink to="/driver/jobs" className={subNavCls}>
                 Dispatch Board
               </NavLink>
+            ) : role === 'farmer' ? (
+              <>
+                <NavLink to="/farmer/dashboard" className={subNavCls}>
+                  Seller Dashboard
+                </NavLink>
+                <NavLink to="/prices" className={subNavCls}>
+                  Price Intelligence
+                </NavLink>
+              </>
             ) : (
               <>
                 <NavLink to="/market" className={subNavCls}>
@@ -221,6 +244,12 @@ export function Layout() {
                 </NavLink>
                 <NavLink to="/engine" className={subNavCls}>
                   Intent Engine
+                </NavLink>
+                <NavLink to="/consolidate" className={subNavCls}>
+                  Consolidate
+                </NavLink>
+                <NavLink to="/traceability" className={subNavCls}>
+                  Traceability
                 </NavLink>
                 <NavLink to="/prices" className={subNavCls}>
                   Price Intelligence
@@ -239,7 +268,7 @@ export function Layout() {
                 className="font-medium text-green-400 transition-colors hover:text-white"
                 onClick={() => {
                   setToken(null);
-                  navigate(role === 'driver' ? '/driver/login' : '/login');
+                  navigate(role === 'driver' ? '/driver/login' : role === 'farmer' ? '/farmer/login' : '/login');
                 }}
               >
                 Log out

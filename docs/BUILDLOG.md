@@ -192,3 +192,27 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **Header completes Frame 01**: working search (routes to `/market?q=`, filters cards live), the language switcher with English active and Twi/Ewe/Dagbani/Hausa disabled pending native review, the real buyer identity chip ("Adjoa Mensah · Verified Buyer · Greater Accra" with initials), and a live "● N lots" pulse in the sub-nav. Buyer nav is now Active Lots / My Demands / Intent Engine / Price Intelligence.
 - Fix en route: the demand form's window-end now snaps down to the commodity's perishable clock (pre-filling Pepper surfaced the invalid 3-day default against its 2-day window). `apps/server/scripts/dev-lots.ts` seeds a handful of browsable lots for demos (`npx tsx apps/server/scripts/dev-lots.ts`).
 - Verified: 114 tests green (new marketplace suite: card shape, units, market-ref pricing, distance, withdrawn lots vanish, buyer-token gate), server + web tsc clean, production build clean, live Chrome pass over the filters, cards, bid modal, and the posted demand.
+
+## 2026-08-24 · M22 complete — the Seller Dashboard: farmers get the web (D-032)
+
+- **Farmer web login**: phone → 6-digit OTP over the SMS outbox (`login_otps`, migration 0008; bcrypt hash, 10-min TTL, 5 attempts) → `kind:'farmer'` JWT + `authFarmer` guard. Offline demo story: the code lands in the USSD tester's SMS inbox for that phone. New `sms.loginCode` catalog key.
+- **`/farmer/dashboard`** (prototype Frame 07): "List a New Lot" sidebar (crop, declared grade, unit+qty, **optional ask price with a live Fair-Price pip** vs the cross-market reference, read-only MoMo payout number), KPI row (active listings / live contracts / total earned), **Incoming Bids** — OFFERED contracts with escrow amount and Accept/Decline running the exact `acceptOfferAndHold`/`declineOffer` the USSD tree calls — My Contracts, My Active Listings (with bid counts), and the Payout History table.
+- Server: `routes/api/farmerPortal.ts` (dashboard + list-lot + accept/decline), farmer OTP routes in auth. Web-listed lots carry the ask price straight onto the buyer marketplace (`priceSource: 'asking'`).
+- Browser-verified end to end: Asante Farms Ltd requested a code, read it from the SMS outbox, signed in, saw the live yam bid (GHS 1,137.50 escrow), accepted from the web → contract ACCEPTED, KPI ticked.
+
+## 2026-08-24 · M23 complete — Transaction Flow card (Frame 03) on the contract page
+
+- ContractDetail gained the **Mobile Money escrow stepper**: six numbered steps (Accepted → Escrow Funded → Picked Up → AI Graded → MoMo Payout → Settled) lit from the contract's real timestamps, progress line between them, amber glow on the current step.
+- When the farmer payout exists, the **MoMo Payout card** renders: dark-green header ("Escrow released to {farmer}", CONFIRMED pill from the real payment status), the MTN MoMo channel tile with the payout number and amount, and an honest Transaction Record — escrow held, farmer payout, refund to buyer, timestamp, payment provider ref — with "View append-only trace" where the prototype had a blockchain-explorer button.
+
+## 2026-08-24 · M24 complete — QR traceability + the public trace page (D-033)
+
+- **`/t/:lotId` is public**: the F2M-branded trace page anyone can open without logging in — lot summary with the AI-certified grade card (band + confidence + model + date), the six-step spine, and the chain of custody. Backed by `GET /api/public/trace/:lotId`, whose payloads are **whitelisted per event type**: no phones, no MoMo numbers, no amounts, ever (tested by string-searching the entire response).
+- **`/traceability`** (buyer nav, prototype Frame 09): lot selector across contracted lots, the certification QR card — a **real QR** (`qrcode` lib) encoding the public URL — region/quantity/grade/confidence rows, Copy-link + Open-public-page actions, and the same public chain of custody beside it, so the buyer previews exactly what a scanner sees.
+- Trace page internals (`SpineStepper`, `TraceEventLog`) extracted as shared components — the portal trace, buyer traceability, and public page all render one implementation.
+
+## 2026-08-24 · M25 complete — Co-op Consolidation Board (Frame 10, D-034)
+
+- **`/consolidate`** (buyer nav): pick a crop, select farmer lots as cards (checkmark circles, grade tiles, kg + price per unit), against a chosen truck from the real vehicle registry. The capacity bar fills amber → green at 80%+ → red on overload; lots that would overload the truck grey out and refuse selection; the sidebar totals lots, cargo, estimated value (market-ref), a rate-card logistics estimate, and the pool's min grade.
+- **"Place Pool Bid"** posts ONE demand for the selected kilograms (min band = lowest selected, window clamped to the tightest perishable clock in the pool). The engine splits it across the lots exactly as it always has — each farmer accepts their own offer; consent, escrow, and dispatch flows untouched.
+- Verified across M22–M25: **118 tests green** (farmer OTP + wrong-code rejection + dashboard + web accept parity + web lot listing with ask price; public trace with no-phone/no-amount assertions and per-type payload whitelist), core+server+web tsc clean, production build clean, live Chrome pass over the farmer login (real OTP from the outbox), Seller Dashboard accept, public trace page, QR traceability page, and consolidation mechanics (60% load, overload lock-out).

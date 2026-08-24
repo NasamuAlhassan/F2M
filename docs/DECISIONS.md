@@ -245,3 +245,27 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** Buyers think in "browse and bid"; the platform's consent model is "offer and the farmer accepts". Pre-filling a demand gives buyers the browsing mental model without inventing a second negotiation path that bypasses farmer consent, price-schedule freezing, or the one-shot match rule. The form's perishable-window snap (end date clamps to the commodity's clock) fell out of this — pre-filling a perishable surfaced the invalid default.
 
 **Rejected:** A separate `bids` entity with farmer-side accept (duplicates matches/contracts wholesale); stock-photo or AI-generated produce imagery (misrepresents the actual lot); enabling the unreviewed locales on the switcher.
+
+## D-032 · 2026-08-24 · Farmer web login = phone + OTP over the SMS outbox; the portal is a parity surface
+
+**Decision:** Farmers get the web Seller Dashboard (prototype Frame 07) without touching USSD registration: `POST /auth/farmer-otp` writes a 6-digit code (bcrypt-hashed, 10-min expiry, 5 attempts, one live code per phone — `login_otps`, migration 0008) and queues `sms.loginCode` through the existing SMS outbox; `POST /auth/farmer-login` exchanges phone+code for a `kind:'farmer'` JWT with its own `authFarmer` guard. Offline, the code is visible in the USSD tester's SMS inbox; with AT keys it is a real text. Every portal action is the same domain call the USSD tree makes: `registerLot` (now with the web form's optional ask price), `acceptOfferAndHold`, `declineOffer`. v1 accepts OTP-request enumeration (a helpful "register by USSD first" error beats a silent no-op for farmers who mistype).
+
+**Why:** Farmers are phone-first with no passwords or emails; an OTP over the channel they already receive rides existing rails and stays mock-first. The parity principle (USSD = web = IVR over one domain layer) extends to a third farmer surface for free.
+
+**Rejected:** Adding a PIN step to USSD registration (changes a tested flow for a web-only need); passwords (wrong medium); silent OTP no-op on unknown phones (hostile to the actual failure mode).
+
+## D-033 · 2026-08-24 · Traceability QR resolves to a public capability URL with a whitelisted payload
+
+**Decision:** Each lot's certification QR (prototype Frame 09, real QR via the `qrcode` lib) encodes `/t/:lotId` — a public, unauthenticated page backed by `GET /api/public/trace/:lotId`. Lot ids are unguessable UUIDs, so the URL itself is the capability. The public payload is whitelisted **per event type** (kg, bands, confidence, distance); phone numbers, MoMo details, and every money amount are never serialized. The buyer's Traceability page renders the same public data beside the QR — what you preview is exactly what a scanner sees. The prototype's blockchain rows become the honest equivalent: the append-only `lot_events` record, linked, with the payment's provider reference on the contract page.
+
+**Why:** Traceability that needs a login is marketing, not traceability — the QR's whole point is that a market inspector or consumer can scan it. Whitelisting per event type makes privacy a property of the endpoint, not a hope about payload contents; the test asserts no phone and no `amount` ever appear.
+
+**Rejected:** Authenticated trace links (defeats the purpose); publishing raw trace payloads (leaks prices and phones); a blockchain pastiche (we have a real append-only log — claiming chain writes we don't do would be dishonest).
+
+## D-034 · 2026-08-24 · Co-op consolidation = one pool demand; the engine already splits it
+
+**Decision:** The Consolidation Board (prototype Frame 10) lets a buyer select same-crop lots against a chosen truck's capacity (real vehicle classes, overload guarded, 80%+ = good load) and post **one pool bid**: a single demand sized to the selected kilograms via the existing `quantityKg` path, min-band = the lowest declared band selected, window clamped to the tightest perishable clock in the pool. No new write paths: the matching engine already allocates one demand across many lots, so each farmer in the pool receives — and individually accepts or declines — their own offer, and transport dispatches per contract as always.
+
+**Why:** The prototype's "auto-assign driver & dispatch" button, taken literally, would move other people's produce without their consent. Mapping consolidation onto a pool demand keeps the consent model, escrow flow, and one-shot match rule intact while delivering the actual value: small lots aggregating into a truck-sized order.
+
+**Rejected:** A consolidation entity that locks member lots and dispatches directly (bypasses farmer consent and duplicates matching); buyer-side multi-lot contracts (the demand already expresses exactly this).

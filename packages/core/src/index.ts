@@ -38,6 +38,7 @@ export { DomainError, notFound } from './domain/errors';
 export { appendLotEvent, getTrace, type DbLike, type LotEventInput, type TraceEvent } from './domain/trace';
 export * from './domain/registries';
 export * from './domain/farmers';
+export * from './domain/farmerAuth';
 export * from './domain/lots';
 export * from './domain/demands';
 export * from './domain/buyers';

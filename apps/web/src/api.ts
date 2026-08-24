@@ -87,6 +87,8 @@ export interface ContractDetail {
     currency: string;
     status: string;
     counterpartyMsisdn: string;
+    providerRef: string;
+    jobId: string | null;
     createdAt: number;
   }>;
   ledger: Array<{ id: string; journalId: string; account: string; debit: number; credit: number; memoKey: string | null }>;
@@ -114,7 +116,87 @@ export interface TraceEvent {
   payload: Record<string, unknown> | null;
 }
 
-export type Role = 'buyer' | 'driver';
+export type Role = 'buyer' | 'driver' | 'farmer';
+
+export interface FarmerDashboard {
+  profile: { name: string; phone: string; regionCode: string; district: string | null; momoMsisdn: string };
+  stats: { activeListings: number; matchedContracts: number; totalEarned: number };
+  offers: FarmerContractRow[];
+  contracts: FarmerContractRow[];
+  lots: Array<{
+    id: string;
+    lotCode: string;
+    commodityCode: string;
+    commodityName: string;
+    quantityKg: number;
+    remainingKg: number;
+    unitName: string;
+    declaredBand: string;
+    askingPricePerKg: number | null;
+    status: string;
+    bids: number;
+    createdAt: number;
+  }>;
+  payouts: Array<{
+    id: string;
+    lotCode: string;
+    amount: number;
+    status: string;
+    provider: string;
+    providerRef: string;
+    counterpartyMsisdn: string;
+    createdAt: number;
+  }>;
+}
+
+export interface FarmerContractRow {
+  id: string;
+  state: string;
+  commodityCode: string;
+  commodityName: string;
+  quantityKg: number;
+  bestPricePerKg: number;
+  holdAmount: number;
+  finalAmount: number | null;
+  finalGrade: string | null;
+  buyerName: string;
+  lotId: string;
+  expiresAt: number | null;
+  createdAt: number;
+}
+
+export interface ContractListRow {
+  id: string;
+  state: string;
+  quantityKg: number;
+  lotId: string;
+  lotCode: string;
+  commodityCode: string;
+  commodityName: string;
+  farmerName: string | null;
+  finalGrade: string | null;
+  createdAt: number;
+}
+
+export interface PublicTrace {
+  lot: {
+    id: string;
+    lotCode: string;
+    commodityCode: string;
+    commodityName: string;
+    clockType: string;
+    quantityKg: number;
+    unitName: string;
+    declaredBand: string;
+    regionName: string;
+    readyDate: number;
+    status: string;
+    createdAt: number;
+  };
+  farmer: { name: string; regionName: string; district: string | null } | null;
+  certification: { gradeBand: string | null; confidence: number | null; model: string | null; gradedAt: number } | null;
+  events: TraceEvent[];
+}
 
 export function getToken(): string | null {
   return localStorage.getItem('ftm_token');
@@ -216,7 +298,7 @@ export async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   if (res.status === 401) {
     const role = getRole();
     setToken(null);
-    window.location.href = role === 'driver' ? '/driver/login' : '/login';
+    window.location.href = role === 'driver' ? '/driver/login' : role === 'farmer' ? '/farmer/login' : '/login';
     throw new ApiError('Login required', 401);
   }
   const body = await res.json().catch(() => null);

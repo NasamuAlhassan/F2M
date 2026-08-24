@@ -11,6 +11,140 @@ const GRADE_TILE: Record<string, string> = {
   REJECT: 'bg-gray-800',
 };
 
+/** Frame 03: the escrow lifecycle as a numbered stepper + the MoMo payout card. */
+function TransactionFlow({ data }: { data: ContractDetail }) {
+  const { contract, lot, farmer } = data;
+  const payout = data.payments.find((p) => p.direction === 'disbursement' && p.jobId === null);
+  const steps = [
+    { label: 'Accepted', sublabel: 'farmer consented', at: contract.acceptedAt },
+    { label: 'Escrow Funded', sublabel: 'hold secured', at: contract.fundedAt },
+    { label: 'Picked Up', sublabel: 'goods collected', at: contract.pickupConfirmedAt },
+    { label: 'AI Graded', sublabel: contract.finalGrade ? `grade ${contract.finalGrade}` : 'quality checked', at: contract.gradedAt },
+    { label: 'MoMo Payout', sublabel: 'escrow released', at: payout ? payout.createdAt : null },
+    { label: 'Settled', sublabel: 'books balanced', at: contract.settledAt },
+  ];
+  const doneCount = steps.filter((s) => s.at !== null).length;
+  const activeIdx = steps.findIndex((s) => s.at === null);
+  const refund = contract.finalAmount !== null ? contract.holdAmount - contract.finalAmount : null;
+
+  return (
+    <Card title="Transaction Flow — Mobile Money Escrow">
+      <div className="relative flex items-start justify-between">
+        <div className="absolute left-0 right-0 top-6 h-0.5 bg-gray-100">
+          <div
+            className="h-full bg-[#1B4332] transition-all duration-500"
+            style={{ width: `${steps.length > 1 ? (Math.max(0, doneCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
+          />
+        </div>
+        {steps.map((step, i) => {
+          const done = step.at !== null;
+          const active = i === activeIdx;
+          return (
+            <div key={step.label} className="relative z-10 flex flex-1 flex-col items-center gap-2.5">
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 text-sm font-extrabold transition-all ${
+                  done
+                    ? 'border-[#1B4332] bg-[#1B4332] text-white'
+                    : active
+                      ? 'step-active border-[#D97706] bg-amber-50 text-[#D97706]'
+                      : 'border-gray-200 bg-white text-gray-400'
+                }`}
+              >
+                {done ? '✓' : i + 1}
+              </div>
+              <div className="text-center">
+                <div
+                  className={`text-xs font-extrabold uppercase tracking-wide ${
+                    done ? 'text-gray-700' : active ? 'text-[#D97706]' : 'text-gray-400'
+                  }`}
+                >
+                  {step.label}
+                </div>
+                <div className="mt-0.5 max-w-[90px] text-[10px] leading-tight text-gray-400">
+                  {step.at ? dateTime(step.at) : step.sublabel}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {payout && (
+        <div className="mt-6 overflow-hidden rounded-2xl border border-green-200">
+          <div className="flex items-center gap-3 bg-[#1B4332] px-5 py-3.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D97706] text-base">📱</div>
+            <div>
+              <div className="text-sm font-bold text-white">Mobile Money Payout</div>
+              <div className="text-[11px] text-green-300">Escrow released to {farmer?.name ?? 'the farmer'}</div>
+            </div>
+            <div
+              className={`ml-auto rounded-full border px-3 py-1 text-[10px] font-bold ${
+                payout.status === 'successful'
+                  ? 'border-green-500/30 bg-green-500/20 text-green-300'
+                  : 'border-amber-500/30 bg-amber-500/20 text-amber-300'
+              }`}
+            >
+              {payout.status === 'successful' ? 'CONFIRMED ✓' : payout.status.toUpperCase()}
+            </div>
+          </div>
+          <div className="grid gap-6 p-5 md:grid-cols-2">
+            <div>
+              <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-gray-400">Payment Channel</p>
+              <div className="flex items-center justify-between rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-400 text-[10px] font-extrabold text-blue-900">
+                    MTN
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-gray-800">MTN MoMo</div>
+                    <div className="mono text-[11px] text-gray-500">+{payout.counterpartyMsisdn}</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="mono text-base font-extrabold text-green-700">{ghs(payout.amount)}</div>
+                  <div className="text-[10px] text-gray-400">
+                    {payout.provider === 'mock' ? 'mock provider (demo)' : 'primary channel'}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-gray-400">Transaction Record</p>
+              <div className="flex flex-col gap-2">
+                {(
+                  [
+                    ['Lot', lot.lotCode],
+                    ['Escrow held', ghs(contract.holdAmount)],
+                    ['Farmer payout', contract.finalAmount !== null ? ghs(contract.finalAmount) : ghs(payout.amount)],
+                    ['Refund to buyer', refund !== null ? ghs(refund) : '—'],
+                    ['Timestamp', dateTime(payout.createdAt)],
+                    ['Payment ref', `${payout.providerRef.slice(0, 13)}…`],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label} className="flex items-start justify-between gap-3">
+                    <span className="flex-shrink-0 text-[11px] font-medium text-gray-400">{label}</span>
+                    <span className={`mono text-right text-xs font-semibold ${label === 'Payment ref' ? 'text-[#1B4332]' : 'text-gray-800'}`}>
+                      {value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <Link
+                  to={`/lots/${lot.id}/trace`}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1B4332] py-2 text-sm font-bold text-white transition-colors hover:bg-green-900"
+                >
+                  🔗 View append-only trace
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -137,6 +271,8 @@ export function ContractDetailPage() {
           </div>
         </div>
       </Card>
+
+      <TransactionFlow data={data} />
 
       <Card
         title={`Pickup Photos (${photos.length})`}
