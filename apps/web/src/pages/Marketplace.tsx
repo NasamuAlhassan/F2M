@@ -74,7 +74,7 @@ export function MarketplacePage() {
         <button
           key={m}
           onClick={() => setSearchParams(m === 'pool' ? { mode: 'pool' } : {}, { replace: true })}
-          className={`smallcaps px-4 py-2 transition-colors ${
+          className={`smallcaps min-h-11 px-4 py-2 transition-colors lg:min-h-0 ${
             mode === m ? 'bg-[var(--ink)] text-[var(--paper)]' : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'
           }`}
         >
@@ -100,7 +100,7 @@ export function MarketplacePage() {
         {/* ── The filter index (folds behind a summary row on phones) ── */}
         <aside className="w-full flex-shrink-0 lg:w-52">
           <button
-            className="smallcaps flex w-full items-center justify-between border border-[var(--ink-3)] bg-[var(--paper-lift)] px-3 py-2.5 text-[var(--ink)] lg:hidden"
+            className="smallcaps flex min-h-11 w-full items-center justify-between border border-[var(--ink-3)] bg-[var(--paper-lift)] px-3 py-2.5 text-[var(--ink)] lg:hidden"
             onClick={() => setFiltersOpen((v) => !v)}
             aria-expanded={filtersOpen}
           >
@@ -188,7 +188,7 @@ export function MarketplacePage() {
                   <button
                     key={g}
                     onClick={() => toggle(grades, g, setGrades)}
-                    className={`flex flex-1 items-center justify-center py-1.5 transition-opacity ${
+                    className={`flex min-h-11 flex-1 items-center justify-center py-1.5 transition-opacity lg:min-h-0 ${
                       grades.size && !grades.has(g) ? 'opacity-30' : ''
                     }`}
                     aria-pressed={grades.has(g)}
@@ -304,7 +304,7 @@ export function MarketplacePage() {
                   {l.farmerPhone && (
                     <a
                       href={`tel:${l.farmerPhone}`}
-                      className="mt-2.5 flex items-center justify-center gap-2 border border-[var(--stamp)] py-2 text-sm font-semibold text-[var(--stamp)] transition-colors hover:bg-[var(--stamp-wash)]"
+                      className="mt-2.5 flex min-h-11 items-center justify-center gap-2 border border-[var(--stamp)] py-2 text-sm font-semibold text-[var(--stamp)] transition-colors hover:bg-[var(--stamp-wash)] lg:min-h-0"
                     >
                       <Glyph name="phone" className="h-4 w-4" />
                       Call to negotiate <span className="serial text-xs">{l.farmerPhone}</span>

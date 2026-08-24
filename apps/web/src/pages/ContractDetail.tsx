@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, dateTime, ghs, type AvailableDriver, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
 import { Glyph, VehicleMark } from '../components/engrave';
 import { QrImage } from '../components/QrImage';
-import { btnCls, btnGhostCls, Card, GradeBadge, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, GradeBadge, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 /** The escrow lifecycle as numbered engraved stations + the payout advice. */
 function TransactionFlow({ data }: { data: ContractDetail }) {
@@ -24,7 +24,10 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
 
   return (
     <Card title="Transaction Flow — Mobile Money Escrow">
-      <div className="relative flex items-start justify-between">
+      {/* Six stations need ~600px of rail; on narrow paper the strip scrolls in
+          its own frame — the same rule the SVG route spine follows. */}
+      <div className="overflow-x-auto">
+      <div className="relative flex min-w-[600px] items-start justify-between">
         <div className="absolute left-0 right-0 top-4 h-px bg-[var(--ink-2)]">
           <div
             className="h-full bg-[var(--ink)] transition-all duration-500"
@@ -60,6 +63,7 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
             </div>
           );
         })}
+      </div>
       </div>
 
       {payout && (
@@ -217,6 +221,7 @@ export function ContractDetailPage() {
                     </div>
                     <StateBadge state={g.status} />
                   </div>
+                  <TableScroll minWidth={420}>
                   <table className="mt-3 w-full text-left text-sm">
                     <thead>
                       <tr>
@@ -239,6 +244,7 @@ export function ContractDetailPage() {
                       ))}
                     </tbody>
                   </table>
+                  </TableScroll>
                   {contract.disputeNote && g.status === 'resolved' && (
                     <p className="stamp mt-3 px-3 py-2 text-[11px] normal-case tracking-normal text-[var(--stamp)]">
                       Farmer dispute: “{contract.disputeNote}”
@@ -446,6 +452,7 @@ export function ContractDetailPage() {
                     Ledger — every journal sums to zero
                   </summary>
                   <div className="mt-2 border border-[var(--ink-2)]">
+                    <TableScroll minWidth={430}>
                     <table className="w-full text-left text-[11px]">
                       <tbody>
                         {ledger.map((l) => (
@@ -457,6 +464,7 @@ export function ContractDetailPage() {
                         ))}
                       </tbody>
                     </table>
+                    </TableScroll>
                   </div>
                 </details>
               )}
@@ -622,6 +630,7 @@ function TransportSection({
               </p>
             </div>
           )}
+          <TableScroll minWidth={520}>
           <table className={tableCls}>
             <thead>
               <tr>
@@ -662,6 +671,7 @@ function TransportSection({
               ))}
             </tbody>
           </table>
+          </TableScroll>
         </div>
       ) : (
         <p className="text-sm text-[var(--ink-6)]">

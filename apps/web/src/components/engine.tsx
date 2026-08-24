@@ -245,7 +245,7 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
             {(data?.locales ?? [{ code: 'tw', label: 'Twi' }]).map((l) => (
               <button
                 key={l.code}
-                className={`smallcaps min-w-[72px] flex-1 py-1.5 transition-colors ${
+                className={`smallcaps min-h-11 min-w-[72px] flex-1 py-1.5 transition-colors lg:min-h-0 ${
                   locale === l.code
                     ? 'bg-[var(--ink)] text-[var(--paper)]'
                     : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'

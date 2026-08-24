@@ -5,7 +5,7 @@ import { api, ghs, shortDate, type Demand, type Registries } from '../api';
 import { NewDemandForm } from '../components/DemandForm';
 import { MatchBanner, MatchRow, SimulationDrawer, type Feed } from '../components/engine';
 import { CropMark } from '../components/engrave';
-import { btnCls, Card, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { btnCls, Card, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 /**
  * Orders = the buyer's order book and the engine working it, on one page:
@@ -87,6 +87,7 @@ export function OrdersPage() {
             <div className="mt-1 text-sm text-[var(--ink-6)]">Post one — matching runs the moment it lands</div>
           </div>
         ) : (
+          <TableScroll minWidth={640}>
           <table className={tableCls}>
             <thead>
               <tr>
@@ -139,6 +140,7 @@ export function OrdersPage() {
               })}
             </tbody>
           </table>
+          </TableScroll>
         )}
       </div>
 

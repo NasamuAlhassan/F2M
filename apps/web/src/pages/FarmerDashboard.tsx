@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type FarmerDashboard, type Registries } from '../api';
 import { CropMark, Glyph } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
-import { btnCls, btnGhostCls, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 interface PriceRow {
   commodityCode: string;
@@ -106,7 +106,7 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
                   key={g}
                   type="button"
                   onClick={() => setDeclaredBand(g)}
-                  className={`flex flex-1 items-center justify-center py-1 transition-opacity ${
+                  className={`flex min-h-11 flex-1 items-center justify-center py-1 transition-opacity lg:min-h-0 ${
                     declaredBand === g ? '' : 'opacity-30 hover:opacity-60'
                   }`}
                   aria-pressed={declaredBand === g}
@@ -388,6 +388,7 @@ export function FarmerDashboardPage() {
           {payouts.length === 0 ? (
             <p className="p-2 text-sm text-[var(--ink-6)]">No payouts yet — they land here (and on your MoMo) at settlement.</p>
           ) : (
+            <TableScroll minWidth={520}>
             <table className={tableCls}>
               <thead>
                 <tr>
@@ -412,6 +413,7 @@ export function FarmerDashboardPage() {
                 ))}
               </tbody>
             </table>
+            </TableScroll>
           )}
         </div>
       </div>

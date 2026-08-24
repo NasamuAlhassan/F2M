@@ -61,7 +61,7 @@ function NotificationBell() {
   return (
     <div className="relative">
       <button
-        className={`smallcaps flex items-center gap-1.5 transition-colors ${
+        className={`smallcaps flex min-h-11 items-center gap-1.5 transition-colors lg:min-h-0 ${
           open ? 'text-[var(--paper)]' : 'text-[var(--ink-3)] hover:text-[var(--paper)]'
         }`}
         onClick={() => setOpen((v) => !v)}
@@ -125,7 +125,9 @@ function NotificationBell() {
 }
 
 function navCls({ isActive }: { isActive: boolean }): string {
-  return `smallcaps pb-1 transition-colors border-b-2 ${
+  // pt-3 below lg grows the tap target toward 44px without moving the gold
+  // underline away from the letterforms.
+  return `smallcaps pt-3 pb-1 transition-colors border-b-2 lg:pt-0 ${
     isActive
       ? 'border-[var(--gold)] text-[var(--paper)]'
       : 'border-transparent text-[var(--ink-3)] hover:text-[var(--paper)]'

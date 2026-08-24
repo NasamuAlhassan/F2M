@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, dateTime, ghs, type JobView, type Registries } from '../api';
 import { CropMark, VehicleMark } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
-import { btnCls, btnGhostCls, Card, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 interface OfferView extends JobView {
   jobId: string;
@@ -299,6 +299,7 @@ export function DriverJobsPage() {
           {history.length === 0 ? (
             <p className="text-sm text-[var(--ink-6)]">No completed jobs yet.</p>
           ) : (
+            <TableScroll minWidth={520}>
             <table className={tableCls}>
               <thead>
                 <tr>
@@ -328,6 +329,7 @@ export function DriverJobsPage() {
                 ))}
               </tbody>
             </table>
+            </TableScroll>
           )}
         </Card>
       </div>

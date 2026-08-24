@@ -134,12 +134,27 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
+// text-base below sm: a 16px input is the line iOS Safari respects — smaller
+// zooms the whole page on focus, which wrecks the certificate framing.
 export const inputCls =
-  'w-full rounded-[2px] border border-[var(--ink-3)] bg-[var(--paper-lift)] px-3 py-2 text-sm text-[var(--ink)] focus:border-[var(--ink-6)] focus:outline-none';
+  'w-full rounded-[2px] border border-[var(--ink-3)] bg-[var(--paper-lift)] px-3 py-2 text-base text-[var(--ink)] focus:border-[var(--ink-6)] focus:outline-none sm:text-sm';
 export const btnCls =
-  'rounded-[2px] bg-[var(--ink)] px-4 py-2 text-sm font-semibold tracking-[0.02em] text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40';
+  'min-h-11 rounded-[2px] bg-[var(--ink)] px-4 py-2 text-sm font-semibold tracking-[0.02em] text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-0';
 export const btnGhostCls =
-  'rounded-[2px] border border-[var(--ink-5)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)] disabled:opacity-40';
+  'min-h-11 rounded-[2px] border border-[var(--ink-5)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)] disabled:opacity-40 lg:min-h-0';
+
+/**
+ * Wide ledgers scroll inside their own frame on narrow paper — the page canvas
+ * never scrolls sideways. minWidth keeps the columns breathing room instead of
+ * letting w-full crush them into the viewport.
+ */
+export function TableScroll({ children, minWidth }: { children: ReactNode; minWidth: number }) {
+  return (
+    <div className="overflow-x-auto">
+      <div style={{ minWidth }}>{children}</div>
+    </div>
+  );
+}
 
 // Ledger tables: tracked capital column heads over a double rule, hairline rows.
 export const tableCls = 'w-full text-left text-sm text-[var(--ink)]';

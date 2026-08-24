@@ -133,7 +133,7 @@ export function NewDemandForm({
                 key={g}
                 type="button"
                 onClick={() => setMinBand(g)}
-                className={`flex flex-1 items-center justify-center py-1 transition-opacity ${minBand === g ? '' : 'opacity-30 hover:opacity-60'}`}
+                className={`flex min-h-11 flex-1 items-center justify-center py-1 transition-opacity lg:min-h-0 ${minBand === g ? '' : 'opacity-30 hover:opacity-60'}`}
                 aria-pressed={minBand === g}
               >
                 <GradeBadge grade={g} />

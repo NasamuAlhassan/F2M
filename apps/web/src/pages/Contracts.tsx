@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type ContractListRow, type PriceTerms } from '../api';
 import { CropMark, Glyph } from '../components/engrave';
-import { GradeBadge, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { GradeBadge, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 interface Row extends ContractListRow {
   quantityKg: number;
@@ -37,6 +37,40 @@ export function ContractsPage() {
             <div className="mt-1 text-sm text-[var(--ink-6)]">They appear the moment the engine matches one of your demands</div>
           </div>
         ) : (
+          <>
+            {/* Phones read the ledger as stacked tickets — the whole ticket is the tap target. */}
+            <div className="md:hidden">
+              {data.contracts.map((c) => (
+                <Link
+                  key={c.id}
+                  to={`/contracts/${c.id}`}
+                  className="block border-b border-[var(--ink-2)] px-1 py-3 transition-colors last:border-b-0 hover:bg-[var(--paper)]"
+                >
+                  <span className="flex items-center gap-2">
+                    <CropMark code={c.commodityCode} className="h-5 w-5 flex-shrink-0 text-[var(--ink-7)]" />
+                    <span className="min-w-0 flex-1 truncate font-bold text-[var(--ink)]">{c.commodityName}</span>
+                    {c.finalGrade && <GradeBadge grade={c.finalGrade} />}
+                    <StateBadge state={c.state} />
+                  </span>
+                  <span className="mt-1 block truncate text-sm text-[var(--ink-7)]">
+                    {c.farmerName ?? '—'} · <span className="serial text-xs text-[var(--ink-6)]">{c.lotCode}</span> ·{' '}
+                    {shortDate(c.createdAt)}
+                  </span>
+                  <span className="mt-1 flex items-baseline justify-between">
+                    <span>
+                      <span className="serial font-bold text-[var(--gold-deep)]">
+                        {c.finalAmount !== null ? ghs(c.finalAmount) : ghs(c.holdAmount)}
+                      </span>
+                      <span className="smallcaps ml-1.5 text-[var(--ink-6)]">{c.finalAmount !== null ? 'final' : 'hold'}</span>
+                    </span>
+                    <span className={`${numCls} text-xs text-[var(--ink-6)]`}>{c.quantityKg} kg</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+
+            <div className="hidden md:block">
+              <TableScroll minWidth={760}>
           <table className={tableCls}>
             <thead>
               <tr>
@@ -88,6 +122,9 @@ export function ContractsPage() {
               ))}
             </tbody>
           </table>
+              </TableScroll>
+            </div>
+          </>
         )}
       </div>
     </div>
