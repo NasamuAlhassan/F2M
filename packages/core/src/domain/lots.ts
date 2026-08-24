@@ -20,6 +20,8 @@ export interface RegisterLotInput {
   /** ms epoch; defaults to now. A future date on a storable commodity is a forward listing. */
   readyDate?: number;
   askingPricePerKg?: number; // pesewas
+  /** How the listing was made (D-036). Defaults to 'ussd' — the basic-phone path. */
+  channel?: 'web' | 'ussd' | 'ivr';
   gpsLat?: number;
   gpsLng?: number;
 }
@@ -66,6 +68,7 @@ export function registerLot(input: RegisterLotInput): Lot {
         unitId: unit.id,
         unitQty: input.unitQty,
         declaredBand,
+        channel: input.channel ?? 'ussd',
         readyDate,
         askingPricePerKg: input.askingPricePerKg ?? null,
         regionCode: farmer.regionCode,

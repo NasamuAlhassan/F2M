@@ -4,7 +4,7 @@ import { desc, eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { config } from '../config';
 import { db } from '../db/client';
-import { photos, type Photo } from '../db/schema';
+import { lots as lotsTable, photos, type Photo } from '../db/schema';
 import { getContract } from './contracts';
 import { DomainError, notFound } from './errors';
 import { appendLotEvent } from './trace';
@@ -58,6 +58,64 @@ export async function addPhoto(opts: {
     });
     return photo;
   });
+}
+
+/**
+ * Attach a LISTING photo to a lot (D-036) — a smartphone seller showing their
+ * produce on the marketplace card. Same pipeline as pickup photos; the row has
+ * no contractId, which is what distinguishes card art from grading evidence.
+ */
+export async function addLotPhoto(opts: { lotId: string; farmerId: string; buffer: Buffer }): Promise<Photo> {
+  const lot = db.select().from(lotsTable).where(eq(lotsTable.id, opts.lotId)).get();
+  if (!lot) throw notFound('lot');
+  if (lot.farmerId !== opts.farmerId) throw new DomainError('Not your lot', 'FORBIDDEN', 403);
+  if (!['registered', 'matched'].includes(lot.status)) {
+    throw new DomainError(`Cannot add listing photos to a ${lot.status} lot`, 'INVALID_STATE', 409);
+  }
+
+  const processed = await sharp(opts.buffer)
+    .rotate()
+    .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+
+  const fileName = `${crypto.randomUUID()}.jpg`;
+  const dir = path.join(config.storageDir, 'photos', lot.id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, fileName), processed);
+
+  return db.transaction((tx) => {
+    const photo = tx
+      .insert(photos)
+      .values({
+        lotId: lot.id,
+        contractId: null,
+        path: path.posix.join('photos', lot.id, fileName),
+        mime: 'image/jpeg',
+        bytes: processed.byteLength,
+      })
+      .returning()
+      .get();
+    appendLotEvent(tx, {
+      lotId: lot.id,
+      type: 'PHOTO_ADDED',
+      actorType: 'farmer',
+      actorId: opts.farmerId,
+      payload: { photoId: photo.id, bytes: processed.byteLength, stage: 'listing' },
+    });
+    return photo;
+  });
+}
+
+/** Listing photos only — the card art (no contractId; pickup photos have one). */
+export function listListingPhotos(lotId: string): Photo[] {
+  return db
+    .select()
+    .from(photos)
+    .where(eq(photos.lotId, lotId))
+    .orderBy(desc(photos.createdAt))
+    .all()
+    .filter((p) => p.contractId === null);
 }
 
 export function listPhotosForContract(contractId: string): Photo[] {

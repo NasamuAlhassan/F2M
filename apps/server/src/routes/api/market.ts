@@ -4,6 +4,7 @@ import {
   getFarmerById,
   getRegion,
   haversineKm,
+  listListingPhotos,
   listMarketPrices,
   resolvePoint,
   schema,
@@ -37,6 +38,7 @@ export async function marketRoutes(app: FastifyInstance): Promise<void> {
         const unit = db.select().from(schema.units).where(eq(schema.units.id, l.unitId)).get();
         const kgPerUnit = unit?.kgPerUnit ?? 0;
 
+        const photo = listListingPhotos(l.id)[0];
         const prices = listMarketPrices(l.commodityId);
         const marketAvgPerKg = prices.length
           ? Math.round(prices.reduce((s, p) => s + p.pricePerKg, 0) / prices.length)
@@ -63,6 +65,11 @@ export async function marketRoutes(app: FastifyInstance): Promise<void> {
           priceSource: l.askingPricePerKg !== null ? 'asking' : marketAvgPerKg !== null ? 'market' : null,
           fairPrice: pricePerKg !== null && marketAvgPerKg !== null && pricePerKg <= marketAvgPerKg,
           farmerName: farmer?.name ?? null,
+          channel: l.channel,
+          photoUrl: photo ? `/${photo.path}` : null,
+          // USSD/IVR farmers may not read SMS — buyers call them directly to
+          // negotiate (D-036). Web sellers are reachable in-app; no phone shown.
+          farmerPhone: l.channel !== 'web' ? (farmer?.phone ?? null) : null,
           district: farmer?.district ?? null,
           regionCode: l.regionCode,
           regionName: t('en', getRegion(l.regionCode).nameKey),

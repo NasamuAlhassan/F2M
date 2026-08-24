@@ -134,6 +134,8 @@ export interface FarmerDashboard {
     declaredBand: string;
     askingPricePerKg: number | null;
     status: string;
+    channel: 'web' | 'ussd' | 'ivr';
+    photoUrl: string | null;
     bids: number;
     createdAt: number;
   }>;
@@ -253,6 +255,9 @@ export interface MarketLot {
   priceSource: 'asking' | 'market' | null;
   fairPrice: boolean;
   farmerName: string | null;
+  channel: 'web' | 'ussd' | 'ivr';
+  photoUrl: string | null;
+  farmerPhone: string | null;
   district: string | null;
   regionCode: string;
   regionName: string;

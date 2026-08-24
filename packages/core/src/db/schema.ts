@@ -119,6 +119,9 @@ export const lots = sqliteTable(
       .references(() => units.id),
     unitQty: real('unit_qty').notNull(),
     declaredBand: text('declared_band').notNull(), // farmer self-assessment, soft signal only
+    // How the listing was made (D-036): web sellers upload photos; ussd/ivr
+    // sellers may not read SMS, so buyers see their phone and call instead.
+    channel: text('channel', { enum: ['web', 'ussd', 'ivr'] }).notNull().default('ussd'),
     readyDate: integer('ready_date').notNull(), // ms; future date on a storable = forward listing
     askingPricePerKg: integer('asking_price_per_kg'), // pesewas, optional
     regionCode: text('region_code')

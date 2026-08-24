@@ -242,11 +242,15 @@ export function MarketplacePage() {
                 key={l.id}
                 className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-lg"
               >
-                {/* hero */}
+                {/* hero — real produce photo when the seller uploaded one (D-036) */}
                 <div className={`relative h-40 bg-gradient-to-br ${CROP_GRADIENT[l.commodityCode] ?? 'from-gray-100 to-gray-200'}`}>
-                  <span className="absolute inset-0 flex items-center justify-center text-7xl opacity-80 drop-shadow-sm">
-                    {CROP_EMOJI[l.commodityCode] ?? '📦'}
-                  </span>
+                  {l.photoUrl ? (
+                    <img src={l.photoUrl} alt={l.commodityName} className="absolute inset-0 h-full w-full object-cover" />
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center text-7xl opacity-80 drop-shadow-sm">
+                      {CROP_EMOJI[l.commodityCode] ?? '📦'}
+                    </span>
+                  )}
                   <span
                     className={`absolute left-3 top-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm ${
                       l.listingType === 'FORWARD' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-800'
@@ -255,6 +259,11 @@ export function MarketplacePage() {
                     {l.listingType === 'SAME_DAY' && <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-current" />}
                     {l.listingType === 'FORWARD' ? 'Forward' : 'Same-day'}
                   </span>
+                  {l.channel !== 'web' && (
+                    <span className="absolute left-3 top-10 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-700 shadow-sm">
+                      {l.channel === 'ivr' ? '🎙 Voice listing' : '📟 USSD listing'}
+                    </span>
+                  )}
                   <span className="absolute right-3 top-3">
                     <GradeBadge grade={l.declaredBand} />
                   </span>
@@ -324,6 +333,20 @@ export function MarketplacePage() {
                     <span className="mono text-[10px] text-gray-400">{l.kgPerUnit} kg / unit</span>
                   </div>
 
+                  {l.farmerPhone && (
+                    <a
+                      href={`tel:${l.farmerPhone}`}
+                      className="mt-3 flex items-center justify-center gap-2 rounded-xl border-2 border-[#D97706] py-2 text-sm font-bold text-[#B45309] transition-colors hover:bg-amber-50"
+                    >
+                      📞 Call to negotiate <span className="mono text-xs font-semibold">{l.farmerPhone}</span>
+                    </a>
+                  )}
+                  {l.channel !== 'web' && (
+                    <p className="mt-1.5 text-[10px] leading-snug text-gray-400">
+                      This farmer listed by {l.channel === 'ivr' ? 'voice call' : 'USSD'} and may not read SMS — call to
+                      agree terms, or bid and they'll get a voice call.
+                    </p>
+                  )}
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Link
                       to={`/lots/${l.id}/trace`}

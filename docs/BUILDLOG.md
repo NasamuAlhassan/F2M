@@ -226,3 +226,10 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **ContractDetail** went from six stacked full-width cards to two columns: main = compact transaction stepper + MoMo payout card, grading, transport, photos; sticky rail = condensed parties/terms with the call button, escrow/final tiles, price-per-grade chips, the **Traceability QR card** (absorbed from the standalone page), and payments with the ledger behind a disclosure.
 - Density: `Card` padding and margins tightened globally (p-4/mb-4); duplicate page-title/card-title pairs removed.
 - Verified: 118 tests green (server untouched), web tsc + build clean, browser pass over all four tabs, the pool toggle, redirects, and the two-column contract page.
+
+## 2026-08-24 · M27 complete — listings truthful to the two seller types (D-036)
+
+- **`lots.channel`** (migration 0009): `web` from the Seller Dashboard form, `ussd` from the USSD tree (and as the default), `ivr` reserved for the voice pipeline.
+- **Listing photos**: the seller form takes up to 3 produce photos (uploaded onto the fresh lot via `POST /api/farmer/lots/:id/photos`); `addLotPhoto` reuses the pickup-photo pipeline (sharp ≤1024px JPEG, trace event) with no contract — `photos.contractId` was already nullable, so no new table. Marketplace card heroes show the real photo; farmer dashboard listings show thumbnails.
+- **Call to negotiate**: market rows now carry `channel`, `photoUrl`, and — for non-web listings only — `farmerPhone`. Cards get a `📟 USSD listing` / `🎙 Voice listing` badge, an amber `tel:` call button with the number, and a one-line note that the farmer may not read SMS. Pool-builder cards link the phone inline. Public trace unchanged (still phone-free, D-033).
+- Verified: 119 tests green (new: channel stamped per surface, real multipart JPEG upload → card art, phone present on the ussd row and null on the web row), all tsc + build clean, browser pass — both open USSD lots show the badge + call button.

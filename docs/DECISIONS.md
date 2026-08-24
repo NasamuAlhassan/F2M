@@ -277,3 +277,11 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** The portal grew a tab per milestone; the user's model is one marketplace with an order book and contracts, not seven sibling pages. Destination = a noun the buyer thinks in (things to buy / my orders / my deals / prices); everything else is a mode or a detail of one of those.
 
 **Rejected:** Keeping seven tabs and only densifying pages (the scatter was the complaint); a dashboard/home page of widgets (a fifth place to look, when the four destinations already answer "where do I go").
+
+## D-036 · 2026-08-24 · Listings carry their channel; basic-phone farmers are reached by phone, smartphone farmers by photos
+
+**Decision:** `lots.channel` (`web | ussd | ivr`, migration 0009) records how a listing was made, stamped at each call site. Smartphone sellers upload **listing photos** (reusing the existing `photos` table — `contractId` was already nullable — via `addLotPhoto`/`listListingPhotos`; same sharp pipeline, `PHOTO_ADDED` trace event with `stage: listing`); the marketplace card shows the real photo. USSD/IVR listings keep the crop-gradient placeholder and instead surface the **farmer's phone with a "Call to negotiate" `tel:` button** plus a note that the farmer may not read SMS — shown to authenticated buyers only; the public trace stays phone-free (D-033). Place Bid remains available on every listing: a bid still reaches a basic-phone farmer as a voice call + SMS.
+
+**Why:** The user's model in one sentence: literate sellers show their produce, non-literate sellers are called. The card must tell the buyer which conversation they're walking into. Reusing the photos table avoids a parallel image system; the channel column is the single fact everything else (phone display, badge, placeholder art) derives from.
+
+**Rejected:** A separate lot_photos table (the schema already modeled contract-less photos); showing every farmer's phone (web sellers are reachable in-app; phones are the accommodation, not the default); hiding Place Bid on called listings (the IVR accept flow exists precisely so bids still work).

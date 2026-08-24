@@ -1,5 +1,6 @@
 import {
   acceptOfferAndHold,
+  addLotPhoto,
   bestBand,
   contractPriceTerms,
   db,
@@ -11,6 +12,7 @@ import {
   getMatch,
   gradeBandSchema,
   listContractsForFarmer,
+  listListingPhotos,
   listLotsByFarmer,
   listPaymentsForFarmer,
   registerLot,
@@ -44,6 +46,7 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
       const commodity = getCommodityById(l.commodityId);
       const unit = db.select().from(schema.units).where(eq(schema.units.id, l.unitId)).get();
       const bids = db.select().from(schema.matches).where(eq(schema.matches.lotId, l.id)).all().length;
+      const photo = listListingPhotos(l.id)[0];
       return {
         id: l.id,
         lotCode: l.lotCode,
@@ -55,6 +58,8 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
         declaredBand: l.declaredBand,
         askingPricePerKg: l.askingPricePerKg,
         status: l.status,
+        channel: l.channel,
+        photoUrl: photo ? `/${photo.path}` : null,
         bids,
         createdAt: l.createdAt,
       };
@@ -121,8 +126,17 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
   // "List a New Lot" — same registerLot the USSD tree calls, now with the web
   // form's optional ask price (USSD keeps its shorter flow).
   app.post('/farmer/lots', { preHandler: [app.authFarmer] }, async (req, reply) => {
-    const lot = registerLot({ ...listLotSchema.parse(req.body), farmerId: req.user.sub });
+    const lot = registerLot({ ...listLotSchema.parse(req.body), farmerId: req.user.sub, channel: 'web' });
     return reply.code(201).send({ lot });
+  });
+
+  // Listing photos (D-036): the smartphone seller's card art.
+  app.post('/farmer/lots/:id/photos', { preHandler: [app.authFarmer] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const file = await req.file();
+    if (!file) throw new DomainError('Attach a photo file', 'NO_FILE', 400);
+    const photo = await addLotPhoto({ lotId: id, farmerId: req.user.sub, buffer: await file.toBuffer() });
+    return reply.code(201).send({ photo: { id: photo.id, url: `/${photo.path}`, createdAt: photo.createdAt } });
   });
 
   // Accept/decline an incoming bid — the exact calls USSD "My offers" makes.

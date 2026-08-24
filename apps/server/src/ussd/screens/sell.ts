@@ -150,6 +150,7 @@ export const sellConfirm: UssdScreen = {
       unitQty: Number(ctx.data.sellQty),
       declaredBand: ctx.data.sellBand as GradeBand,
       readyDate: Date.now() + Number(ctx.data.sellReadyDays) * DAY_MS,
+      channel: 'ussd', // basic-phone listing — buyers see the phone, not photos (D-036)
     });
     return {
       end: [

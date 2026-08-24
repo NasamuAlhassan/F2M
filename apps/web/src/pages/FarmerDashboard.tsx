@@ -24,6 +24,7 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
   const [unitQty, setUnitQty] = useState('10');
   const [declaredBand, setDeclaredBand] = useState<'A' | 'B' | 'C'>('B');
   const [askPerUnit, setAskPerUnit] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
@@ -34,8 +35,8 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
   const fair = askPerKg !== null && refPerKg !== null ? askPerKg <= refPerKg * 1.05 : null;
 
   const list = useMutation({
-    mutationFn: () =>
-      api('/api/farmer/lots', {
+    mutationFn: async () => {
+      const res = await api<{ lot: { id: string } }>('/api/farmer/lots', {
         method: 'POST',
         body: JSON.stringify({
           commodityCode,
@@ -44,10 +45,19 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
           declaredBand,
           askingPricePerKg: askPerKg ?? undefined,
         }),
-      }),
+      });
+      // Card art: upload the chosen produce photos onto the fresh listing.
+      for (const file of files.slice(0, 3)) {
+        const form = new FormData();
+        form.append('photo', file);
+        await api(`/api/farmer/lots/${res.lot.id}/photos`, { method: 'POST', body: form });
+      }
+      return res;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['farmer-dashboard'] });
       setAskPerUnit('');
+      setFiles([]);
       setDone(true);
       setTimeout(() => setDone(false), 2000);
     },
@@ -133,6 +143,20 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
                 }`}
               >
                 {fair ? '✓ Fair Price — at or near the market reference' : '▲ Above the market reference — may match slower'}
+              </span>
+            )}
+          </Field>
+          <Field label="Produce Photos (up to 3)">
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="block w-full text-xs text-gray-500 file:mr-2 file:rounded-lg file:border-0 file:bg-green-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[#1B4332] hover:file:bg-green-100"
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 3))}
+            />
+            {files.length > 0 && (
+              <span className="mt-1 block text-[10px] font-semibold text-green-700">
+                {files.length} photo{files.length > 1 ? 's' : ''} ready — buyers see them on your card
               </span>
             )}
           </Field>
@@ -300,6 +324,13 @@ export function FarmerDashboardPage() {
               .filter((l) => ['registered', 'matched'].includes(l.status))
               .map((l) => (
                 <div key={l.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  {l.photoUrl ? (
+                    <img src={l.photoUrl} alt="" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                  ) : (
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-green-50 text-xl">
+                      {CROP_EMOJI[l.commodityCode] ?? '📦'}
+                    </div>
+                  )}
                   <div className="min-w-44 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-gray-900">

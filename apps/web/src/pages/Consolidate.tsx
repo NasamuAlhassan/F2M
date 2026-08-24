@@ -255,6 +255,14 @@ export function PoolBuilder() {
                       <div className="mt-0.5 text-xs text-gray-500">
                         {lot.district ? `${lot.district}, ` : ''}
                         {lot.regionName} · {lot.distanceKm} km · <span className="mono">{lot.lotCode}</span>
+                        {lot.farmerPhone && (
+                          <>
+                            {' · '}
+                            <a href={`tel:${lot.farmerPhone}`} className="mono font-semibold text-[#B45309] hover:underline">
+                              📞 {lot.farmerPhone}
+                            </a>
+                          </>
+                        )}
                       </div>
                       <div className="mt-2 flex items-center gap-5">
                         <div>
