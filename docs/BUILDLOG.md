@@ -304,3 +304,11 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **The phone pilot gets its identity**: authored `favicon.svg` (the F2M rosette seal — ink disc, paper petals), Cinzel-lettered PNG icons at 512/192/180 rendered from the real self-hosted face, `manifest.webmanifest` (standalone, paper background, ink theme), `theme-color`, and apple-touch-icon — browser chrome and Add-to-Home-Screen now carry the Trade Instrument.
 - **Detector: exit 0, zero findings** across the whole repo — the dev capture probe is an honest config ignore (`apps/web/public/probe.html`) beside the two Nokia tester pages.
 - Verified: tsc + build clean, the in-world QR captured on the contract rail, icon renders inspected at 512px.
+
+## 2026-08-24 · Provider day — real keys, real wires, two quota walls found (D-041)
+
+- **Verified live**: AT sandbox SMS (201 "Sent to 1/1" — and the host bug it exposed: sandbox keys need the sandbox hosts, now switched by username for SMS + Voice); **real HF AI grading** (`Qwen/Qwen3-VL-30B-A3B-Instruct` after the retired-model swap: provider `hf`, grade A at 95% with genuinely model-authored observations, demo to SETTLED+PAID — MVP criterion 2's grading leg); **Khaya MT** (97 real Twi translations, proving the parse fix, before the free quota wall).
+- **The quota walls, honestly**: Khaya free tier exhausted mid-Twi (replenishes in ~23 days); HF free monthly inference credits exhausted the same afternoon (402 — pre-paid credits or PRO for 20×). Twi stands at 148/235 keys (Khaya + Gemma drafts, gated behind `_reviewed`); Ewe/Dagbani/Hausa/Kusaal await headroom.
+- **New rail (D-041)**: `MT_PROVIDER=hf` (LLM translation on the router, `MT_MODEL` default Gemma-3-27B) and `ASR_PROVIDER=hf` (Whisper on hf-inference, `ASR_MODEL`) beside Khaya; the draft script switches engines by env and stamps its engine into each catalog. Probed and ruled out for now: NLLB + MMS-TTS on hf-inference.
+- **Bug the wire caught**: unquoted `#` in `.env` shortcodes is a comment — every SMS said "Dial *384*7247" with no `#`. Quoted in both env files; tests now pin the full code.
+- Verified: **170 tests green** (14 new HF-provider wire tests; locale tests made draft-agnostic), check clean, demo exit 0 on mocks.

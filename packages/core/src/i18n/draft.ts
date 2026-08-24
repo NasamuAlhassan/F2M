@@ -17,7 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config';
 import { LOCALE_TO_KHAYA } from '../providers/khaya';
-import { KhayaMtProvider } from '../providers/mt/index';
+import { HfMtProvider, KhayaMtProvider, type MtProvider } from '../providers/mt/index';
 import { AVAILABLE_LOCALES } from './index';
 import { isPurePlaceholder, protectPlaceholders, restorePlaceholders } from './draftPlaceholders';
 
@@ -49,7 +49,7 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
 }
 
-async function translateWithRetry(mt: KhayaMtProvider, text: string, to: string): Promise<string> {
+async function translateWithRetry(mt: MtProvider, text: string, to: string): Promise<string> {
   try {
     return await mt.translate({ text, from: 'en', to });
   } catch (err) {
@@ -61,13 +61,21 @@ async function translateWithRetry(mt: KhayaMtProvider, text: string, to: string)
   }
 }
 
-if (!config.KHAYA_API_KEY) {
+// MT_PROVIDER picks the engine: 'hf' = LLM translation via the HF router
+// (D-041, e.g. `MT_PROVIDER=hf npm run i18n:draft`); anything else = Khaya.
+const useHf = config.MT_PROVIDER === 'hf';
+if (useHf && !config.HF_TOKEN) {
+  console.error('MT_PROVIDER=hf needs HF_TOKEN in .env.');
+  process.exit(1);
+}
+if (!useHf && !config.KHAYA_API_KEY) {
   console.error('KHAYA_API_KEY is not set — add it to .env (GhanaNLP grants keys free at https://ghananlp.org).');
   process.exit(1);
 }
 
 const { locales, all } = parseArgs();
-const mt = new KhayaMtProvider();
+const mt: MtProvider = useHf ? new HfMtProvider() : new KhayaMtProvider();
+const engine = useHf ? `hf:${config.MT_MODEL}` : 'khaya-mt';
 const en = loadCatalog('en');
 const enKeys = Object.keys(en).filter((k) => !k.startsWith('_'));
 
@@ -75,7 +83,7 @@ for (const code of locales) {
   const label = AVAILABLE_LOCALES.find((l) => l.code === code)!.label;
   console.log(`\n── ${label} (${code}) ──`);
 
-  if (!LOCALE_TO_KHAYA[code]) {
+  if (!useHf && !LOCALE_TO_KHAYA[code]) {
     console.log(`  UNSUPPORTED: Khaya AI has no language code for '${code}' yet — catalog untouched, English fallback stands.`);
     continue;
   }
@@ -95,8 +103,8 @@ for (const code of locales) {
 
   const existing = loadCatalog(code);
   const out: Record<string, string> = {
-    _note: `${label} — machine-drafted from en.json via Khaya AI. Native-speaker review required before farmer-facing use (D-040): set _reviewed when signed off.`,
-    _machineDrafted: `${new Date().toISOString().slice(0, 10)} khaya-mt`,
+    _note: `${label} — machine-drafted from en.json (${engine}). Native-speaker review required before farmer-facing use (D-040): set _reviewed when signed off.`,
+    _machineDrafted: `${new Date().toISOString().slice(0, 10)} ${engine}`,
     _reviewed: existing['_reviewed'] ?? '',
   };
   let drafted = 0;

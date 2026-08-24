@@ -15,11 +15,15 @@ export class MockNotifyProvider implements NotifyProvider {
   }
 }
 
-/** Africa's Talking SMS (sandbox works with the sandbox username + API key). */
+/**
+ * Africa's Talking SMS. The sandbox username routes to the sandbox host —
+ * verified live: sandbox keys 401 on the production host and 201 on this one.
+ */
 export class AtNotifyProvider implements NotifyProvider {
   readonly name = 'at' as const;
   async send(phone: string, message: string): Promise<void> {
-    const res = await fetch('https://api.africastalking.com/version1/messaging', {
+    const host = config.AT_USERNAME === 'sandbox' ? 'https://api.sandbox.africastalking.com' : 'https://api.africastalking.com';
+    const res = await fetch(`${host}/version1/messaging`, {
       method: 'POST',
       headers: {
         apiKey: config.AT_API_KEY ?? '',

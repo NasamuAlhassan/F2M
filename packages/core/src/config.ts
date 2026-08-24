@@ -23,7 +23,9 @@ const envSchema = z
 
     GRADING_PROVIDER: z.enum(['mock', 'hf']).default('mock'),
     HF_TOKEN: z.string().optional(),
-    GRADING_MODEL: z.string().default('Qwen/Qwen2.5-VL-7B-Instruct'),
+    // Must exist in the HF router catalog (GET router.huggingface.co/v1/models);
+    // the original 7B VL retired from the router, verified live 2026-08-24.
+    GRADING_MODEL: z.string().default('Qwen/Qwen3-VL-30B-A3B-Instruct'),
 
     PAYMENT_PROVIDER: z.enum(['mock', 'momo']).default('mock'),
     MOCK_PAYMENT_DELAY_MS: z.coerce.number().default(2000),
@@ -48,11 +50,15 @@ const envSchema = z
     VOICE_ANSWER_TIMEOUT_MS: z.coerce.number().default(120_000),
 
     // Voice listing pipeline (D-038): speech → text → English → parsed lot.
-    // Khaya AI (GhanaNLP) slots in per-provider when the key lands.
-    ASR_PROVIDER: z.enum(['mock', 'khaya']).default('mock'),
-    MT_PROVIDER: z.enum(['mock', 'khaya']).default('mock'),
+    // 'khaya' = GhanaNLP's hosted API (quota-metered); 'hf' = open models via
+    // the Hugging Face token (D-041) — LLM translation on the router, Whisper
+    // ASR on hf-inference. TTS has no HF path yet (MMS not deployed there).
+    ASR_PROVIDER: z.enum(['mock', 'khaya', 'hf']).default('mock'),
+    MT_PROVIDER: z.enum(['mock', 'khaya', 'hf']).default('mock'),
     TTS_PROVIDER: z.enum(['mock', 'khaya']).default('mock'),
     KHAYA_API_KEY: z.string().optional(),
+    MT_MODEL: z.string().default('google/gemma-3-27b-it'),
+    ASR_MODEL: z.string().default('openai/whisper-large-v3'),
 
     // Review gate escape hatch (D-040): 'true' lets machine-drafted catalogs
     // reach farmer-facing surfaces — the owner's own live testing ONLY.
@@ -69,6 +75,9 @@ const envSchema = z
     }
     if ((env.ASR_PROVIDER === 'khaya' || env.MT_PROVIDER === 'khaya' || env.TTS_PROVIDER === 'khaya') && !env.KHAYA_API_KEY) {
       ctx.addIssue({ code: 'custom', message: 'ASR/MT/TTS_PROVIDER=khaya requires KHAYA_API_KEY' });
+    }
+    if ((env.ASR_PROVIDER === 'hf' || env.MT_PROVIDER === 'hf') && !env.HF_TOKEN) {
+      ctx.addIssue({ code: 'custom', message: 'ASR/MT_PROVIDER=hf requires HF_TOKEN' });
     }
     if (env.VOICE_PROVIDER === 'at' && (!env.AT_API_KEY || !env.AT_VOICE_NUMBER)) {
       ctx.addIssue({ code: 'custom', message: 'VOICE_PROVIDER=at requires AT_API_KEY and AT_VOICE_NUMBER' });

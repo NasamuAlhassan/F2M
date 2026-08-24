@@ -56,7 +56,8 @@ describe('KhayaAsrProvider', () => {
   });
 
   it('throws without a key or a recording', async () => {
-    await expect(new KhayaAsrProvider(undefined).transcribe({ audioRef: 'x', locale: 'tw' })).rejects.toThrow(/KHAYA_API_KEY/);
+    // '' (not undefined): undefined would fall back to a real key in .env.
+    await expect(new KhayaAsrProvider('').transcribe({ audioRef: 'x', locale: 'tw' })).rejects.toThrow(/KHAYA_API_KEY/);
     await expect(new KhayaAsrProvider('k').transcribe({ audioRef: null, locale: 'tw' })).rejects.toThrow(/No recording/);
   });
 });

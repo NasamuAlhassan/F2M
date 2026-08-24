@@ -35,7 +35,9 @@ export class MockVoiceProvider implements VoiceProvider {
 export class AtVoiceProvider implements VoiceProvider {
   readonly name = 'at' as const;
   async initiateCall(p: InitiateCallParams): Promise<InitiateCallResult> {
-    const res = await fetch('https://voice.africastalking.com/call', {
+    // Same sandbox-host rule the SMS wire proved: sandbox keys only work there.
+    const host = config.AT_USERNAME === 'sandbox' ? 'https://voice.sandbox.africastalking.com' : 'https://voice.africastalking.com';
+    const res = await fetch(`${host}/call`, {
       method: 'POST',
       headers: {
         apiKey: config.AT_API_KEY ?? '',

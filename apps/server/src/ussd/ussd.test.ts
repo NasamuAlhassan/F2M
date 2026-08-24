@@ -10,6 +10,7 @@
   pollPaymentsOnce,
   runGrading,
   setDraftLocalesLive,
+  tDraft,
   setGradingProvider,
   setPaymentProvider,
   verifyBuyerLogin,
@@ -214,10 +215,10 @@ describe('USSD language flows (M30, D-040)', () => {
 
   it('a Twi choice renders the rest of the session in draft Twi and registration persists it', async () => {
     const phone = '+233209990402';
-    // 2 = Twi → welcome (Twi has no ussd.* drafts yet, so welcome falls back per-key
-    // to English — the locale itself must still stick) → register.
+    // 2 = Twi → welcome renders in whatever the tw catalog holds for that key
+    // today (draft or en fallback — drafting fills over time) → register.
     const responses = await dial(phone, ['2', '1', 'Yaw Mensah', '9', '2', 'Tolon', '1']);
-    expect(responses[1]).toContain('Welcome to Farm to Market'); // en fallback, session now tw
+    expect(responses[1]).toBe(`CON ${tDraft('tw', 'ussd.welcome.title')}\n${tDraft('tw', 'ussd.welcome.register')}\n${tDraft('tw', 'ussd.welcome.registerDriver')}\n${tDraft('tw', 'ussd.welcome.prices')}`);
     expect(responses[7]).toMatch(/^END/);
     const farmer = getFarmerByPhone(phone)!;
     expect(farmer.locale).toBe('tw');

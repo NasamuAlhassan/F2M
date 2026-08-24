@@ -7,7 +7,7 @@ import { khayaLang } from '../khaya';
  * Khaya AI (GhanaNLP) provider transcribes the recorded audio when keys land.
  */
 export interface AsrProvider {
-  readonly name: 'mock' | 'khaya';
+  readonly name: 'mock' | 'khaya' | 'hf';
   transcribe(opts: { audioRef?: string | null; hint?: string | null; locale: string }): Promise<string>;
 }
 
@@ -41,10 +41,42 @@ export class KhayaAsrProvider implements AsrProvider {
   }
 }
 
+/**
+ * Whisper on hf-inference (D-041): the transcription path the HF token
+ * verifiably reaches. Strong for English calls; Ghanaian-language speech is
+ * beyond stock Whisper — the pipeline's honest-failure SMS covers the gap
+ * until a Ghanaian ASR model lands on an HF provider (or Khaya quota returns).
+ */
+export class HfAsrProvider implements AsrProvider {
+  readonly name = 'hf' as const;
+  constructor(
+    private readonly token: string | undefined = config.HF_TOKEN,
+    private readonly model: string = config.ASR_MODEL,
+  ) {}
+
+  async transcribe(opts: { audioRef?: string | null; hint?: string | null; locale: string }): Promise<string> {
+    if (!this.token) throw new Error('HF_TOKEN is not set');
+    if (!opts.audioRef) throw new Error('No recording to transcribe');
+    const audio = await fetch(opts.audioRef);
+    if (!audio.ok) throw new Error(`Recording fetch failed: ${audio.status}`);
+    const res = await fetch(`https://router.huggingface.co/hf-inference/models/${this.model}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': audio.headers.get('content-type') ?? 'audio/mpeg' },
+      body: Buffer.from(await audio.arrayBuffer()),
+    });
+    if (!res.ok) throw new Error(`HF ASR failed: ${res.status} ${await res.text()}`);
+    const data = (await res.json()) as { text?: string };
+    return (data.text ?? '').trim();
+  }
+}
+
 let provider: AsrProvider | null = null;
 
 export function getAsrProvider(): AsrProvider {
-  if (!provider) provider = config.ASR_PROVIDER === 'khaya' ? new KhayaAsrProvider() : new MockAsrProvider();
+  if (!provider) {
+    provider =
+      config.ASR_PROVIDER === 'khaya' ? new KhayaAsrProvider() : config.ASR_PROVIDER === 'hf' ? new HfAsrProvider() : new MockAsrProvider();
+  }
   return provider;
 }
 

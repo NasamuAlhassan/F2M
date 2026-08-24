@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import en from './catalogs/en.json' with { type: 'json' };
+import tw from './catalogs/tw.json' with { type: 'json' };
 import { isLocaleLive, isLocaleReviewed, liveLocales, setDraftLocalesLive, speechLocale, t, tDraft } from './index';
 
 // The review gate (D-040): machine-drafted catalogs resolve to English on
@@ -25,8 +27,14 @@ describe('i18n review gate', () => {
 
   it('per-key English fallback still applies inside a live draft catalog', () => {
     setDraftLocalesLive(true);
-    // tw has no ussd.home.sell — falls back to English, never the raw key.
-    expect(t('tw', 'ussd.home.sell')).toBe('1. Sell produce');
+    // Pick a key the tw draft genuinely lacks (drafting fills the catalog over
+    // time, so the test finds one instead of hardcoding it).
+    const missing = Object.keys(en).find((k) => !k.startsWith('_') && !(k in tw));
+    if (missing) {
+      expect(t('tw', missing)).toBe((en as Record<string, string>)[missing]);
+    }
+    // And a drafted key resolves from the draft, not English.
+    expect(t('tw', 'commodity.MAIZE')).toBe(tDraft('tw', 'commodity.MAIZE'));
   });
 
   it('liveLocales() is English-only by default and grows under draft-live', () => {

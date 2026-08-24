@@ -20,3 +20,13 @@ export function khayaLang(locale: string): string {
   if (!code) throw new Error(`Khaya AI has no language code for locale '${locale}'`);
   return code;
 }
+
+/** English names for prompting LLM translators (D-041) — every locale has one. */
+export const LOCALE_ENGLISH_NAME: Record<string, string> = {
+  en: 'English',
+  tw: 'Twi (Akan, Ghana)',
+  ee: 'Ewe (Ghana/Togo)',
+  dag: 'Dagbani (northern Ghana)',
+  ha: 'Hausa',
+  kus: 'Kusaal (Kusasi, north-eastern Ghana)',
+};
