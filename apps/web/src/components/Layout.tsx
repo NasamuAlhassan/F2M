@@ -237,22 +237,16 @@ export function Layout() {
             ) : (
               <>
                 <NavLink to="/market" className={subNavCls}>
-                  Active Lots
+                  Marketplace
                 </NavLink>
-                <NavLink to="/demands" className={subNavCls}>
-                  My Demands
+                <NavLink to="/orders" className={subNavCls}>
+                  Orders
                 </NavLink>
-                <NavLink to="/engine" className={subNavCls}>
-                  Intent Engine
-                </NavLink>
-                <NavLink to="/consolidate" className={subNavCls}>
-                  Consolidate
-                </NavLink>
-                <NavLink to="/traceability" className={subNavCls}>
-                  Traceability
+                <NavLink to="/contracts" className={subNavCls}>
+                  Contracts
                 </NavLink>
                 <NavLink to="/prices" className={subNavCls}>
-                  Price Intelligence
+                  Prices
                 </NavLink>
                 <NotificationBell />
               </>

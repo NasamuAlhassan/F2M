@@ -6,19 +6,17 @@ import { getToken } from './api';
 import { Layout } from './components/Layout';
 import './index.css';
 import { ContractDetailPage } from './pages/ContractDetail';
+import { ContractsPage } from './pages/Contracts';
 import { DemandDetailPage } from './pages/DemandDetail';
-import { DemandsPage } from './pages/Demands';
-import { ConsolidatePage } from './pages/Consolidate';
 import { DriverJobsPage } from './pages/DriverJobs';
 import { DriverLoginPage } from './pages/DriverLogin';
-import { EnginePage } from './pages/Engine';
 import { FarmerDashboardPage } from './pages/FarmerDashboard';
 import { FarmerLoginPage } from './pages/FarmerLogin';
 import { LoginPage } from './pages/Login';
 import { MarketplacePage } from './pages/Marketplace';
+import { OrdersPage } from './pages/Orders';
 import { PricesPage } from './pages/Prices';
 import { PublicTracePage } from './pages/PublicTrace';
-import { TraceabilityPage } from './pages/Traceability';
 import { TracePage } from './pages/Trace';
 
 const queryClient = new QueryClient({
@@ -43,16 +41,19 @@ const router = createBrowserRouter([
         children: [
           { path: '/', element: <Navigate to="/market" replace /> },
           { path: '/market', element: <MarketplacePage /> },
-          { path: '/demands', element: <DemandsPage /> },
-          { path: '/engine', element: <EnginePage /> },
+          { path: '/orders', element: <OrdersPage /> },
+          { path: '/contracts', element: <ContractsPage /> },
           { path: '/prices', element: <PricesPage /> },
           { path: '/driver/jobs', element: <DriverJobsPage /> },
           { path: '/farmer/dashboard', element: <FarmerDashboardPage /> },
-          { path: '/traceability', element: <TraceabilityPage /> },
-          { path: '/consolidate', element: <ConsolidatePage /> },
           { path: '/demands/:id', element: <DemandDetailPage /> },
           { path: '/contracts/:id', element: <ContractDetailPage /> },
           { path: '/lots/:id/trace', element: <TracePage /> },
+          // M26 consolidation — old URLs stay alive (deploying live, no dead links).
+          { path: '/demands', element: <Navigate to="/orders" replace /> },
+          { path: '/engine', element: <Navigate to="/orders" replace /> },
+          { path: '/consolidate', element: <Navigate to="/market?mode=pool" replace /> },
+          { path: '/traceability', element: <Navigate to="/contracts" replace /> },
         ],
       },
     ],

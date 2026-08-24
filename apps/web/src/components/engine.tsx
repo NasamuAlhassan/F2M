@@ -1,10 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, dateTime, ghs, shortDate } from '../api';
-import { btnCls, btnGhostCls, Card, Stat, StateBadge } from '../components/ui';
+import { api, dateTime, ghs } from '../api';
+import { btnCls, btnGhostCls, Stat, StateBadge } from './ui';
 
-interface FeedLot {
+// The AI Intent & Auto-Matching Engine's shared pieces (Frame 06), consumed by
+// the Orders page. Extracted verbatim in M26's consolidation.
+
+export interface FeedLot {
   lotCode: string;
   commodityName: string;
   remainingKg: number;
@@ -14,7 +17,7 @@ interface FeedLot {
   farmerName: string | null;
   createdAt: number;
 }
-interface FeedDemand {
+export interface FeedDemand {
   commodityName: string;
   remainingKg: number;
   minBand: string;
@@ -25,7 +28,7 @@ interface FeedDemand {
   mine: boolean;
   createdAt: number;
 }
-interface FeedMatch {
+export interface FeedMatch {
   contractId: string;
   state: string;
   scorePct: number | null;
@@ -39,13 +42,13 @@ interface FeedMatch {
   logisticsEstimate: number | null;
   createdAt: number;
 }
-interface Feed {
+export interface Feed {
   lots: FeedLot[];
   demands: FeedDemand[];
   matches: FeedMatch[];
   simulateEnabled: boolean;
 }
-interface AlertPreview {
+export interface AlertPreview {
   locales: Array<{ code: string; label: string }>;
   locale: string;
   reviewNote: boolean;
@@ -58,7 +61,7 @@ interface AlertPreview {
 }
 
 /** Animated SVG score ring — the prototype's match-score dial. */
-function ScoreRing({ pct }: { pct: number }) {
+export function ScoreRing({ pct }: { pct: number }) {
   const r = 30;
   const c = 2 * Math.PI * r;
   return (
@@ -87,7 +90,7 @@ function ScoreRing({ pct }: { pct: number }) {
 }
 
 /** Frame 06's "AI Match Found" banner — amber gradient, score ring, terms chips. */
-function MatchBanner({
+export function MatchBanner({
   match,
   simulateEnabled,
   onPreview,
@@ -101,7 +104,10 @@ function MatchBanner({
   simulating: boolean;
 }) {
   return (
-    <div className="slide-in mb-5 overflow-hidden rounded-2xl shadow-lg" style={{ background: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)' }}>
+    <div
+      className="slide-in mb-4 overflow-hidden rounded-2xl shadow-lg"
+      style={{ background: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)' }}
+    >
       <div className="flex items-center gap-2 px-5 pt-4">
         <span className="pulse-dot inline-block h-2 w-2 rounded-full bg-white" />
         <span className="text-[11px] font-extrabold uppercase tracking-widest text-white">🤖 AI Match Found</span>
@@ -165,7 +171,7 @@ function TermChip({ label, value }: { label: string; value: string }) {
 }
 
 /** Quieter row for older matches below the banner. */
-function MatchRow({
+export function MatchRow({
   match,
   simulateEnabled,
   onPreview,
@@ -179,7 +185,7 @@ function MatchRow({
   simulating: boolean;
 }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 last:mb-0 hover:bg-gray-50">
+    <div className="mb-2 flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-3 last:mb-0 hover:bg-gray-50">
       {match.scorePct !== null && <Stat value={`${match.scorePct}%`} caption="match" accent />}
       <div className="min-w-48 flex-1">
         <p className="text-sm font-bold text-gray-900">
@@ -209,7 +215,7 @@ function MatchRow({
   );
 }
 
-function SimulationDrawer({ contractId, onClose }: { contractId: string; onClose: () => void }) {
+export function SimulationDrawer({ contractId, onClose }: { contractId: string; onClose: () => void }) {
   const [locale, setLocale] = useState('tw');
   const { data } = useQuery({
     queryKey: ['alert-preview', contractId, locale],
@@ -295,131 +301,6 @@ function SimulationDrawer({ contractId, onClose }: { contractId: string; onClose
           </div>
         </div>
       </aside>
-    </div>
-  );
-}
-
-export function EnginePage() {
-  const queryClient = useQueryClient();
-  const { data } = useQuery({
-    queryKey: ['engine-feed'],
-    queryFn: () => api<Feed>('/api/engine/feed'),
-    refetchInterval: 5000,
-  });
-  const [preview, setPreview] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const simulate = useMutation({
-    mutationFn: (contractId: string) =>
-      api('/api/engine/simulate-accept', { method: 'POST', body: JSON.stringify({ contractId }) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['engine-feed'] }),
-    onError: (err) => setError(err instanceof Error ? err.message : 'Failed'),
-  });
-
-  if (!data) return <p className="text-sm text-gray-400">Loading…</p>;
-  const newestOffered = data.matches.find((m) => m.state === 'OFFERED') ?? null;
-  const rest = data.matches.filter((m) => m !== newestOffered);
-
-  return (
-    <div>
-      <div className="mb-5 flex items-center gap-3">
-        <div>
-          <h1 className="text-xl font-extrabold text-gray-900">AI Intent & Auto-Matching Engine</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Every buy order evaluated against every produce listing, continuously — commodity, quality band, distance,
-            delivery clock. A match reserves the lot and alerts both sides instantly.
-          </p>
-        </div>
-        <span className="ml-auto flex flex-shrink-0 items-center gap-1.5 rounded-full border border-green-300 bg-green-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-green-700">
-          <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-green-600" />
-          Engine live
-        </span>
-      </div>
-      {error && (
-        <p
-          className="mb-4 cursor-pointer rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
-          onClick={() => setError(null)}
-        >
-          {error}
-        </p>
-      )}
-
-      {newestOffered && (
-        <MatchBanner
-          match={newestOffered}
-          simulateEnabled={data.simulateEnabled}
-          onPreview={() => setPreview(newestOffered.contractId)}
-          onSimulate={() => simulate.mutate(newestOffered.contractId)}
-          simulating={simulate.isPending}
-        />
-      )}
-
-      <div className="grid gap-5 md:grid-cols-2">
-        <Card title={`Active Intent Feed — Buy Orders (${data.demands.length})`}>
-          {data.demands.length === 0 ? (
-            <p className="text-sm text-gray-400">No open buy orders.</p>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {data.demands.map((d, i) => (
-                <div key={i} className="flex items-center gap-3 py-2.5 text-sm">
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-900">
-                      {d.remainingKg}kg {d.commodityName}
-                      {d.mine && (
-                        <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">
-                          mine
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      min {d.minBand} · <span className="mono font-semibold">{ghs(d.minPricePerKg)}/kg</span> ·{' '}
-                      {d.regionCode} · {shortDate(d.windowStart)}–{shortDate(d.windowEnd)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        <Card title={`Active Intent Feed — Produce Listings (${data.lots.length})`}>
-          {data.lots.length === 0 ? (
-            <p className="text-sm text-gray-400">No open produce listings.</p>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {data.lots.map((l) => (
-                <div key={l.lotCode} className="py-2.5 text-sm">
-                  <p className="font-bold text-gray-900">
-                    {l.remainingKg}kg {l.commodityName}
-                    <span className="mono ml-2 text-[10px] font-medium text-gray-400">{l.lotCode}</span>
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {l.farmerName} · declared {l.declaredBand} · {l.regionCode} · ready {shortDate(l.readyDate)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      <Card title="Engine Matches — background pairings for your demands">
-        {rest.length === 0 && !newestOffered ? (
-          <p className="text-sm text-gray-400">No matches yet. Post a demand — the engine takes it from there.</p>
-        ) : (
-          rest.map((m) => (
-            <MatchRow
-              key={m.contractId}
-              match={m}
-              simulateEnabled={data.simulateEnabled}
-              onPreview={() => setPreview(m.contractId)}
-              onSimulate={() => simulate.mutate(m.contractId)}
-              simulating={simulate.isPending}
-            />
-          ))
-        )}
-      </Card>
-
-      {preview && <SimulationDrawer contractId={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

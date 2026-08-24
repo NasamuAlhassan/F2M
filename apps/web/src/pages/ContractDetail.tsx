@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, dateTime, ghs, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
+import { QrImage } from '../components/QrImage';
 import { btnCls, btnGhostCls, Card, CROP_EMOJI, GradeBadge, numCls, Stat, StateBadge, tableCls, tdCls, thCls, VEHICLE_EMOJI } from '../components/ui';
 
 const GRADE_TILE: Record<string, string> = {
@@ -11,16 +12,16 @@ const GRADE_TILE: Record<string, string> = {
   REJECT: 'bg-gray-800',
 };
 
-/** Frame 03: the escrow lifecycle as a numbered stepper + the MoMo payout card. */
+/** Frame 03, compacted: the escrow lifecycle stepper + the MoMo payout card. */
 function TransactionFlow({ data }: { data: ContractDetail }) {
   const { contract, lot, farmer } = data;
   const payout = data.payments.find((p) => p.direction === 'disbursement' && p.jobId === null);
   const steps = [
     { label: 'Accepted', sublabel: 'farmer consented', at: contract.acceptedAt },
-    { label: 'Escrow Funded', sublabel: 'hold secured', at: contract.fundedAt },
+    { label: 'Escrow', sublabel: 'hold secured', at: contract.fundedAt },
     { label: 'Picked Up', sublabel: 'goods collected', at: contract.pickupConfirmedAt },
-    { label: 'AI Graded', sublabel: contract.finalGrade ? `grade ${contract.finalGrade}` : 'quality checked', at: contract.gradedAt },
-    { label: 'MoMo Payout', sublabel: 'escrow released', at: payout ? payout.createdAt : null },
+    { label: 'Graded', sublabel: contract.finalGrade ? `grade ${contract.finalGrade}` : 'quality checked', at: contract.gradedAt },
+    { label: 'Payout', sublabel: 'escrow released', at: payout ? payout.createdAt : null },
     { label: 'Settled', sublabel: 'books balanced', at: contract.settledAt },
   ];
   const doneCount = steps.filter((s) => s.at !== null).length;
@@ -30,7 +31,7 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
   return (
     <Card title="Transaction Flow — Mobile Money Escrow">
       <div className="relative flex items-start justify-between">
-        <div className="absolute left-0 right-0 top-6 h-0.5 bg-gray-100">
+        <div className="absolute left-0 right-0 top-4 h-0.5 bg-gray-100">
           <div
             className="h-full bg-[#1B4332] transition-all duration-500"
             style={{ width: `${steps.length > 1 ? (Math.max(0, doneCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
@@ -40,9 +41,9 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
           const done = step.at !== null;
           const active = i === activeIdx;
           return (
-            <div key={step.label} className="relative z-10 flex flex-1 flex-col items-center gap-2.5">
+            <div key={step.label} className="relative z-10 flex flex-1 flex-col items-center gap-1.5">
               <div
-                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 text-sm font-extrabold transition-all ${
+                className={`flex h-8 w-8 items-center justify-center rounded-full border-[3px] text-xs font-extrabold transition-all ${
                   done
                     ? 'border-[#1B4332] bg-[#1B4332] text-white'
                     : active
@@ -54,13 +55,13 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
               </div>
               <div className="text-center">
                 <div
-                  className={`text-xs font-extrabold uppercase tracking-wide ${
+                  className={`text-[10px] font-extrabold uppercase tracking-wide ${
                     done ? 'text-gray-700' : active ? 'text-[#D97706]' : 'text-gray-400'
                   }`}
                 >
                   {step.label}
                 </div>
-                <div className="mt-0.5 max-w-[90px] text-[10px] leading-tight text-gray-400">
+                <div className="mt-0.5 max-w-[80px] text-[9px] leading-tight text-gray-400">
                   {step.at ? dateTime(step.at) : step.sublabel}
                 </div>
               </div>
@@ -70,9 +71,9 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
       </div>
 
       {payout && (
-        <div className="mt-6 overflow-hidden rounded-2xl border border-green-200">
-          <div className="flex items-center gap-3 bg-[#1B4332] px-5 py-3.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D97706] text-base">📱</div>
+        <div className="mt-4 overflow-hidden rounded-2xl border border-green-200">
+          <div className="flex items-center gap-3 bg-[#1B4332] px-4 py-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#D97706] text-sm">📱</div>
             <div>
               <div className="text-sm font-bold text-white">Mobile Money Payout</div>
               <div className="text-[11px] text-green-300">Escrow released to {farmer?.name ?? 'the farmer'}</div>
@@ -87,12 +88,12 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
               {payout.status === 'successful' ? 'CONFIRMED ✓' : payout.status.toUpperCase()}
             </div>
           </div>
-          <div className="grid gap-6 p-5 md:grid-cols-2">
+          <div className="grid gap-5 p-4 md:grid-cols-2">
             <div>
-              <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-gray-400">Payment Channel</p>
-              <div className="flex items-center justify-between rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">Payment Channel</p>
+              <div className="flex items-center justify-between rounded-xl border border-yellow-200 bg-yellow-50 p-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-400 text-[10px] font-extrabold text-blue-900">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-400 text-[10px] font-extrabold text-blue-900">
                     MTN
                   </div>
                   <div>
@@ -109,8 +110,8 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
               </div>
             </div>
             <div>
-              <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-gray-400">Transaction Record</p>
-              <div className="flex flex-col gap-2">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">Transaction Record</p>
+              <div className="flex flex-col gap-1.5">
                 {(
                   [
                     ['Lot', lot.lotCode],
@@ -129,14 +130,6 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
                   </div>
                 ))}
               </div>
-              <div className="mt-4 border-t border-gray-100 pt-3">
-                <Link
-                  to={`/lots/${lot.id}/trace`}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1B4332] py-2 text-sm font-bold text-white transition-colors hover:bg-green-900"
-                >
-                  🔗 View append-only trace
-                </Link>
-              </div>
             </div>
           </div>
         </div>
@@ -154,6 +147,7 @@ export function ContractDetailPage() {
     refetchInterval: 4000, // payments + grading move live during a demo
   });
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['contract', id] });
@@ -187,16 +181,17 @@ export function ContractDetailPage() {
   const { contract, lot, farmer, commodity, payments, ledger, photos, gradings, match } = data;
   const canPhoto = ['FUNDS_HELD', 'PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state);
   const canGrade = ['PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state) && photos.length > 0;
+  const publicUrl = `${window.location.origin}/t/${lot.id}`;
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-extrabold text-gray-900">
           {CROP_EMOJI[commodity.code] ?? '📦'} {contract.quantityKg}kg {commodity.name}
         </h1>
         <StateBadge state={contract.state} />
-        <Link to={`/lots/${lot.id}/trace`} className="ml-auto text-sm font-semibold text-[#1B4332] hover:underline">
-          Full trace timeline →
+        <Link to="/contracts" className="ml-auto text-sm font-semibold text-gray-400 hover:text-gray-600">
+          ← All contracts
         </Link>
       </div>
       {error && (
@@ -208,255 +203,285 @@ export function ContractDetailPage() {
         </p>
       )}
 
-      <Card title="Parties & Terms">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Farmer</p>
-            <p className="mt-1 text-sm font-bold text-gray-900">{farmer?.name}</p>
-            <p className="mono text-[11px] text-gray-500">
-              {farmer?.phone} · {farmer?.regionCode}
-              {farmer?.district ? ` · ${farmer.district}` : ''}
-            </p>
-            <button
-              className="mt-1.5 rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50"
-              onClick={() => callFarmer.mutate()}
-              disabled={callFarmer.isPending}
-            >
-              {callFarmer.isSuccess ? '📞 Call queued ✓' : '📞 Request call'}
-            </button>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Lot</p>
-            <p className="mono mt-1 text-sm font-bold text-gray-900">{lot.lotCode}</p>
-            <p className="text-[11px] text-gray-500">
-              declared {lot.declaredBand} · match score{' '}
-              <span className="mono font-bold text-[#D97706]">{match.score.toFixed(2)}</span>
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Escrow Hold</p>
-            <p className="mono mt-1 text-lg font-extrabold text-[#1B4332]">{ghs(contract.holdAmount)}</p>
-            <p className="text-[11px] text-gray-500">held at acceptance</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Final Amount</p>
-            <p className="mono mt-1 text-lg font-extrabold text-gray-900">
-              {contract.finalAmount !== null ? ghs(contract.finalAmount) : '—'}
-            </p>
-            <p className="text-[11px] text-gray-500">
-              {contract.finalGrade ? `graded ${contract.finalGrade}` : 'awaiting grade'}
-            </p>
-          </div>
-        </div>
+      <div className="flex flex-col gap-4 xl:flex-row">
+        {/* ── Main column ─────────────────────────────────────── */}
+        <div className="min-w-0 flex-1">
+          <TransactionFlow data={data} />
 
-        <div className="mt-5">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">
-            Price per grade — frozen at offer
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {(['A', 'B', 'C', 'REJECT'] as const).map((band) => (
-              <div
-                key={band}
-                className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
-                  contract.finalGrade === band
-                    ? 'border-[#1B4332] bg-green-50 font-bold text-[#1B4332]'
-                    : 'border-gray-100 bg-white text-gray-600'
-                }`}
-              >
-                <GradeBadge grade={band} />
-                <span className={numCls}>{ghs(contract.priceTerms[band])}</span>
-                <span className="text-[10px] text-gray-400">/kg</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      <TransactionFlow data={data} />
-
-      <Card
-        title={`Pickup Photos (${photos.length})`}
-        actions={
-          canPhoto ? (
-            <div className="flex flex-wrap gap-2">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) uploadPhoto.mutate(file);
-                  e.target.value = '';
-                }}
-              />
-              <button className={btnGhostCls} onClick={() => fileRef.current?.click()} disabled={uploadPhoto.isPending}>
-                {uploadPhoto.isPending ? 'Uploading…' : '📷 Upload photo'}
-              </button>
-              {contract.state === 'FUNDS_HELD' && (
-                <button className={btnCls} onClick={() => confirmPickup.mutate()} disabled={confirmPickup.isPending}>
-                  Confirm pickup
-                </button>
-              )}
-              {canGrade && (
-                <button className={btnCls} onClick={() => runGrading.mutate()} disabled={runGrading.isPending}>
-                  {runGrading.isPending ? 'Grading…' : contract.state === 'DISPUTED' ? '🔬 Run re-grade' : '🔬 Run AI grading'}
-                </button>
-              )}
-            </div>
-          ) : undefined
-        }
-      >
-        {photos.length === 0 ? (
-          <p className="text-sm text-gray-400">
-            No photos yet. {canPhoto ? 'Upload pickup photos — grading needs at least one.' : ''}
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-3">
-            {photos.map((p) => (
-              <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
-                <img
-                  src={p.url}
-                  alt="pickup"
-                  className="h-28 w-28 rounded-xl border border-gray-100 object-cover shadow-sm transition-shadow hover:shadow-md"
-                />
-              </a>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {gradings.length > 0 && (
-        <Card title="AI Grading — every grade explains itself">
-          {gradings.map((g) => (
-            <div key={g.id} className="mb-4 rounded-xl border border-gray-100 p-4 last:mb-0">
-              <div className="flex flex-wrap items-center gap-4">
-                <div
-                  className={`flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-xl text-white ${
-                    GRADE_TILE[g.gradeBand ?? ''] ?? 'bg-gray-300'
-                  }`}
-                >
-                  <span className="text-2xl font-extrabold leading-none">
-                    {g.gradeBand === 'REJECT' ? 'R' : (g.gradeBand ?? '…')}
-                  </span>
-                  <span className="text-[8px] font-bold uppercase tracking-widest opacity-80">Grade</span>
+          {gradings.length > 0 && (
+            <Card title="AI Grading — every grade explains itself">
+              {gradings.map((g) => (
+                <div key={g.id} className="mb-4 rounded-xl border border-gray-100 p-3 last:mb-0">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div
+                      className={`flex h-14 w-14 flex-shrink-0 flex-col items-center justify-center rounded-xl text-white ${
+                        GRADE_TILE[g.gradeBand ?? ''] ?? 'bg-gray-300'
+                      }`}
+                    >
+                      <span className="text-xl font-extrabold leading-none">
+                        {g.gradeBand === 'REJECT' ? 'R' : (g.gradeBand ?? '…')}
+                      </span>
+                      <span className="text-[8px] font-bold uppercase tracking-widest opacity-80">Grade</span>
+                    </div>
+                    <div className="min-w-44 flex-1">
+                      {g.confidence !== null && (
+                        <>
+                          <div className="mb-1 flex items-baseline justify-between text-xs">
+                            <span className="font-bold uppercase tracking-wide text-gray-400">Confidence</span>
+                            <span className="mono text-sm font-extrabold text-gray-900">
+                              {(g.confidence * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-[#1B4332]"
+                              style={{ width: `${Math.round(g.confidence * 100)}%` }}
+                            />
+                          </div>
+                        </>
+                      )}
+                      <p className="mono mt-1.5 text-[10px] text-gray-400">
+                        attempt {g.attempt} · {g.provider}
+                        {g.model ? ` · ${g.model}` : ''} · {dateTime(g.createdAt)}
+                      </p>
+                    </div>
+                    <StateBadge state={g.status} />
+                  </div>
+                  <table className="mt-3 w-full text-left text-sm">
+                    <thead>
+                      <tr>
+                        <th className={thCls}>Criterion</th>
+                        <th className={thCls}>Observation</th>
+                        <th className={`${thCls} text-right`}>Band</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {g.reasons.map((r, i) => (
+                        <tr key={i}>
+                          <td className="px-4 py-2 font-semibold text-gray-700">{r.criterion}</td>
+                          <td className="px-4 py-2 text-gray-600">{r.observation}</td>
+                          <td className="px-4 py-2 text-right">
+                            <GradeBadge grade={r.bandForCriterion} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {contract.disputeNote && g.status === 'resolved' && (
+                    <p className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
+                      Farmer dispute: “{contract.disputeNote}”
+                    </p>
+                  )}
                 </div>
-                <div className="min-w-44 flex-1">
-                  {g.confidence !== null && (
-                    <>
-                      <div className="mb-1 flex items-baseline justify-between text-xs">
-                        <span className="font-bold uppercase tracking-wide text-gray-400">Confidence</span>
-                        <span className="mono text-sm font-extrabold text-gray-900">
-                          {(g.confidence * 100).toFixed(0)}%
+              ))}
+            </Card>
+          )}
+
+          {['FUNDS_HELD', 'PICKUP_CONFIRMED', 'GRADED', 'DISPUTED', 'SETTLED'].includes(contract.state) && (
+            <TransportSection contractId={contract.id} contractState={contract.state} onError={onError} />
+          )}
+
+          <Card
+            title={`Pickup Photos (${photos.length})`}
+            actions={
+              canPhoto ? (
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadPhoto.mutate(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button className={btnGhostCls} onClick={() => fileRef.current?.click()} disabled={uploadPhoto.isPending}>
+                    {uploadPhoto.isPending ? 'Uploading…' : '📷 Upload photo'}
+                  </button>
+                  {contract.state === 'FUNDS_HELD' && (
+                    <button className={btnCls} onClick={() => confirmPickup.mutate()} disabled={confirmPickup.isPending}>
+                      Confirm pickup
+                    </button>
+                  )}
+                  {canGrade && (
+                    <button className={btnCls} onClick={() => runGrading.mutate()} disabled={runGrading.isPending}>
+                      {runGrading.isPending ? 'Grading…' : contract.state === 'DISPUTED' ? '🔬 Run re-grade' : '🔬 Run AI grading'}
+                    </button>
+                  )}
+                </div>
+              ) : undefined
+            }
+          >
+            {photos.length === 0 ? (
+              <p className="text-sm text-gray-400">
+                No photos yet. {canPhoto ? 'Upload pickup photos — grading needs at least one.' : ''}
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {photos.map((p) => (
+                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
+                    <img
+                      src={p.url}
+                      alt="pickup"
+                      className="h-24 w-24 rounded-xl border border-gray-100 object-cover shadow-sm transition-shadow hover:shadow-md"
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* ── Right rail ──────────────────────────────────────── */}
+        <aside className="w-full flex-shrink-0 xl:w-80">
+          <div className="xl:sticky xl:top-4">
+            <Card title="Parties & Terms">
+              <div className="space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">👨🏾‍🌾 {farmer?.name}</p>
+                    <p className="mono text-[11px] text-gray-500">
+                      {farmer?.phone} · {farmer?.regionCode}
+                    </p>
+                  </div>
+                  <button
+                    className="flex-shrink-0 rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+                    onClick={() => callFarmer.mutate()}
+                    disabled={callFarmer.isPending}
+                  >
+                    {callFarmer.isSuccess ? '📞 Queued ✓' : '📞 Call'}
+                  </button>
+                </div>
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="mono text-xs text-gray-400">{lot.lotCode}</span>
+                  <span className="text-[11px] text-gray-500">
+                    declared {lot.declaredBand} · score{' '}
+                    <span className="mono font-bold text-[#D97706]">{match.score.toFixed(2)}</span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-gray-50 p-2 text-center">
+                    <div className="mono text-sm font-extrabold text-[#1B4332]">{ghs(contract.holdAmount)}</div>
+                    <div className="text-[9px] uppercase tracking-wide text-gray-400">escrow hold</div>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-2 text-center">
+                    <div className="mono text-sm font-extrabold text-gray-900">
+                      {contract.finalAmount !== null ? ghs(contract.finalAmount) : '—'}
+                    </div>
+                    <div className="text-[9px] uppercase tracking-wide text-gray-400">
+                      {contract.finalGrade ? `final · grade ${contract.finalGrade}` : 'awaiting grade'}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    Price per grade (frozen at offer)
+                  </p>
+                  <div className="flex gap-1.5">
+                    {(['A', 'B', 'C', 'REJECT'] as const).map((band) => (
+                      <div
+                        key={band}
+                        className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg border py-1.5 ${
+                          contract.finalGrade === band ? 'border-[#1B4332] bg-green-50' : 'border-gray-100'
+                        }`}
+                      >
+                        <GradeBadge grade={band} />
+                        <span className="mono text-[10px] font-semibold text-gray-600">
+                          {(contract.priceTerms[band] / 100).toFixed(2)}
                         </span>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                        <div
-                          className="h-full rounded-full bg-[#1B4332]"
-                          style={{ width: `${Math.round(g.confidence * 100)}%` }}
-                        />
-                      </div>
-                    </>
-                  )}
-                  <p className="mono mt-1.5 text-[10px] text-gray-400">
-                    attempt {g.attempt} · {g.provider}
-                    {g.model ? ` · ${g.model}` : ''} · {dateTime(g.createdAt)}
-                  </p>
+                    ))}
+                  </div>
                 </div>
-                <StateBadge state={g.status} />
               </div>
-              <table className="mt-4 w-full text-left text-sm">
-                <thead>
-                  <tr>
-                    <th className={thCls}>Criterion</th>
-                    <th className={thCls}>Observation</th>
-                    <th className={`${thCls} text-right`}>Band</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {g.reasons.map((r, i) => (
-                    <tr key={i}>
-                      <td className="px-4 py-2 font-semibold text-gray-700">{r.criterion}</td>
-                      <td className="px-4 py-2 text-gray-600">{r.observation}</td>
-                      <td className="px-4 py-2 text-right">
-                        <GradeBadge grade={r.bandForCriterion} />
-                      </td>
-                    </tr>
+            </Card>
+
+            <Card title="Traceability QR">
+              <div className="flex items-center gap-3">
+                <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg border-2 border-[#1B4332] p-1">
+                  <QrImage url={publicUrl} />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <p className="text-[11px] leading-snug text-gray-500">
+                    Scans to the public, append-only chain of custody — no login, no money details.
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                      onClick={() => {
+                        navigator.clipboard.writeText(publicUrl).then(() => {
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        });
+                      }}
+                    >
+                      {copied ? '✓ Copied' : 'Copy link'}
+                    </button>
+                    <div className="flex gap-1">
+                      <Link
+                        to={`/t/${lot.id}`}
+                        target="_blank"
+                        className="flex-1 rounded-lg bg-[#1B4332] px-2 py-1 text-center text-[11px] font-bold text-white hover:bg-green-900"
+                      >
+                        Public page ↗
+                      </Link>
+                      <Link
+                        to={`/lots/${lot.id}/trace`}
+                        className="flex-1 rounded-lg border border-gray-200 px-2 py-1 text-center text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                      >
+                        Full trace
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card title={`Payments (${payments.length})`}>
+              {payments.length === 0 ? (
+                <p className="text-sm text-gray-400">The hold fires when the farmer accepts.</p>
+              ) : (
+                <div className="space-y-2">
+                  {payments.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-gray-800">
+                          {p.direction === 'collection' ? 'Hold (buyer)' : p.jobId ? 'Driver payout' : 'Farmer payout'}
+                        </p>
+                        <p className="mono text-[10px] text-gray-400">{dateTime(p.createdAt)}</p>
+                      </div>
+                      <span className={`${numCls} flex-shrink-0 font-bold text-[#1B4332]`}>{ghs(p.amount)}</span>
+                      <StateBadge state={p.status} />
+                    </div>
                   ))}
-                </tbody>
-              </table>
-              {contract.disputeNote && g.status === 'resolved' && (
-                <p className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
-                  Farmer dispute: “{contract.disputeNote}”
-                </p>
+                </div>
               )}
-            </div>
-          ))}
-          <p className="text-[10px] text-gray-400">
-            The farmer sees this grade, its payout, and the top reason on her phone — and can dispute it within the window.
-          </p>
-        </Card>
-      )}
-
-      {['FUNDS_HELD', 'PICKUP_CONFIRMED', 'GRADED', 'DISPUTED', 'SETTLED'].includes(contract.state) && (
-        <TransportSection contractId={contract.id} contractState={contract.state} onError={onError} />
-      )}
-
-      <Card title="Payments & Ledger">
-        {payments.length === 0 ? (
-          <p className="text-sm text-gray-400">No payments yet — the hold fires when the farmer accepts.</p>
-        ) : (
-          <table className={`${tableCls} mb-4`}>
-            <thead>
-              <tr>
-                <th className={thCls}>Direction</th>
-                <th className={thCls}>Amount</th>
-                <th className={thCls}>Counterparty</th>
-                <th className={thCls}>Provider</th>
-                <th className={thCls}>Status</th>
-                <th className={thCls}>When</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {payments.map((p) => (
-                <tr key={p.id}>
-                  <td className={`${tdCls} font-semibold text-gray-800`}>
-                    {p.direction === 'collection' ? 'Hold (buyer)' : 'Payout'}
-                  </td>
-                  <td className={`${tdCls} ${numCls} font-bold text-[#1B4332]`}>{ghs(p.amount)}</td>
-                  <td className={`${tdCls} ${numCls} text-xs text-gray-500`}>{p.counterpartyMsisdn}</td>
-                  <td className={`${tdCls} text-xs text-gray-500`}>{p.provider}</td>
-                  <td className={tdCls}>
-                    <StateBadge state={p.status} />
-                  </td>
-                  <td className={`${tdCls} mono text-[11px] text-gray-500`}>{dateTime(p.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {ledger.length > 0 && (
-          <>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">
-              Ledger — produce and transport money in one book (every journal sums to zero)
-            </p>
-            <div className="overflow-hidden rounded-lg border border-gray-100">
-              <table className="w-full text-left text-xs">
-                <tbody className="divide-y divide-gray-50">
-                  {ledger.map((l) => (
-                    <tr key={l.id} className="hover:bg-gray-50">
-                      <td className="mono px-3 py-1.5 text-gray-700">{l.account}</td>
-                      <td className="mono px-3 py-1.5 text-right text-red-600">{l.debit ? `DR ${ghs(l.debit)}` : ''}</td>
-                      <td className="mono px-3 py-1.5 text-right text-green-700">{l.credit ? `CR ${ghs(l.credit)}` : ''}</td>
-                      <td className="px-3 py-1.5 text-gray-400">{l.memoKey?.replace('ledger.', '')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </Card>
+              {ledger.length > 0 && (
+                <details className="mt-3 border-t border-gray-100 pt-2">
+                  <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600">
+                    Ledger — every journal sums to zero
+                  </summary>
+                  <div className="mt-2 overflow-hidden rounded-lg border border-gray-100">
+                    <table className="w-full text-left text-[10px]">
+                      <tbody className="divide-y divide-gray-50">
+                        {ledger.map((l) => (
+                          <tr key={l.id}>
+                            <td className="mono max-w-32 truncate px-2 py-1 text-gray-700">{l.account}</td>
+                            <td className="mono px-2 py-1 text-right text-red-600">{l.debit ? `DR ${ghs(l.debit)}` : ''}</td>
+                            <td className="mono px-2 py-1 text-right text-green-700">{l.credit ? `CR ${ghs(l.credit)}` : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+            </Card>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -506,7 +531,7 @@ function TransportSection({
   return (
     <Card title="Transport — the middle-mile bridge">
       {job && !['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state) ? (
-        <div className="flex flex-wrap items-center gap-5 rounded-xl border border-gray-100 bg-gray-50 p-4">
+        <div className="flex flex-wrap items-center gap-5 rounded-xl border border-gray-100 bg-gray-50 p-3">
           <span className="mono text-sm font-extrabold text-gray-900">{job.jobCode}</span>
           <StateBadge state={job.state} />
           <Stat value={job.vehicleClassName} caption="vehicle" />

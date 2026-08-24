@@ -10,8 +10,9 @@ const BAND_ORDER: Record<string, number> = { A: 3, B: 2, C: 1 };
  * Frame 10: bundle small same-crop lots toward one truck. "Dispatch" here is a
  * pool bid — ONE demand sized to the selection; the engine already splits a
  * demand across lots, so each farmer still consents to their own offer (D-034).
+ * Rendered as the Marketplace's "Pool builder" mode since M26.
  */
-export function ConsolidatePage() {
+export function PoolBuilder() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
@@ -79,7 +80,7 @@ export function ConsolidatePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['demands'] });
-      navigate('/demands');
+      navigate('/orders');
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Failed'),
   });
@@ -187,13 +188,11 @@ export function ConsolidatePage() {
 
       {/* Board */}
       <div className="min-w-0 flex-1">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-extrabold text-gray-900">Consolidation Board</h1>
-            <p className="mt-0.5 text-sm text-gray-500">
-              Select individual farmer lots of the same crop to consolidate into one truck-sized pool bid
-            </p>
-          </div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-gray-500">
+            Select same-crop lots to consolidate into one truck-sized pool bid — each farmer still accepts their own
+            offer
+          </p>
           <div className="flex gap-1.5">
             {commodityCodes.map((code) => (
               <button

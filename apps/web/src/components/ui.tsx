@@ -4,9 +4,9 @@ import type { ReactNode } from 'react';
 
 export function Card({ title, children, actions }: { title?: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section className="mb-5 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+    <section className="mb-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
       {(title || actions) && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           {title && <h2 className="text-[11px] font-bold uppercase tracking-widest text-gray-400">{title}</h2>}
           {actions}
         </div>

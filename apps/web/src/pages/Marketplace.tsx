@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ghs, shortDate, type MarketLot, type Registries } from '../api';
+import { NewDemandForm } from '../components/DemandForm';
 import { btnCls, CROP_EMOJI, GradeBadge, inputCls } from '../components/ui';
-import { NewDemandForm } from './Demands';
+import { PoolBuilder } from './Consolidate';
 
 // Hero gradients per crop — we have no lot photos (farmers list over USSD from
 // basic phones), so the card art is an honest brand-styled stand-in.
@@ -22,8 +23,9 @@ type SortKey = 'newest' | 'nearest' | 'largest' | 'cheapest';
 
 export function MarketplacePage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const q = (searchParams.get('q') ?? '').trim().toLowerCase();
+  const mode = searchParams.get('mode') === 'pool' ? 'pool' : 'browse';
 
   const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
   const { data, dataUpdatedAt } = useQuery({
@@ -70,8 +72,40 @@ export function MarketplacePage() {
     apply(next);
   };
 
+  const modeSwitch = (
+    <div className="mb-4 inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+      {(
+        [
+          ['browse', '🛒 Browse Lots'],
+          ['pool', '🚚 Pool Builder'],
+        ] as const
+      ).map(([m, label]) => (
+        <button
+          key={m}
+          onClick={() => setSearchParams(m === 'pool' ? { mode: 'pool' } : {}, { replace: true })}
+          className={`rounded-lg px-4 py-1.5 text-sm font-bold transition-colors ${
+            mode === m ? 'bg-[#1B4332] text-white' : 'text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (mode === 'pool') {
+    return (
+      <div>
+        {modeSwitch}
+        <PoolBuilder />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
+    <div>
+      {modeSwitch}
+      <div className="flex flex-col gap-6 lg:flex-row">
       {/* ── Filters sidebar (Frame 01) ─────────────────────────── */}
       <aside className="w-full flex-shrink-0 lg:w-52">
         <div className="space-y-6">
@@ -341,7 +375,7 @@ export function MarketplacePage() {
                   }}
                   onDone={() => {
                     setBidLot(null);
-                    navigate('/demands');
+                    navigate('/orders');
                   }}
                   onCancel={() => setBidLot(null)}
                 />
@@ -350,6 +384,7 @@ export function MarketplacePage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

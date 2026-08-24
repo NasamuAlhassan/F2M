@@ -269,3 +269,11 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Why:** The prototype's "auto-assign driver & dispatch" button, taken literally, would move other people's produce without their consent. Mapping consolidation onto a pool demand keeps the consent model, escrow flow, and one-shot match rule intact while delivering the actual value: small lots aggregating into a truck-sized order.
 
 **Rejected:** A consolidation entity that locks member lots and dispatches directly (bypasses farmer consent and duplicates matching); buyer-side multi-lot contracts (the demand already expresses exactly this).
+
+## D-035 · 2026-08-24 · Buyer IA consolidates to four destinations
+
+**Decision:** The buyer portal's seven nav tabs collapse to four: **Marketplace** (browse + the Pool Builder as an in-page mode, `?mode=pool`), **Orders** (the demand book and the engine working it — match banner, compact table, demand form in a modal, intent feed), **Contracts** (new compact list; the traceability QR moves onto each contract's detail page), **Prices**. ContractDetail becomes two-column: the flow (transaction stepper, grading, transport, photos) in the main column, a sticky rail with parties/terms, the price schedule, payments (ledger behind a disclosure), and the QR card. Old URLs (`/demands`, `/engine`, `/consolidate`, `/traceability`) redirect — the platform is being deployed and tested live, so no link may die. Shared pieces were extracted, not rewritten: `components/DemandForm.tsx`, `components/engine.tsx`, `components/QrImage.tsx`.
+
+**Why:** The portal grew a tab per milestone; the user's model is one marketplace with an order book and contracts, not seven sibling pages. Destination = a noun the buyer thinks in (things to buy / my orders / my deals / prices); everything else is a mode or a detail of one of those.
+
+**Rejected:** Keeping seven tabs and only densifying pages (the scatter was the complaint); a dashboard/home page of widgets (a fifth place to look, when the four destinations already answer "where do I go").
