@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type PriceTerms, type Registries } from '../api';
-import { btnCls, btnGhostCls, Card, Field, GradeBadge, inputCls } from './ui';
+import { btnCls, btnGhostCls, Card, ErrorStamp, Field, GradeBadge, inputCls } from './ui';
 
 const MULTIPLIERS: Record<'A' | 'B' | 'C', number> = { A: 1.0, B: 0.88, C: 0.7 };
 
@@ -193,9 +193,7 @@ export function NewDemandForm({
       </div>
 
       {error && (
-        <p className="stamp mt-3 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
-          {error}
-        </p>
+        <ErrorStamp message={error} onDismiss={() => setError(null)} className="mt-3" />
       )}
       <div className="mt-4 flex gap-3">
         <button className={`${btnCls} flex-1 py-2.5`} onClick={() => create.mutate()} disabled={create.isPending}>

@@ -5,7 +5,8 @@ import { api, ghs, shortDate, type Demand, type Registries } from '../api';
 import { NewDemandForm } from '../components/DemandForm';
 import { MatchBanner, MatchRow, SimulationDrawer, type Feed } from '../components/engine';
 import { CropMark } from '../components/engrave';
-import { btnCls, Card, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { Modal } from '../components/Modal';
+import { btnCls, Card, ErrorStamp, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 /**
  * Orders = the buyer's order book and the engine working it, on one page:
@@ -64,9 +65,7 @@ export function OrdersPage() {
         </div>
       </div>
       {error && (
-        <p className="stamp mb-4 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
-          {error}
-        </p>
+        <ErrorStamp message={error} onDismiss={() => setError(null)} className="mb-4" />
       )}
 
       {newestOffered && (
@@ -184,9 +183,7 @@ export function OrdersPage() {
       </div>
 
       {showForm && registries && (
-        <div className="fixed inset-0 z-40 overflow-y-auto" onClick={() => setShowForm(false)}>
-          <div className="absolute inset-0 bg-[var(--ink)]/70" />
-          <div className="relative mx-auto my-8 w-full max-w-3xl px-4" onClick={(e) => e.stopPropagation()}>
+        <Modal label="Post a new demand" onClose={() => setShowForm(false)}>
             <div className="certificate overflow-hidden bg-[var(--paper)]">
               <div className="plate flex items-center justify-between px-6 py-4">
                 <div>
@@ -208,8 +205,7 @@ export function OrdersPage() {
                 />
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {preview && <SimulationDrawer contractId={preview} onClose={() => setPreview(null)} />}

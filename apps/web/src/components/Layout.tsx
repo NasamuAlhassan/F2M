@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, dateTime, getRole, setToken, type LocaleInfo, type MarketLot, type Me } from '../api';
 import { F2MSeal, Glyph } from './engrave';
@@ -47,6 +47,23 @@ function LangLegend() {
 function NotificationBell() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  // Escape and outside-click both file the tray away — same manners as a dialog.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [open]);
   const { data } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => api<{ unread: number; notifications: NotificationRow[] }>('/api/notifications'),
@@ -59,8 +76,10 @@ function NotificationBell() {
   const unread = data?.unread ?? 0;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={rootRef}>
       <button
+        aria-expanded={open}
+        aria-haspopup="true"
         className={`smallcaps flex min-h-11 items-center gap-1.5 transition-colors lg:min-h-0 ${
           open ? 'text-[var(--paper)]' : 'text-[var(--ink-3)] hover:text-[var(--paper)]'
         }`}

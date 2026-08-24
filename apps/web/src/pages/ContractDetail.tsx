@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, dateTime, ghs, type AvailableDriver, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
 import { Glyph, VehicleMark } from '../components/engrave';
 import { QrImage } from '../components/QrImage';
-import { btnCls, btnGhostCls, Card, GradeBadge, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, ErrorStamp, GradeBadge, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 /** The escrow lifecycle as numbered engraved stations + the payout advice. */
 function TransactionFlow({ data }: { data: ContractDetail }) {
@@ -182,9 +182,7 @@ export function ContractDetailPage() {
         </Link>
       </div>
       {error && (
-        <p className="stamp mb-4 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
-          {error}
-        </p>
+        <ErrorStamp message={error} onDismiss={() => setError(null)} className="mb-4" />
       )}
 
       <div className="flex flex-col gap-4 xl:flex-row">

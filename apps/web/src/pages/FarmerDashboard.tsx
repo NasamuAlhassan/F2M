@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type FarmerDashboard, type Registries } from '../api';
 import { CropMark, Glyph } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
-import { btnCls, btnGhostCls, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, ErrorStamp, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 interface PriceRow {
   commodityCode: string;
@@ -169,9 +169,7 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
             <span className="mt-1 block text-[11px] text-[var(--ink-6)]">Set at USSD registration — payouts land here</span>
           </Field>
           {error && (
-            <p className="stamp cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
-              {error}
-            </p>
+            <ErrorStamp message={error} onDismiss={() => setError(null)} />
           )}
           <button className={`${btnCls} w-full py-2.5`} onClick={() => list.mutate()} disabled={list.isPending}>
             {done ? 'Lot listed ✓' : list.isPending ? 'Listing…' : 'List Lot'}
@@ -230,9 +228,7 @@ export function FarmerDashboardPage() {
 
       <div className="min-w-0 flex-1">
         {error && (
-          <p className="stamp mb-4 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
-            {error}
-          </p>
+          <ErrorStamp message={error} onDismiss={() => setError(null)} className="mb-4" />
         )}
 
         {/* Standing figures */}

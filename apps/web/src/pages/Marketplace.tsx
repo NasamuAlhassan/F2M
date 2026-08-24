@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ghs, placeName, sellerName, shortDate, type MarketLot, type Registries } from '../api';
 import { NewDemandForm } from '../components/DemandForm';
 import { CropMark, Glyph } from '../components/engrave';
+import { Modal } from '../components/Modal';
 import { btnCls, GradeBadge, inputCls, rowOffCls, rowOnCls } from '../components/ui';
 import { PoolBuilder } from './Consolidate';
 
@@ -168,6 +169,7 @@ export function MarketplacePage() {
               <p className="serial mb-2 text-2xl font-bold text-[var(--ink)]">{maxKm} km</p>
               <input
                 type="range"
+                aria-label="Maximum distance in kilometres"
                 min={50}
                 max={700}
                 step={10}
@@ -218,7 +220,7 @@ export function MarketplacePage() {
               </p>
             </div>
             <div className="w-52">
-              <select className={inputCls} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+              <select aria-label="Sort lots" className={inputCls} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
                 <option value="newest">Sort: Newest</option>
                 <option value="nearest">Sort: Nearest</option>
                 <option value="largest">Sort: Largest</option>
@@ -336,9 +338,10 @@ export function MarketplacePage() {
 
         {/* ── Place Bid = a demand pre-filled for this lot ──────── */}
         {bidLot && registries && (
-          <div className="fixed inset-0 z-40 overflow-y-auto" onClick={() => setBidLot(null)}>
-            <div className="absolute inset-0 bg-[var(--ink)]/70" />
-            <div className="relative mx-auto my-8 w-full max-w-3xl px-4" onClick={(e) => e.stopPropagation()}>
+          <Modal
+            label={`Place bid on ${bidLot.remainingKg} kilograms of ${bidLot.commodityName}`}
+            onClose={() => setBidLot(null)}
+          >
               <div className="certificate overflow-hidden bg-[var(--paper)]">
                 <div className="plate flex items-center justify-between px-6 py-4">
                   <div>
@@ -375,8 +378,7 @@ export function MarketplacePage() {
                   />
                 </div>
               </div>
-            </div>
-          </div>
+          </Modal>
         )}
       </div>
     </div>

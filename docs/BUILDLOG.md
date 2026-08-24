@@ -279,3 +279,11 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **44px touch floor below lg**: `btnCls`/`btnGhostCls`, the Browse/Pool toggle, filter disclosure, call-to-negotiate strips, grade-seal selectors, drawer locale tabs, the alerts bell, and nav links (tap padding grows upward so the gold underline stays on the letterforms). Desktop density unchanged via `lg:` resets.
 - **iOS zoom guard**: `inputCls` is 16px below sm (14px from sm up) — Safari no longer zooms the page on input focus.
 - Verified: tsc + build clean; batched capture round at true 390px (Contracts tickets, ContractDetail stepper + payout advice, marketplace card CTAs) + 1568px desktop ledger sanity; one bounded fix round (the stepper).
+
+## 2026-08-24 · Harden pass — dialogs, alerts, and labels earn their semantics (audit P1/P2 a11y closed)
+
+- **One dialog behavior for every modal surface**: new `components/Modal.tsx` — `useDialog` hook (Escape closes, focus moves in and returns to the opener, Tab cycles inside the panel, the page behind stops scrolling) + a centered certificate `Modal` shell with `role="dialog"`/`aria-modal`/`aria-label`. The Orders demand modal and Marketplace bid modal ride the shell; the Voice & SMS simulation drawer takes the same hook with its own right-panel layout.
+- **`ErrorStamp`** (ui.tsx) replaces all eight clickable-paragraph error dismissals: `role="alert"` announces the error the moment it appears, the whole stamp stays clickable for mouse users, and the engraved cross is a real focusable dismiss button.
+- **Named controls**: the distance slider and lot-sort select carry aria-labels; the alerts bell declares `aria-expanded`/`aria-haspopup` and its tray now closes on Escape and outside click.
+- Double-submission was already guarded everywhere (`isPending` disables); verified, not changed.
+- Verified: tsc + build clean, detector reports no new findings (the three open ones are the polish pass's QrImage/scrollbar items), render smoke at 390px.

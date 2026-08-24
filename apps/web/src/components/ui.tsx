@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Glyph } from './engrave';
 
 // The Trade Instrument design system (D-039, seed 222cf785). Component APIs
 // frozen through the redesign — this file is the skin, pages are the layout.
@@ -142,6 +143,34 @@ export const btnCls =
   'min-h-11 rounded-[2px] bg-[var(--ink)] px-4 py-2 text-sm font-semibold tracking-[0.02em] text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-0';
 export const btnGhostCls =
   'min-h-11 rounded-[2px] border border-[var(--ink-5)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)] disabled:opacity-40 lg:min-h-0';
+
+/**
+ * A dismissible error, stamped in oxide. role="alert" announces it to screen
+ * readers the moment it appears; the whole stamp stays clickable for mouse
+ * users while the cross is the real, focusable dismiss control.
+ */
+export function ErrorStamp({ message, onDismiss, className = '' }: { message: string; onDismiss: () => void; className?: string }) {
+  return (
+    <div
+      role="alert"
+      className={`stamp flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-[11px] text-[var(--stamp)] ${className}`}
+      onClick={onDismiss}
+    >
+      <span>{message}</span>
+      <button
+        type="button"
+        aria-label="Dismiss error"
+        className="-m-2 flex-shrink-0 p-2 transition-colors hover:text-[var(--stamp-deep)]"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDismiss();
+        }}
+      >
+        <Glyph name="cross" className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
 
 /**
  * Wide ledgers scroll inside their own frame on narrow paper — the page canvas

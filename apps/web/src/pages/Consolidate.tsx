@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ghs, placeName, sellerName, type MarketLot, type Registries } from '../api';
 import { CropMark, Glyph, VehicleMark } from '../components/engrave';
-import { GradeBadge } from '../components/ui';
+import { ErrorStamp, GradeBadge } from '../components/ui';
 
 const BAND_ORDER: Record<string, number> = { A: 3, B: 2, C: 1 };
 
@@ -165,9 +165,7 @@ export function PoolBuilder() {
             </div>
 
             {error && (
-              <p className="stamp cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
-                {error}
-              </p>
+              <ErrorStamp message={error} onDismiss={() => setError(null)} />
             )}
             <button
               disabled={chosen.length === 0 || overload || poolBid.isPending}

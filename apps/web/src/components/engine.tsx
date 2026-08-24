@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, dateTime, ghs } from '../api';
 import { Glyph } from './engrave';
+import { useDialog } from './Modal';
 import { btnCls, btnGhostCls, Stat, StateBadge } from './ui';
 
 // The AI Intent & Auto-Matching Engine's shared pieces, in the Trade
@@ -213,6 +214,7 @@ export function MatchRow({
 
 export function SimulationDrawer({ contractId, onClose }: { contractId: string; onClose: () => void }) {
   const [locale, setLocale] = useState('tw');
+  const { panelRef, trapTab } = useDialog<HTMLElement>(onClose);
   const { data } = useQuery({
     queryKey: ['alert-preview', contractId, locale],
     queryFn: () => api<AlertPreview>(`/api/engine/alert-preview?contractId=${contractId}&locale=${locale}`),
@@ -222,8 +224,14 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
     <div className="fixed inset-0 z-30" onClick={onClose}>
       <div className="absolute inset-0 bg-[var(--ink)]/70" />
       <aside
-        className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto border-l border-[var(--ink-7)] bg-[var(--paper)]"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Voice and SMS simulation"
+        tabIndex={-1}
+        className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto border-l border-[var(--ink-7)] bg-[var(--paper)] outline-none"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={trapTab}
       >
         <div className="plate flex items-center justify-between px-5 py-4">
           <div>

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, dateTime, ghs, type JobView, type Registries } from '../api';
 import { CropMark, VehicleMark } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
-import { btnCls, btnGhostCls, Card, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, ErrorStamp, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 interface OfferView extends JobView {
   jobId: string;
@@ -217,9 +217,7 @@ export function DriverJobsPage() {
           </p>
         </div>
         {error && (
-          <p className="stamp mb-4 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
-            {error}
-          </p>
+          <ErrorStamp message={error} onDismiss={() => setError(null)} className="mb-4" />
         )}
 
         <Card title={`Pickup Offers for You (${data.offers.length})`}>
