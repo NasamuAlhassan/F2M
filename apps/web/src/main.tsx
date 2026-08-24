@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
 import { activeRole, getToken, loginPathFor, type Role } from './api';
 import { Layout } from './components/Layout';
+import { useAuth } from './hooks/useAuth';
 import './index.css';
 
 // Route-level code splitting: each page ships as its own chunk, so a phone on
@@ -29,6 +30,10 @@ const DemandDetailPage = page(() => import('./pages/DemandDetail'), 'DemandDetai
 const ContractDetailPage = page(() => import('./pages/ContractDetail'), 'ContractDetailPage');
 const TracePage = page(() => import('./pages/Trace'), 'TracePage');
 const PhonePage = page(() => import('./pages/Phone'), 'PhonePage');
+const AuthPage = page(() => import('./pages/Auth'), 'AuthPage');
+const BuyerHomePage = page(() => import('./pages/BuyerHome'), 'BuyerHomePage');
+const SellerHomePage = page(() => import('./pages/SellerHome'), 'SellerHomePage');
+const DriverHomePage = page(() => import('./pages/DriverHome'), 'DriverHomePage');
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
@@ -42,6 +47,16 @@ const queryClient = new QueryClient({
 function RequireAuth({ role }: { role?: Role }) {
   if (role) return getToken(role) ? <Outlet /> : <Navigate to={loginPathFor(role)} replace />;
   return activeRole() ? <Outlet /> : <Navigate to="/login" replace />;
+}
+
+// The new unified-signup identity (supabase/README.md) — separate from the
+// role-keyed JWT system above. useAuth()'s loading window matters here: a
+// Supabase session check is async, so redirecting before it resolves would
+// bounce a genuinely signed-in person back to /auth on every refresh.
+function RequireSupabaseAuth() {
+  const { session, loading } = useAuth();
+  if (loading) return <PageLoading />;
+  return session ? <Outlet /> : <Navigate to="/auth" replace />;
 }
 
 // The chunk-load interstitial, in the world's own voice.
@@ -60,6 +75,18 @@ const router = createBrowserRouter([
   // The handset simulator has no web login — a phone identifies itself by the
   // number it dials from, exactly as it does on a real shortcode.
   { path: '/phone', element: withSuspense(<PhonePage />) },
+  // The unified role-picker signup/login (supabase/README.md). Runs
+  // alongside the role-keyed JWT system above, not in place of it — see
+  // that README for what still needs reconciling between the two.
+  { path: '/auth', element: withSuspense(<AuthPage />) },
+  {
+    element: <RequireSupabaseAuth />,
+    children: [
+      { path: '/app/buyer', element: withSuspense(<BuyerHomePage />) },
+      { path: '/app/seller', element: withSuspense(<SellerHomePage />) },
+      { path: '/app/driver', element: withSuspense(<DriverHomePage />) },
+    ],
+  },
   {
     element: <RequireAuth role="buyer" />,
     children: [
