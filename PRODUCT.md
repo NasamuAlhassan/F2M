@@ -49,8 +49,8 @@ The claim a neighboring marketplace cannot truthfully copy: **a farmer with a ba
 
 ## Brand Commitments
 
-- Name: **Farm to Market**; mark: the amber **F2M** tile. Sub-line in use: "Agritech Marketplace · Ghana".
-- The owner authored the visual system in Figma and it is binding (recorded as D-030): deep forest green `#1B4332` / `#14532d`, amber `#D97706`, gray ground `#F3F4F6`, **Inter** for text and **JetBrains Mono** for every number/code/phone/price, rounded-xl white cards, pill state badges, crop/vehicle emoji iconography, Nokia-LCD styling for the phone simulators. Inter is a deliberate choice and is whitelisted in the design detector.
+- Name: **Farm to Market**; mark: the **F2M** seal. Sub-line in use: "Agritech Marketplace · Ghana".
+- The visual world is **The Trade Instrument** (D-039, owner-approved 2026-08-24, superseding the Figma system of D-030 at the owner's explicit request): cedi banknote / security-print grammar — intaglio green `#14322B` ink on tinted banknote paper `#EFEBDD`, bronze-gold `#A87B23` value figures, oxide-red `#9E3B2C` stamps, engraved guilloché at frames, Cinzel engraved capitals, Public Sans document text, Courier Prime serials and money. DESIGN.md (written from the built world) is the visual authority; the Nokia-LCD simulator pages are unaffected props.
 - Voice: plain, honest, consent-literate microcopy. The product never overstates — no fabricated blockchain language (the append-only trace is described as exactly that), machine translation is visibly flagged, demo-only actions are labeled as demo.
 
 ## Evidence on Hand

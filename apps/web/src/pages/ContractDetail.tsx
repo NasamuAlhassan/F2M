@@ -2,17 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, dateTime, ghs, type AvailableDriver, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
+import { Glyph, VehicleMark } from '../components/engrave';
 import { QrImage } from '../components/QrImage';
-import { btnCls, btnGhostCls, Card, CROP_EMOJI, GradeBadge, numCls, Stat, StateBadge, tableCls, tdCls, thCls, VEHICLE_EMOJI } from '../components/ui';
+import { btnCls, btnGhostCls, Card, GradeBadge, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
-const GRADE_TILE: Record<string, string> = {
-  A: 'bg-green-700',
-  B: 'bg-amber-600',
-  C: 'bg-red-600',
-  REJECT: 'bg-gray-800',
-};
-
-/** Frame 03, compacted: the escrow lifecycle stepper + the MoMo payout card. */
+/** The escrow lifecycle as numbered engraved stations + the payout advice. */
 function TransactionFlow({ data }: { data: ContractDetail }) {
   const { contract, lot, farmer } = data;
   const payout = data.payments.find((p) => p.direction === 'disbursement' && p.jobId === null);
@@ -31,9 +25,9 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
   return (
     <Card title="Transaction Flow — Mobile Money Escrow">
       <div className="relative flex items-start justify-between">
-        <div className="absolute left-0 right-0 top-4 h-0.5 bg-gray-100">
+        <div className="absolute left-0 right-0 top-4 h-px bg-[var(--ink-2)]">
           <div
-            className="h-full bg-[#1B4332] transition-all duration-500"
+            className="h-full bg-[var(--ink)] transition-all duration-500"
             style={{ width: `${steps.length > 1 ? (Math.max(0, doneCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
           />
         </div>
@@ -43,25 +37,23 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
           return (
             <div key={step.label} className="relative z-10 flex flex-1 flex-col items-center gap-1.5">
               <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full border-[3px] text-xs font-extrabold transition-all ${
+                className={`serial flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] text-xs font-bold ${
                   done
-                    ? 'border-[#1B4332] bg-[#1B4332] text-white'
+                    ? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]'
                     : active
-                      ? 'step-active border-[#D97706] bg-amber-50 text-[#D97706]'
-                      : 'border-gray-200 bg-white text-gray-400'
+                      ? 'ember border-[var(--gold)] bg-[var(--gold-wash)] text-[var(--gold-deep)]'
+                      : 'border-[var(--ink-3)] bg-[var(--paper)] text-[var(--ink-4)]'
                 }`}
               >
-                {done ? '✓' : i + 1}
+                {done ? <Glyph name="check" className="h-3.5 w-3.5" /> : i + 1}
               </div>
               <div className="text-center">
                 <div
-                  className={`text-[10px] font-extrabold uppercase tracking-wide ${
-                    done ? 'text-gray-700' : active ? 'text-[#D97706]' : 'text-gray-400'
-                  }`}
+                  className={`smallcaps ${done ? 'text-[var(--ink)]' : active ? 'text-[var(--gold-deep)]' : 'text-[var(--ink-4)]'}`}
                 >
                   {step.label}
                 </div>
-                <div className="mt-0.5 max-w-[80px] text-[9px] leading-tight text-gray-400">
+                <div className="serial mt-0.5 max-w-[84px] text-[11px] leading-tight text-[var(--ink-6)]">
                   {step.at ? dateTime(step.at) : step.sublabel}
                 </div>
               </div>
@@ -71,46 +63,38 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
       </div>
 
       {payout && (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-green-200">
-          <div className="flex items-center gap-3 bg-[#1B4332] px-4 py-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#D97706] text-sm">📱</div>
+        <div className="certificate seal-land mt-4 overflow-hidden bg-[var(--paper)]">
+          <div className="plate flex items-center gap-3 px-4 py-3">
             <div>
-              <div className="text-sm font-bold text-white">Mobile Money Payout</div>
-              <div className="text-[11px] text-green-300">Escrow released to {farmer?.name ?? 'the farmer'}</div>
+              <div className="display text-sm font-semibold tracking-[0.1em]">MOBILE MONEY PAYOUT</div>
+              <div className="smallcaps text-[var(--ink-3)]">escrow released to {farmer?.name ?? 'the farmer'}</div>
             </div>
-            <div
-              className={`ml-auto rounded-full border px-3 py-1 text-[10px] font-bold ${
-                payout.status === 'successful'
-                  ? 'border-green-500/30 bg-green-500/20 text-green-300'
-                  : 'border-amber-500/30 bg-amber-500/20 text-amber-300'
+            <span
+              className={`stamp ml-auto px-2 py-0.5 text-[11px] ${
+                payout.status === 'successful' ? 'text-[var(--paper)]' : 'text-[var(--ink-3)]'
               }`}
             >
-              {payout.status === 'successful' ? 'CONFIRMED ✓' : payout.status.toUpperCase()}
-            </div>
+              {payout.status === 'successful' ? 'Confirmed' : payout.status}
+            </span>
           </div>
           <div className="grid gap-5 p-4 md:grid-cols-2">
             <div>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">Payment Channel</p>
-              <div className="flex items-center justify-between rounded-xl border border-yellow-200 bg-yellow-50 p-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-400 text-[10px] font-extrabold text-blue-900">
-                    MTN
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-gray-800">MTN MoMo</div>
-                    <div className="mono text-[11px] text-gray-500">+{payout.counterpartyMsisdn}</div>
-                  </div>
+              <p className="rule-double smallcaps mb-2.5 pb-1.5 text-[var(--ink-6)]">Payment Channel</p>
+              <div className="flex items-center justify-between border border-[var(--ink-2)] bg-[var(--paper-lift)] p-3">
+                <div>
+                  <div className="stamp inline-block px-1.5 py-0.5 text-[11px] text-[var(--ink)]">MTN MoMo</div>
+                  <div className="serial mt-1.5 text-xs text-[var(--ink-6)]">+{payout.counterpartyMsisdn}</div>
                 </div>
                 <div className="text-right">
-                  <div className="mono text-base font-extrabold text-green-700">{ghs(payout.amount)}</div>
-                  <div className="text-[10px] text-gray-400">
+                  <div className="serial text-lg font-bold text-[var(--gold-deep)]">{ghs(payout.amount)}</div>
+                  <div className="smallcaps text-[var(--ink-6)]">
                     {payout.provider === 'mock' ? 'mock provider (demo)' : 'primary channel'}
                   </div>
                 </div>
               </div>
             </div>
             <div>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">Transaction Record</p>
+              <p className="rule-double smallcaps mb-2.5 pb-1.5 text-[var(--ink-6)]">Transaction Record</p>
               <div className="flex flex-col gap-1.5">
                 {(
                   [
@@ -123,10 +107,8 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
                   ] as const
                 ).map(([label, value]) => (
                   <div key={label} className="flex items-start justify-between gap-3">
-                    <span className="flex-shrink-0 text-[11px] font-medium text-gray-400">{label}</span>
-                    <span className={`mono text-right text-xs font-semibold ${label === 'Payment ref' ? 'text-[#1B4332]' : 'text-gray-800'}`}>
-                      {value}
-                    </span>
+                    <span className="smallcaps flex-shrink-0 text-[var(--ink-6)]">{label}</span>
+                    <span className="serial text-right text-xs font-semibold text-[var(--ink)]">{value}</span>
                   </div>
                 ))}
               </div>
@@ -177,7 +159,7 @@ export function ContractDetailPage() {
     onError,
   });
 
-  if (!data) return <p className="text-sm text-gray-400">Loading…</p>;
+  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
   const { contract, lot, farmer, commodity, payments, ledger, photos, gradings, match } = data;
   const canPhoto = ['FUNDS_HELD', 'PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state);
   const canGrade = ['PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state) && photos.length > 0;
@@ -186,19 +168,17 @@ export function ContractDetailPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-extrabold text-gray-900">
-          {CROP_EMOJI[commodity.code] ?? '📦'} {contract.quantityKg}kg {commodity.name}
+        <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">
+          {contract.quantityKg}kg {commodity.name}
         </h1>
+        <span className="serial text-sm text-[var(--ink-6)]">№ {lot.lotCode}</span>
         <StateBadge state={contract.state} />
-        <Link to="/contracts" className="ml-auto text-sm font-semibold text-gray-400 hover:text-gray-600">
+        <Link to="/contracts" className="smallcaps ml-auto text-[var(--ink-6)] hover:text-[var(--ink)]">
           ← All contracts
         </Link>
       </div>
       {error && (
-        <p
-          className="mb-4 cursor-pointer rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
-          onClick={() => setError(null)}
-        >
+        <p className="stamp mb-4 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
           {error}
         </p>
       )}
@@ -211,36 +191,26 @@ export function ContractDetailPage() {
           {gradings.length > 0 && (
             <Card title="AI Grading — every grade explains itself">
               {gradings.map((g) => (
-                <div key={g.id} className="mb-4 rounded-xl border border-gray-100 p-3 last:mb-0">
+                <div key={g.id} className="certificate mb-4 bg-[var(--paper)] p-3 last:mb-0">
                   <div className="flex flex-wrap items-center gap-4">
-                    <div
-                      className={`flex h-14 w-14 flex-shrink-0 flex-col items-center justify-center rounded-xl text-white ${
-                        GRADE_TILE[g.gradeBand ?? ''] ?? 'bg-gray-300'
-                      }`}
-                    >
-                      <span className="text-xl font-extrabold leading-none">
-                        {g.gradeBand === 'REJECT' ? 'R' : (g.gradeBand ?? '…')}
-                      </span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest opacity-80">Grade</span>
-                    </div>
+                    <span className="seal-land inline-flex scale-[1.9] px-3 py-3">
+                      <GradeBadge grade={g.gradeBand ?? '…'} />
+                    </span>
                     <div className="min-w-44 flex-1">
                       {g.confidence !== null && (
                         <>
                           <div className="mb-1 flex items-baseline justify-between text-xs">
-                            <span className="font-bold uppercase tracking-wide text-gray-400">Confidence</span>
-                            <span className="mono text-sm font-extrabold text-gray-900">
+                            <span className="smallcaps text-[var(--ink-6)]">Confidence</span>
+                            <span className="serial text-sm font-bold text-[var(--ink)]">
                               {(g.confidence * 100).toFixed(0)}%
                             </span>
                           </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                            <div
-                              className="h-full rounded-full bg-[#1B4332]"
-                              style={{ width: `${Math.round(g.confidence * 100)}%` }}
-                            />
+                          <div className="h-[7px] border border-[var(--ink-3)] bg-[var(--paper-lift)] p-[1.5px]">
+                            <div className="h-full bg-[var(--ink)]" style={{ width: `${Math.round(g.confidence * 100)}%` }} />
                           </div>
                         </>
                       )}
-                      <p className="mono mt-1.5 text-[10px] text-gray-400">
+                      <p className="serial mt-1.5 text-[11px] text-[var(--ink-6)]">
                         attempt {g.attempt} · {g.provider}
                         {g.model ? ` · ${g.model}` : ''} · {dateTime(g.createdAt)}
                       </p>
@@ -255,12 +225,14 @@ export function ContractDetailPage() {
                         <th className={`${thCls} text-right`}>Band</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody>
                       {g.reasons.map((r, i) => (
                         <tr key={i}>
-                          <td className="px-4 py-2 font-semibold text-gray-700">{r.criterion}</td>
-                          <td className="px-4 py-2 text-gray-600">{r.observation}</td>
-                          <td className="px-4 py-2 text-right">
+                          <td className="border-b border-[var(--ink-2)] px-3 py-2 font-semibold text-[var(--ink-7)]">
+                            {r.criterion}
+                          </td>
+                          <td className="border-b border-[var(--ink-2)] px-3 py-2 text-[var(--ink-6)]">{r.observation}</td>
+                          <td className="border-b border-[var(--ink-2)] px-3 py-2 text-right">
                             <GradeBadge grade={r.bandForCriterion} />
                           </td>
                         </tr>
@@ -268,12 +240,15 @@ export function ContractDetailPage() {
                     </tbody>
                   </table>
                   {contract.disputeNote && g.status === 'resolved' && (
-                    <p className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
+                    <p className="stamp mt-3 px-3 py-2 text-[11px] normal-case tracking-normal text-[var(--stamp)]">
                       Farmer dispute: “{contract.disputeNote}”
                     </p>
                   )}
                 </div>
               ))}
+              <p className="text-[11px] text-[var(--ink-6)]">
+                The farmer sees this grade, its payout, and the top reason on her phone — and can dispute it within the window.
+              </p>
             </Card>
           )}
 
@@ -308,7 +283,7 @@ export function ContractDetailPage() {
                     }}
                   />
                   <button className={btnGhostCls} onClick={() => fileRef.current?.click()} disabled={uploadPhoto.isPending}>
-                    {uploadPhoto.isPending ? 'Uploading…' : '📷 Upload photo'}
+                    {uploadPhoto.isPending ? 'Uploading…' : 'Upload photo'}
                   </button>
                   {contract.state === 'FUNDS_HELD' && (
                     <button className={btnCls} onClick={() => confirmPickup.mutate()} disabled={confirmPickup.isPending}>
@@ -317,7 +292,7 @@ export function ContractDetailPage() {
                   )}
                   {canGrade && (
                     <button className={btnCls} onClick={() => runGrading.mutate()} disabled={runGrading.isPending}>
-                      {runGrading.isPending ? 'Grading…' : contract.state === 'DISPUTED' ? '🔬 Run re-grade' : '🔬 Run AI grading'}
+                      {runGrading.isPending ? 'Grading…' : contract.state === 'DISPUTED' ? 'Run re-grade' : 'Run AI grading'}
                     </button>
                   )}
                 </div>
@@ -325,18 +300,14 @@ export function ContractDetailPage() {
             }
           >
             {photos.length === 0 ? (
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-[var(--ink-6)]">
                 No photos yet. {canPhoto ? 'Upload pickup photos — grading needs at least one.' : ''}
               </p>
             ) : (
               <div className="flex flex-wrap gap-3">
                 {photos.map((p) => (
-                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
-                    <img
-                      src={p.url}
-                      alt="pickup"
-                      className="h-24 w-24 rounded-xl border border-gray-100 object-cover shadow-sm transition-shadow hover:shadow-md"
-                    />
+                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="border border-[var(--ink-3)] p-1">
+                    <img src={p.url} alt="pickup" className="h-24 w-24 object-cover" />
                   </a>
                 ))}
               </div>
@@ -351,54 +322,53 @@ export function ContractDetailPage() {
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm font-bold text-gray-900">👨🏾‍🌾 {farmer?.name}</p>
-                    <p className="mono text-[11px] text-gray-500">
+                    <p className="text-sm font-bold text-[var(--ink)]">{farmer?.name}</p>
+                    <p className="serial text-[11px] text-[var(--ink-6)]">
                       {farmer?.phone} · {farmer?.regionCode}
                     </p>
                   </div>
                   <button
-                    className="flex-shrink-0 rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+                    className="flex flex-shrink-0 items-center gap-1.5 rounded-[2px] border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
                     onClick={() => callFarmer.mutate()}
                     disabled={callFarmer.isPending}
                   >
-                    {callFarmer.isSuccess ? '📞 Queued ✓' : '📞 Call'}
+                    <Glyph name="phone" className="h-3 w-3" />
+                    {callFarmer.isSuccess ? 'Queued' : 'Call'}
                   </button>
                 </div>
                 <div className="flex items-baseline justify-between text-sm">
-                  <span className="mono text-xs text-gray-400">{lot.lotCode}</span>
-                  <span className="text-[11px] text-gray-500">
+                  <span className="serial text-xs text-[var(--ink-6)]">{lot.lotCode}</span>
+                  <span className="text-[11px] text-[var(--ink-6)]">
                     declared {lot.declaredBand} · score{' '}
-                    <span className="mono font-bold text-[#D97706]">{match.score.toFixed(2)}</span>
+                    <span className="serial font-bold text-[var(--gold-deep)]">{match.score.toFixed(2)}</span>
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg bg-gray-50 p-2 text-center">
-                    <div className="mono text-sm font-extrabold text-[#1B4332]">{ghs(contract.holdAmount)}</div>
-                    <div className="text-[9px] uppercase tracking-wide text-gray-400">escrow hold</div>
+                  <div className="border border-[var(--ink-2)] bg-[var(--paper)] p-2 text-center">
+                    <div className="serial text-sm font-bold text-[var(--ink)]">{ghs(contract.holdAmount)}</div>
+                    <div className="smallcaps text-[11px] text-[var(--ink-6)]">escrow hold</div>
                   </div>
-                  <div className="rounded-lg bg-gray-50 p-2 text-center">
-                    <div className="mono text-sm font-extrabold text-gray-900">
+                  <div className="border border-[var(--ink-2)] bg-[var(--paper)] p-2 text-center">
+                    <div className="serial text-sm font-bold text-[var(--gold-deep)]">
                       {contract.finalAmount !== null ? ghs(contract.finalAmount) : '—'}
                     </div>
-                    <div className="text-[9px] uppercase tracking-wide text-gray-400">
+                    <div className="smallcaps text-[11px] text-[var(--ink-6)]">
                       {contract.finalGrade ? `final · grade ${contract.finalGrade}` : 'awaiting grade'}
                     </div>
                   </div>
                 </div>
                 <div>
-                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Price per grade (frozen at offer)
-                  </p>
+                  <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">Price per grade (frozen at offer)</p>
                   <div className="flex gap-1.5">
                     {(['A', 'B', 'C', 'REJECT'] as const).map((band) => (
                       <div
                         key={band}
-                        className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg border py-1.5 ${
-                          contract.finalGrade === band ? 'border-[#1B4332] bg-green-50' : 'border-gray-100'
+                        className={`flex flex-1 flex-col items-center gap-1 border py-1.5 ${
+                          contract.finalGrade === band ? 'border-[var(--gold)] bg-[var(--gold-wash)]' : 'border-[var(--ink-2)]'
                         }`}
                       >
                         <GradeBadge grade={band} />
-                        <span className="mono text-[10px] font-semibold text-gray-600">
+                        <span className="serial text-[11px] font-semibold text-[var(--ink-7)]">
                           {(contract.priceTerms[band] / 100).toFixed(2)}
                         </span>
                       </div>
@@ -410,16 +380,16 @@ export function ContractDetailPage() {
 
             <Card title="Traceability QR">
               <div className="flex items-center gap-3">
-                <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg border-2 border-[#1B4332] p-1">
+                <div className="h-24 w-24 flex-shrink-0 border-2 border-[var(--ink)] p-1.5">
                   <QrImage url={publicUrl} />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
-                  <p className="text-[11px] leading-snug text-gray-500">
+                  <p className="text-[11px] leading-snug text-[var(--ink-6)]">
                     Scans to the public, append-only chain of custody — no login, no money details.
                   </p>
                   <div className="flex flex-col gap-1">
                     <button
-                      className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                      className="rounded-[2px] border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
                       onClick={() => {
                         navigator.clipboard.writeText(publicUrl).then(() => {
                           setCopied(true);
@@ -427,19 +397,19 @@ export function ContractDetailPage() {
                         });
                       }}
                     >
-                      {copied ? '✓ Copied' : 'Copy link'}
+                      {copied ? 'Copied' : 'Copy link'}
                     </button>
                     <div className="flex gap-1">
                       <Link
                         to={`/t/${lot.id}`}
                         target="_blank"
-                        className="flex-1 rounded-lg bg-[#1B4332] px-2 py-1 text-center text-[11px] font-bold text-white hover:bg-green-900"
+                        className="flex-1 rounded-[2px] bg-[var(--ink)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--paper)] hover:bg-[var(--ink-8)]"
                       >
-                        Public page ↗
+                        Public page
                       </Link>
                       <Link
                         to={`/lots/${lot.id}/trace`}
-                        className="flex-1 rounded-lg border border-gray-200 px-2 py-1 text-center text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                        className="flex-1 rounded-[2px] border border-[var(--ink-4)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
                       >
                         Full trace
                       </Link>
@@ -451,36 +421,38 @@ export function ContractDetailPage() {
 
             <Card title={`Payments (${payments.length})`}>
               {payments.length === 0 ? (
-                <p className="text-sm text-gray-400">The hold fires when the farmer accepts.</p>
+                <p className="text-sm text-[var(--ink-6)]">The hold fires when the farmer accepts.</p>
               ) : (
-                <div className="space-y-2">
+                <div>
                   {payments.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-gray-800">
+                    <div key={p.id} className="border-b border-[var(--ink-2)] py-2 text-sm last:border-b-0">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="font-semibold text-[var(--ink)]">
                           {p.direction === 'collection' ? 'Hold (buyer)' : p.jobId ? 'Driver payout' : 'Farmer payout'}
                         </p>
-                        <p className="mono text-[10px] text-gray-400">{dateTime(p.createdAt)}</p>
+                        <span className={`${numCls} flex-shrink-0 font-bold text-[var(--gold-deep)]`}>{ghs(p.amount)}</span>
                       </div>
-                      <span className={`${numCls} flex-shrink-0 font-bold text-[#1B4332]`}>{ghs(p.amount)}</span>
-                      <StateBadge state={p.status} />
+                      <div className="mt-0.5 flex items-center justify-between gap-2">
+                        <p className="serial text-[11px] text-[var(--ink-6)]">{dateTime(p.createdAt)}</p>
+                        <StateBadge state={p.status} />
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
               {ledger.length > 0 && (
-                <details className="mt-3 border-t border-gray-100 pt-2">
-                  <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600">
+                <details className="mt-3 border-t border-[var(--ink-2)] pt-2">
+                  <summary className="smallcaps cursor-pointer text-[var(--ink-6)] hover:text-[var(--ink)]">
                     Ledger — every journal sums to zero
                   </summary>
-                  <div className="mt-2 overflow-hidden rounded-lg border border-gray-100">
-                    <table className="w-full text-left text-[10px]">
-                      <tbody className="divide-y divide-gray-50">
+                  <div className="mt-2 border border-[var(--ink-2)]">
+                    <table className="w-full text-left text-[11px]">
+                      <tbody>
                         {ledger.map((l) => (
-                          <tr key={l.id}>
-                            <td className="mono max-w-32 truncate px-2 py-1 text-gray-700">{l.account}</td>
-                            <td className="mono px-2 py-1 text-right text-red-600">{l.debit ? `DR ${ghs(l.debit)}` : ''}</td>
-                            <td className="mono px-2 py-1 text-right text-green-700">{l.credit ? `CR ${ghs(l.credit)}` : ''}</td>
+                          <tr key={l.id} className="border-b border-[var(--ink-2)] last:border-b-0">
+                            <td className="serial max-w-32 truncate px-2 py-1 text-[var(--ink-7)]">{l.account}</td>
+                            <td className="serial px-2 py-1 text-right text-[var(--stamp)]">{l.debit ? `DR ${ghs(l.debit)}` : ''}</td>
+                            <td className="serial px-2 py-1 text-right text-[var(--ink)]">{l.credit ? `CR ${ghs(l.credit)}` : ''}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -552,17 +524,20 @@ function TransportSection({
   return (
     <Card title="Transport — the middle-mile bridge">
       {job && !['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state) ? (
-        <div className="flex flex-wrap items-center gap-5 rounded-xl border border-gray-100 bg-gray-50 p-3">
-          <span className="mono text-sm font-extrabold text-gray-900">{job.jobCode}</span>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border border-[var(--ink-2)] bg-[var(--paper)] p-3">
+          <span className="serial text-sm font-bold text-[var(--ink)]">{job.jobCode}</span>
           <StateBadge state={job.state} />
-          <Stat value={job.vehicleClassName} caption="vehicle" />
-          <Stat value={`${job.distanceKm}km`} caption="distance" />
-          <Stat value={ghs(job.quoteAmount)} caption="escrowed fee" accent />
+          <span className="flex items-center gap-2 text-sm text-[var(--ink-7)]">
+            <VehicleMark code={job.vehicleClassCode} className="h-6 w-6" />
+            {job.vehicleClassName}
+          </span>
+          <span className="serial text-sm text-[var(--ink-7)]">{job.distanceKm} km</span>
+          <span className="serial text-sm font-bold text-[var(--gold-deep)]">{ghs(job.quoteAmount)}</span>
           {job.driver && (
-            <div className="text-sm">
-              <p className="font-bold text-gray-900">🧑🏾‍✈️ {job.driver.name}</p>
-              <p className="mono text-[10px] text-gray-400">{job.driver.phone}</p>
-            </div>
+            <span className="text-sm">
+              <span className="font-bold text-[var(--ink)]">{job.driver.name}</span>{' '}
+              <span className="serial text-[11px] text-[var(--ink-6)]">{job.driver.phone}</span>
+            </span>
           )}
           <div className="ml-auto">
             {job.state === 'NO_DRIVER' && (
@@ -572,70 +547,67 @@ function TransportSection({
             )}
             {job.state === 'PICKED_UP' && (
               <button className={btnCls} onClick={() => deliver.mutate(job.id)} disabled={deliver.isPending}>
-                ✓ Confirm delivery received
+                Confirm delivery received
               </button>
             )}
             {job.state === 'DELIVERED' && (
-              <span className="text-sm font-semibold text-gray-500">Driver payout on the way…</span>
+              <span className="text-sm font-semibold text-[var(--ink-6)]">Driver payout on the way…</span>
             )}
-            {job.state === 'PAID' && <span className="text-sm font-bold text-green-700">Driver paid ✓</span>}
+            {job.state === 'PAID' && <span className="text-sm font-bold text-[var(--ink)]">Driver paid</span>}
           </div>
         </div>
       ) : canRequest && quoteData ? (
         <div>
           {farmerSuggested && (
-            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
-              <span className="pulse-dot inline-block h-2 w-2 rounded-full bg-amber-500" />
-              <p className="text-sm font-semibold text-amber-900">
-                {farmerName} has asked for a driver — approve by requesting one below; the fee escrows from your
-                account.
+            <div className="mb-3 flex flex-wrap items-center gap-2 border border-[var(--gold)] bg-[var(--gold-wash)] px-3 py-2.5">
+              <span className="ember inline-block h-2 w-2 rounded-full bg-[var(--gold-deep)]" />
+              <p className="text-sm font-semibold text-[var(--ink)]">
+                {farmerName} has asked for a driver — approve by requesting one below; the fee escrows from your account.
               </p>
             </div>
           )}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-[var(--ink-6)]">
               Instant quotes for every vehicle that fits the load. The fee is held in escrow when a driver accepts and
               released on your delivery confirmation.
             </p>
             <button
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-600 transition-colors hover:bg-gray-50"
+              className="rounded-[2px] border border-[var(--ink-4)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
               onClick={() => setShowDrivers((v) => !v)}
             >
-              {showDrivers ? 'Hide drivers' : '🧑🏾‍✈️ Choose a driver'}
+              {showDrivers ? 'Hide drivers' : 'Choose a driver'}
             </button>
           </div>
           {showDrivers && (
-            <div className="mb-3 space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div className="mb-3 space-y-2 border border-[var(--ink-2)] bg-[var(--paper)] p-3">
               {!driverData ? (
-                <p className="text-sm text-gray-400">Loading drivers…</p>
+                <p className="text-sm text-[var(--ink-6)]">Loading drivers…</p>
               ) : driverData.drivers.length === 0 ? (
-                <p className="text-sm text-gray-400">No drivers are online right now — auto-dispatch below still works.</p>
+                <p className="text-sm text-[var(--ink-6)]">No drivers are online right now — auto-dispatch below still works.</p>
               ) : (
                 driverData.drivers.map((d) => (
-                  <div key={d.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-white p-2.5 shadow-sm">
-                    <span className="text-xl">{VEHICLE_EMOJI[d.vehicleClassCode] ?? '🚚'}</span>
+                  <div key={d.id} className="flex flex-wrap items-center gap-3 border-b border-[var(--ink-2)] pb-2 last:border-b-0 last:pb-0">
+                    <VehicleMark code={d.vehicleClassCode} className="h-7 w-7 text-[var(--ink)]" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-gray-900">
+                      <p className="text-sm font-bold text-[var(--ink)]">
                         {d.name}
-                        {d.busy && (
-                          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-bold uppercase text-gray-500">
-                            on a job
-                          </span>
-                        )}
+                        {d.busy && <span className="stamp ml-2 px-1.5 py-0.5 text-[11px] text-[var(--ink-6)]">on a job</span>}
                       </p>
-                      <p className="text-[11px] text-gray-500">
+                      <p className="text-[11px] text-[var(--ink-6)]">
                         {d.vehicleClassName} · ≤{d.capacityKg}kg ·{' '}
-                        {d.routeRegions.length ? `${d.routeRegions.length} route region${d.routeRegions.length > 1 ? 's' : ''}` : 'serves anywhere'}
+                        {d.routeRegions.length
+                          ? `${d.routeRegions.length} route region${d.routeRegions.length > 1 ? 's' : ''}`
+                          : 'serves anywhere'}
                       </p>
                     </div>
                     <a
                       href={`tel:${d.phone}`}
-                      className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                      className="flex items-center gap-1 rounded-[2px] border border-[var(--ink-4)] px-2.5 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
                     >
-                      📞 Call
+                      <Glyph name="phone" className="h-3 w-3" /> Call
                     </a>
                     <button
-                      className="rounded-lg bg-[#1B4332] px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-[2px] bg-[var(--ink)] px-3 py-1 text-xs font-semibold text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={d.busy || request.isPending}
                       onClick={() => request.mutate({ preferredDriverId: d.id })}
                     >
@@ -644,7 +616,7 @@ function TransportSection({
                   </div>
                 ))
               )}
-              <p className="text-[10px] text-gray-400">
+              <p className="text-[11px] text-[var(--ink-6)]">
                 Hiring offers the job to your chosen driver first at their vehicle's rate — if they decline, dispatch
                 falls back to nearest-first.
               </p>
@@ -661,24 +633,22 @@ function TransportSection({
                 <th className={thCls} />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody>
               {quoteData.quotes.map((q, i) => (
-                <tr key={q.vehicleClassCode} className="hover:bg-gray-50">
-                  <td className={`${tdCls} font-bold text-gray-900`}>
-                    <span className="mr-1.5 text-lg">{VEHICLE_EMOJI[q.vehicleClassCode] ?? '🚚'}</span>
-                    {q.vehicleClassName}
-                    {i === 0 && (
-                      <span className="ml-2 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase text-green-700">
-                        cheapest
-                      </span>
-                    )}
+                <tr key={q.vehicleClassCode} className="hover:bg-[var(--paper)]">
+                  <td className={`${tdCls} font-bold`}>
+                    <span className="flex items-center gap-2">
+                      <VehicleMark code={q.vehicleClassCode} className="h-6 w-6 flex-shrink-0 text-[var(--ink-7)]" />
+                      {q.vehicleClassName}
+                      {i === 0 && <span className="stamp px-1.5 py-0.5 text-[11px] text-[var(--ink)]">cheapest</span>}
+                    </span>
                   </td>
-                  <td className={`${tdCls} ${numCls} text-xs`}>{q.capacityKg}kg</td>
-                  <td className={`${tdCls} ${numCls} text-xs`}>{q.distanceKm}km</td>
-                  <td className={`${tdCls} mono text-[11px] text-gray-500`}>
+                  <td className={`${tdCls} ${numCls} text-xs`}>{q.capacityKg} kg</td>
+                  <td className={`${tdCls} ${numCls} text-xs`}>{q.distanceKm} km</td>
+                  <td className={`${tdCls} serial text-[11px] text-[var(--ink-6)]`}>
                     {ghs(q.baseFee)} + {ghs(q.perKmRate)}/km
                   </td>
-                  <td className={`${tdCls} mono font-extrabold text-[#D97706]`}>{ghs(q.quoteAmount)}</td>
+                  <td className={`${tdCls} serial font-bold text-[var(--gold-deep)]`}>{ghs(q.quoteAmount)}</td>
                   <td className={`${tdCls} text-right`}>
                     <button
                       className={btnCls}
@@ -694,7 +664,7 @@ function TransportSection({
           </table>
         </div>
       ) : (
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-[var(--ink-6)]">
           {job ? 'Previous transport was cancelled.' : 'No transport requested for this contract.'}
         </p>
       )}

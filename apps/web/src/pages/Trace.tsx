@@ -1,109 +1,69 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { api, dateTime, type TraceEvent } from '../api';
+import { RouteSpine } from '../components/engrave';
 import { Card } from '../components/ui';
 
-const EVENT_STYLE: Record<string, { dot: string; label: string; icon?: string }> = {
-  LOT_REGISTERED: { dot: 'bg-green-600', label: 'Lot registered', icon: '🌱' },
-  MATCHED: { dot: 'bg-sky-500', label: 'Matched to demand', icon: '🤝' },
-  CONTRACT_OFFERED: { dot: 'bg-amber-500', label: 'Contract offered', icon: '📄' },
-  CONTRACT_ACCEPTED: { dot: 'bg-green-600', label: 'Farmer accepted', icon: '✅' },
-  CONTRACT_DECLINED: { dot: 'bg-gray-400', label: 'Farmer declined' },
-  OFFER_EXPIRED: { dot: 'bg-gray-400', label: 'Offer expired' },
-  FUNDING_FAILED: { dot: 'bg-red-500', label: 'Funding failed' },
-  FUNDS_HELD: { dot: 'bg-indigo-600', label: 'Buyer funds held in escrow', icon: '🔒' },
-  PICKUP_CONFIRMED: { dot: 'bg-violet-600', label: 'Pickup confirmed', icon: '📦' },
-  PHOTO_ADDED: { dot: 'bg-gray-500', label: 'Pickup photo added', icon: '📷' },
-  GRADED: { dot: 'bg-teal-600', label: 'AI graded', icon: '🔬' },
-  DISPUTE_OPENED: { dot: 'bg-orange-500', label: 'Farmer disputed the grade', icon: '⚠️' },
-  DISPUTE_RESOLVED: { dot: 'bg-teal-600', label: 'Dispute resolved' },
-  PAYMENT_RELEASED: { dot: 'bg-green-600', label: 'Payment released', icon: '💸' },
-  REFUNDED: { dot: 'bg-red-500', label: 'Hold refunded to buyer' },
-  CANCELLED: { dot: 'bg-red-500', label: 'Cancelled' },
-  SETTLED: { dot: 'bg-green-700', label: 'Settled — farmer paid', icon: '🏁' },
-  TRANSPORT_SUGGESTED: { dot: 'bg-amber-500', label: 'Farmer requested a driver', icon: '🙋🏾' },
-  TRANSPORT_REQUESTED: { dot: 'bg-sky-500', label: 'Transport requested', icon: '🚚' },
-  DRIVER_ASSIGNED: { dot: 'bg-sky-600', label: 'Driver assigned', icon: '🧑🏾‍✈️' },
-  TRANSPORT_FUNDED: { dot: 'bg-indigo-600', label: 'Transport fee held in escrow', icon: '🔒' },
-  IN_TRANSIT: { dot: 'bg-violet-600', label: 'In transit — driver picked up', icon: '🛣️' },
-  TRANSPORT_DELIVERED: { dot: 'bg-teal-600', label: 'Delivered — buyer confirmed receipt', icon: '📍' },
-  DRIVER_PAID: { dot: 'bg-green-600', label: 'Driver paid', icon: '💸' },
-  TRANSPORT_CANCELLED: { dot: 'bg-red-500', label: 'Transport cancelled' },
-  VOICE_CALL: { dot: 'bg-gray-500', label: 'Voice call', icon: '📞' },
+// Tones: ink = money/completion truth, gold = movement and matches,
+// red = refusals and failures, faded = the quiet clerical entries.
+const EVENT_STYLE: Record<string, { tone: 'ink' | 'gold' | 'red' | 'faded'; label: string }> = {
+  LOT_REGISTERED: { tone: 'ink', label: 'Lot registered' },
+  MATCHED: { tone: 'gold', label: 'Matched to demand' },
+  CONTRACT_OFFERED: { tone: 'gold', label: 'Contract offered' },
+  CONTRACT_ACCEPTED: { tone: 'ink', label: 'Farmer accepted' },
+  CONTRACT_DECLINED: { tone: 'faded', label: 'Farmer declined' },
+  OFFER_EXPIRED: { tone: 'faded', label: 'Offer expired' },
+  FUNDING_FAILED: { tone: 'red', label: 'Funding failed' },
+  FUNDS_HELD: { tone: 'ink', label: 'Buyer funds held in escrow' },
+  PICKUP_CONFIRMED: { tone: 'gold', label: 'Pickup confirmed' },
+  PHOTO_ADDED: { tone: 'faded', label: 'Photo added' },
+  GRADED: { tone: 'ink', label: 'AI graded' },
+  DISPUTE_OPENED: { tone: 'red', label: 'Farmer disputed the grade' },
+  DISPUTE_RESOLVED: { tone: 'ink', label: 'Dispute resolved' },
+  PAYMENT_RELEASED: { tone: 'ink', label: 'Payment released' },
+  REFUNDED: { tone: 'red', label: 'Hold refunded to buyer' },
+  CANCELLED: { tone: 'red', label: 'Cancelled' },
+  SETTLED: { tone: 'ink', label: 'Settled — farmer paid' },
+  TRANSPORT_SUGGESTED: { tone: 'gold', label: 'Farmer requested a driver' },
+  TRANSPORT_REQUESTED: { tone: 'gold', label: 'Transport requested' },
+  DRIVER_ASSIGNED: { tone: 'gold', label: 'Driver assigned' },
+  TRANSPORT_FUNDED: { tone: 'ink', label: 'Transport fee held in escrow' },
+  IN_TRANSIT: { tone: 'gold', label: 'In transit — driver picked up' },
+  TRANSPORT_DELIVERED: { tone: 'ink', label: 'Delivered — buyer confirmed receipt' },
+  DRIVER_PAID: { tone: 'ink', label: 'Driver paid' },
+  TRANSPORT_CANCELLED: { tone: 'red', label: 'Transport cancelled' },
+  VOICE_CALL: { tone: 'faded', label: 'Voice call' },
 };
 
-// The six-step spine, each step lit by the trace events that prove it happened.
-const SPINE: { label: string; icon: string; doneWhen: string[] }[] = [
-  { label: 'Register', icon: '🌱', doneWhen: ['LOT_REGISTERED'] },
-  { label: 'Match', icon: '🤝', doneWhen: ['MATCHED'] },
-  { label: 'Contract', icon: '📄', doneWhen: ['CONTRACT_ACCEPTED', 'FUNDS_HELD'] },
-  { label: 'Grade', icon: '🔬', doneWhen: ['GRADED'] },
-  { label: 'Pay', icon: '💸', doneWhen: ['PAYMENT_RELEASED', 'SETTLED'] },
-  { label: 'Trace', icon: '🔗', doneWhen: ['SETTLED'] },
-];
+const TONE_DOT: Record<'ink' | 'gold' | 'red' | 'faded', string> = {
+  ink: 'bg-[var(--ink)]',
+  gold: 'bg-[var(--gold)]',
+  red: 'bg-[var(--stamp)]',
+  faded: 'bg-[var(--ink-3)]',
+};
 
-/** The six-step transaction-spine stepper — shared by the portal and public trace pages. */
+/** The six-station engraved route — shared by the portal and public trace pages. */
 export function SpineStepper({ events }: { events: TraceEvent[] }) {
-  const seen = new Set(events.map((e) => e.type));
-  const doneFlags = SPINE.map((s) => s.doneWhen.some((t) => seen.has(t)));
-  const activeIdx = doneFlags.findIndex((d) => !d);
-  return (
-    <div className="flex items-center overflow-x-auto pb-1">
-      {SPINE.map((step, i) => {
-        const done = doneFlags[i];
-        const active = i === activeIdx;
-        return (
-          <div key={step.label} className="flex flex-1 items-center" style={{ minWidth: 90 }}>
-            <div className="flex flex-1 flex-col items-center gap-1.5">
-              <div
-                className={`flex h-11 w-11 items-center justify-center rounded-full border-2 text-lg transition-colors ${
-                  done
-                    ? 'border-[#1B4332] bg-[#1B4332]'
-                    : active
-                      ? 'step-active border-[#D97706] bg-amber-50'
-                      : 'border-gray-200 bg-white grayscale'
-                }`}
-              >
-                {done ? <span className="text-sm font-extrabold text-white">✓</span> : step.icon}
-              </div>
-              <span
-                className={`text-[10px] font-bold uppercase tracking-wide ${
-                  done ? 'text-[#1B4332]' : active ? 'text-[#D97706]' : 'text-gray-300'
-                }`}
-              >
-                {step.label}
-              </span>
-            </div>
-            {i < SPINE.length - 1 && (
-              <div className={`h-0.5 flex-1 -translate-y-2.5 ${done ? 'bg-[#1B4332]' : 'bg-gray-200'}`} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <RouteSpine eventTypes={events.map((e) => e.type)} />;
 }
 
-/** The append-only event list — shared by the portal and public trace pages. */
+/** The append-only entry ledger — shared by the portal and public trace pages. */
 export function TraceEventLog({ events }: { events: TraceEvent[] }) {
   return (
-    <ol className="relative ml-3 border-l-2 border-gray-100">
+    <ol className="relative ml-1.5 border-l border-[var(--ink-2)]">
       {events.map((e) => {
-        const style = EVENT_STYLE[e.type] ?? { dot: 'bg-gray-400', label: e.type };
+        const style = EVENT_STYLE[e.type] ?? { tone: 'faded' as const, label: e.type };
         return (
-          <li key={e.id} className="mb-5 ml-5 last:mb-1">
-            <span className={`absolute -left-[7px] mt-1.5 h-3 w-3 rounded-full ${style.dot}`} />
+          <li key={e.id} className="mb-4 ml-5 last:mb-1">
+            <span className={`absolute -left-[5px] mt-1.5 h-[9px] w-[9px] rounded-full border-2 border-[var(--paper-lift)] ${TONE_DOT[style.tone]}`} />
             <div className="flex flex-wrap items-baseline gap-2">
-              <p className="text-sm font-bold text-gray-900">
-                {style.icon && <span className="mr-1">{style.icon}</span>}
-                {style.label}
-              </p>
-              <span className="mono text-[10px] text-gray-400">
-                #{e.seq} · {e.actorType} · {dateTime(e.createdAt)}
+              <p className="text-sm font-bold text-[var(--ink)]">{style.label}</p>
+              <span className="serial text-[11px] text-[var(--ink-6)]">
+                №{e.seq} · {e.actorType} · {dateTime(e.createdAt)}
               </span>
             </div>
             {e.payload && (
-              <p className="mono mt-0.5 max-w-2xl text-[11px] text-gray-500">
+              <p className="serial mt-0.5 max-w-2xl text-[11px] text-[var(--ink-6)]">
                 {Object.entries(e.payload)
                   .filter(([k, v]) => v !== null && typeof v !== 'object' && k !== 'contractId')
                   .map(([k, v]) => `${k}: ${String(v)}`)
@@ -124,12 +84,12 @@ export function TracePage() {
     queryFn: () => api<{ events: TraceEvent[] }>(`/api/lots/${id}/trace`),
     refetchInterval: 5000,
   });
-  if (!data) return <p className="text-sm text-gray-400">Loading…</p>;
+  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
 
   return (
     <div>
-      <h1 className="text-xl font-extrabold text-gray-900">Lot Trace</h1>
-      <p className="mb-5 mt-0.5 text-sm text-gray-500">
+      <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">Lot Trace</h1>
+      <p className="mb-4 mt-1 text-sm text-[var(--ink-6)]">
         The append-only record this lot carries from farm to buyer. Nothing here can be edited or deleted.
       </p>
 
@@ -137,7 +97,7 @@ export function TracePage() {
         <SpineStepper events={data.events} />
       </Card>
 
-      <Card title={`Event Log (${data.events.length})`}>
+      <Card title={`Entry Ledger (${data.events.length})`}>
         <TraceEventLog events={data.events} />
       </Card>
     </div>

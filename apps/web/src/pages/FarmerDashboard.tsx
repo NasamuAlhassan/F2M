@@ -2,20 +2,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type FarmerDashboard, type Registries } from '../api';
-import { btnCls, btnGhostCls, CROP_EMOJI, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { CropMark, Glyph } from '../components/engrave';
+import { btnCls, btnGhostCls, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
 interface PriceRow {
   commodityCode: string;
   pricePerKg: number;
 }
 
-// The picker's "No file chosen" text (gray, on white) and its button
-// pseudo-element (brand green chip) are separate surfaces.
+// The picker's "No file chosen" text and its button pseudo-element are
+// separate surfaces; the button is an ink chip on paper.
 const filePickerCls =
-  'block w-full text-xs text-gray-500 ' +
-  'file:mr-2 file:rounded-lg file:border-0 file:bg-green-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[#1B4332] hover:file:bg-green-100';
+  'block w-full text-xs text-[var(--ink-6)] ' +
+  'file:mr-2 file:rounded-[2px] file:border-0 file:bg-[var(--ink)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--paper)] hover:file:bg-[var(--ink-8)]';
 
-/** Frame 07's sidebar: "List a New Lot". Same registerLot the USSD tree calls. */
+/** The manifest desk: "List a New Lot". Same registerLot the USSD tree calls. */
 function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoMsisdn: string }) {
   const queryClient = useQueryClient();
   const { data: priceData } = useQuery({
@@ -74,11 +75,12 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
 
   return (
     <aside className="w-full flex-shrink-0 lg:w-72">
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-        <div className="bg-[#1B4332] px-5 py-4">
-          <div className="text-base font-extrabold text-white">List a New Lot</div>
-          <div className="mt-0.5 text-[11px] text-green-300">Add your produce to the marketplace</div>
+      <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
+        <div className="plate px-5 py-4">
+          <div className="display text-base font-semibold tracking-[0.08em]">LIST A NEW LOT</div>
+          <div className="smallcaps mt-0.5 text-[var(--ink-3)]">add your produce to the marketplace</div>
         </div>
+        <div className="guilloche h-[10px] w-full bg-[var(--ink)] opacity-90" />
         <div className="flex flex-col gap-4 p-5">
           <Field label="Crop">
             <select
@@ -91,33 +93,28 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
             >
               {registries.commodities.map((c) => (
                 <option key={c.code} value={c.code}>
-                  {CROP_EMOJI[c.code] ?? ''} {c.name}
+                  {c.name}
                 </option>
               ))}
             </select>
           </Field>
           <Field label="Declared Grade">
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2 py-1">
               {(['A', 'B', 'C'] as const).map((g) => (
                 <button
                   key={g}
                   type="button"
                   onClick={() => setDeclaredBand(g)}
-                  className={`flex-1 rounded-lg border-2 py-1.5 text-sm font-bold transition-colors ${
-                    declaredBand === g
-                      ? g === 'A'
-                        ? 'border-green-700 bg-green-700 text-white'
-                        : g === 'B'
-                          ? 'border-amber-600 bg-amber-600 text-white'
-                          : 'border-red-600 bg-red-600 text-white'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-400'
+                  className={`flex flex-1 items-center justify-center py-1 transition-opacity ${
+                    declaredBand === g ? '' : 'opacity-30 hover:opacity-60'
                   }`}
+                  aria-pressed={declaredBand === g}
                 >
-                  {g}
+                  <GradeBadge grade={g} />
                 </button>
               ))}
             </div>
-            <span className="mt-1 block text-[10px] text-gray-400">Soft signal — the AI grade at pickup decides the payout</span>
+            <span className="block text-[11px] text-[var(--ink-6)]">Soft signal — the AI grade at pickup decides the payout</span>
           </Field>
           <Field label="Quantity">
             <div className="flex gap-2">
@@ -130,11 +127,11 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
                 ))}
               </select>
             </div>
-            <span className="mono mt-1 block text-[10px] text-gray-400">= {kg} kg</span>
+            <span className="serial mt-1 block text-[11px] text-[var(--ink-6)]">= {kg} kg</span>
           </Field>
           <Field label={`Ask Price (GHS / ${activeUnit?.name ?? 'unit'}) — optional`}>
             <input
-              className={inputCls}
+              className={`${inputCls} serial`}
               type="number"
               min="0"
               step="0.5"
@@ -144,11 +141,11 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
             />
             {fair !== null && (
               <span
-                className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  fair ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'
+                className={`stamp mt-1.5 inline-block px-1.5 py-0.5 text-[11px] ${
+                  fair ? 'text-[var(--ink)]' : 'text-[var(--gold-deep)]'
                 }`}
               >
-                {fair ? '✓ Fair Price — at or near the market reference' : '▲ Above the market reference — may match slower'}
+                {fair ? 'Fair price — near the market reference' : 'Above the market reference — may match slower'}
               </span>
             )}
           </Field>
@@ -161,29 +158,22 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
               onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 3))}
             />
             {files.length > 0 && (
-              <span className="mt-1 block text-[10px] font-semibold text-green-700">
-                {files.length} photo{files.length > 1 ? 's' : ''} ready — buyers see them on your card
+              <span className="mt-1 block text-[11px] font-semibold text-[var(--ink)]">
+                {files.length} photo{files.length > 1 ? 's' : ''} ready — buyers see them on your certificate
               </span>
             )}
           </Field>
           <Field label="MoMo Payout Number">
-            <input className={`${inputCls} mono bg-gray-50 text-gray-500`} value={`+${momoMsisdn}`} readOnly />
-            <span className="mt-1 block text-[10px] text-gray-400">Set at USSD registration — payouts land here</span>
+            <input className={`${inputCls} serial bg-[var(--paper-deep)] text-[var(--ink-6)]`} value={`+${momoMsisdn}`} readOnly />
+            <span className="mt-1 block text-[11px] text-[var(--ink-6)]">Set at USSD registration — payouts land here</span>
           </Field>
           {error && (
-            <p
-              className="cursor-pointer rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700"
-              onClick={() => setError(null)}
-            >
+            <p className="stamp cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
               {error}
             </p>
           )}
-          <button
-            className={`${btnCls} w-full py-2.5 ${done ? '!bg-green-600' : ''}`}
-            onClick={() => list.mutate()}
-            disabled={list.isPending}
-          >
-            {done ? '✓ Lot Listed!' : list.isPending ? 'Listing…' : 'List Lot'}
+          <button className={`${btnCls} w-full py-2.5`} onClick={() => list.mutate()} disabled={list.isPending}>
+            {done ? 'Lot listed ✓' : list.isPending ? 'Listing…' : 'List Lot'}
           </button>
         </div>
       </div>
@@ -220,7 +210,7 @@ export function FarmerDashboardPage() {
     onError,
   });
 
-  if (!data || !registries) return <p className="text-sm text-gray-400">Loading…</p>;
+  if (!data || !registries) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
   const { stats, offers, contracts, lots, payouts, profile } = data;
 
   return (
@@ -229,62 +219,59 @@ export function FarmerDashboardPage() {
 
       <div className="min-w-0 flex-1">
         {error && (
-          <p
-            className="mb-4 cursor-pointer rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
-            onClick={() => setError(null)}
-          >
+          <p className="stamp mb-4 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
             {error}
           </p>
         )}
 
-        {/* KPI row */}
-        <div className="mb-6 grid grid-cols-3 gap-4">
-          <div className="rounded-xl border border-green-100 bg-white p-4 shadow-sm">
-            <div className="text-2xl font-extrabold text-gray-900">{stats.activeListings}</div>
-            <div className="text-xs font-medium text-gray-500">Active Listings</div>
+        {/* Standing figures */}
+        <div className="mb-4 grid grid-cols-3 gap-4">
+          <div className="certificate bg-[var(--paper-lift)] p-4">
+            <div className="serial text-2xl font-bold text-[var(--ink)]">{stats.activeListings}</div>
+            <div className="smallcaps text-[var(--ink-6)]">Active Listings</div>
           </div>
-          <div className="rounded-xl border border-amber-100 bg-white p-4 shadow-sm">
-            <div className="text-2xl font-extrabold text-gray-900">{stats.matchedContracts}</div>
-            <div className="text-xs font-medium text-gray-500">Live Contracts</div>
+          <div className="certificate bg-[var(--paper-lift)] p-4">
+            <div className="serial text-2xl font-bold text-[var(--ink)]">{stats.matchedContracts}</div>
+            <div className="smallcaps text-[var(--ink-6)]">Live Contracts</div>
           </div>
-          <div className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-            <div className="mono text-2xl font-extrabold text-gray-900">{ghs(stats.totalEarned)}</div>
-            <div className="text-xs font-medium text-gray-500">Total Earned</div>
+          <div className="certificate bg-[var(--paper-lift)] p-4">
+            <div className="serial text-2xl font-bold text-[var(--gold-deep)]">{ghs(stats.totalEarned)}</div>
+            <div className="smallcaps text-[var(--ink-6)]">Total Earned</div>
           </div>
         </div>
 
-        {/* Incoming bids = OFFERED contracts, accept/decline via the same domain calls as USSD */}
-        <h2 className="mb-3 flex items-center gap-2 text-base font-extrabold text-gray-900">
+        {/* Incoming bids = OFFERED contracts, the same domain calls as USSD */}
+        <h2 className="rule-double mb-3 flex items-center gap-2 pb-1.5 text-base font-bold text-[var(--ink)]">
           Incoming Bids
-          {offers.length > 0 && <span className="pulse-dot h-2 w-2 rounded-full bg-amber-500" />}
+          {offers.length > 0 && <span className="ember h-2 w-2 rounded-full bg-[var(--gold)]" />}
         </h2>
-        <div className="mb-6 flex flex-col gap-2">
+        <div className="mb-5 flex flex-col gap-2">
           {offers.length === 0 ? (
-            <p className="rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-400 shadow-sm">
+            <p className="certificate bg-[var(--paper-lift)] p-4 text-sm text-[var(--ink-6)]">
               No open bids. When a buyer's demand matches your lot, the offer appears here — and on your phone by SMS
               and voice call.
             </p>
           ) : (
             offers.map((o) => (
-              <div key={o.id} className="slide-in flex flex-wrap items-center gap-4 rounded-xl border border-amber-200 bg-white p-4 shadow-sm">
+              <div key={o.id} className="certificate seal-land flex flex-wrap items-center gap-4 bg-[var(--gold-wash)] p-4">
                 <div className="min-w-44 flex-1">
-                  <div className="text-sm font-bold text-gray-900">{o.buyerName}</div>
-                  <div className="mt-0.5 text-xs text-gray-500">
-                    {CROP_EMOJI[o.commodityCode] ?? ''} {o.quantityKg}kg {o.commodityName} · up to{' '}
-                    <span className="mono font-bold">{ghs(o.bestPricePerKg)}/kg</span>
+                  <div className="text-sm font-bold text-[var(--ink)]">{o.buyerName}</div>
+                  <div className="mt-0.5 text-xs text-[var(--ink-6)]">
+                    {o.quantityKg}kg {o.commodityName} · up to{' '}
+                    <span className="serial font-bold">{ghs(o.bestPricePerKg)}/kg</span>
                     {o.expiresAt && <> · expires {shortDate(o.expiresAt)}</>}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="mono text-lg font-extrabold text-[#1B4332]">{ghs(o.holdAmount)}</div>
-                  <div className="text-[10px] text-gray-400">held in escrow on accept</div>
+                  <div className="serial text-lg font-bold text-[var(--gold-deep)]">{ghs(o.holdAmount)}</div>
+                  <div className="smallcaps text-[var(--ink-6)]">held in escrow on accept</div>
                 </div>
                 <div className="flex flex-shrink-0 gap-2">
                   <button className={btnGhostCls} onClick={() => decline.mutate(o.id)} disabled={decline.isPending}>
                     Decline
                   </button>
                   <button className={btnCls} onClick={() => accept.mutate(o.id)} disabled={accept.isPending}>
-                    {accept.isPending ? 'Accepting…' : '✓ Accept'}
+                    {accept.isPending ? 'Accepting…' : 'Accept'}
                   </button>
                 </div>
               </div>
@@ -295,42 +282,43 @@ export function FarmerDashboardPage() {
         {/* Live contracts */}
         {contracts.length > 0 && (
           <>
-            <h2 className="mb-3 text-base font-extrabold text-gray-900">My Contracts</h2>
-            <div className="mb-6 flex flex-col gap-2">
+            <h2 className="rule-double mb-3 pb-1.5 text-base font-bold text-[var(--ink)]">My Contracts</h2>
+            <div className="mb-5 flex flex-col gap-2">
               {contracts.map((c) => (
-                <div key={c.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                <div key={c.id} className="certificate flex flex-wrap items-center gap-4 bg-[var(--paper-lift)] p-4">
                   <div className="min-w-44 flex-1">
-                    <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                      {CROP_EMOJI[c.commodityCode] ?? ''} {c.quantityKg}kg {c.commodityName}
+                    <div className="flex items-center gap-2 text-sm font-bold text-[var(--ink)]">
+                      <CropMark code={c.commodityCode} className="h-5 w-5 text-[var(--ink-7)]" />
+                      {c.quantityKg}kg {c.commodityName}
                       {c.finalGrade && <GradeBadge grade={c.finalGrade} />}
                       <StateBadge state={c.state} />
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500">
+                    <div className="mt-0.5 text-xs text-[var(--ink-6)]">
                       {c.buyerName} · {shortDate(c.createdAt)}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="mono text-lg font-extrabold text-[#1B4332]">
+                    <div className="serial text-lg font-bold text-[var(--gold-deep)]">
                       {c.finalAmount !== null ? ghs(c.finalAmount) : ghs(c.holdAmount)}
                     </div>
-                    <div className="text-[10px] text-gray-400">{c.finalAmount !== null ? 'final payout' : 'escrow hold'}</div>
+                    <div className="smallcaps text-[var(--ink-6)]">{c.finalAmount !== null ? 'final payout' : 'escrow hold'}</div>
                   </div>
                   {c.state === 'FUNDS_HELD' && (
                     <button
-                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                      className={`rounded-[2px] px-3 py-1.5 text-xs font-semibold transition-colors ${
                         suggested.has(c.id)
-                          ? 'bg-green-50 text-green-700'
-                          : 'border border-[#1B4332] text-[#1B4332] hover:bg-green-50'
+                          ? 'bg-[var(--gold-wash)] text-[var(--ink)]'
+                          : 'border border-[var(--ink-5)] text-[var(--ink)] hover:bg-[var(--paper-deep)]'
                       }`}
                       disabled={suggested.has(c.id) || suggest.isPending}
                       onClick={() => suggest.mutate(c.id)}
                       title="Ask the buyer to send a driver — they approve and the fee escrows from their account"
                     >
-                      {suggested.has(c.id) ? '✓ Buyer asked to approve' : '🚚 Arrange delivery'}
+                      {suggested.has(c.id) ? 'Buyer asked to approve' : 'Arrange delivery'}
                     </button>
                   )}
-                  <Link to={`/t/${c.lotId}`} className="text-xs font-semibold text-[#1B4332] hover:underline">
-                    Trace →
+                  <Link to={`/t/${c.lotId}`} className="text-xs font-semibold text-[var(--gold-deep)] hover:underline">
+                    Trace
                   </Link>
                 </div>
               ))}
@@ -339,71 +327,73 @@ export function FarmerDashboardPage() {
         )}
 
         {/* My listings */}
-        <h2 className="mb-3 text-base font-extrabold text-gray-900">My Active Listings</h2>
-        <div className="mb-6 flex flex-col gap-2">
+        <h2 className="rule-double mb-3 pb-1.5 text-base font-bold text-[var(--ink)]">My Active Listings</h2>
+        <div className="mb-5 flex flex-col gap-2">
           {lots.filter((l) => ['registered', 'matched'].includes(l.status)).length === 0 ? (
-            <p className="rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-400 shadow-sm">
+            <p className="certificate bg-[var(--paper-lift)] p-4 text-sm text-[var(--ink-6)]">
               Nothing listed right now — use the form to put produce on the marketplace.
             </p>
           ) : (
             lots
               .filter((l) => ['registered', 'matched'].includes(l.status))
               .map((l) => (
-                <div key={l.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                <div key={l.id} className="certificate flex flex-wrap items-center gap-4 bg-[var(--paper-lift)] p-4">
                   {l.photoUrl ? (
-                    <img src={l.photoUrl} alt="" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                    <span className="border border-[var(--ink-3)] p-0.5">
+                      <img src={l.photoUrl} alt="" className="h-11 w-11 object-cover" />
+                    </span>
                   ) : (
-                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-green-50 text-xl">
-                      {CROP_EMOJI[l.commodityCode] ?? '📦'}
-                    </div>
+                    <span className="hatch flex h-12 w-12 flex-shrink-0 items-center justify-center border border-[var(--ink-2)]">
+                      <CropMark code={l.commodityCode} className="h-7 w-7 text-[var(--ink-7)]" />
+                    </span>
                   )}
                   <div className="min-w-44 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-900">
-                        {CROP_EMOJI[l.commodityCode] ?? ''} {l.commodityName}
-                      </span>
+                      <span className="text-sm font-bold text-[var(--ink)]">{l.commodityName}</span>
                       <GradeBadge grade={l.declaredBand} />
                       <StateBadge state={l.status} />
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500">
+                    <div className="mt-0.5 text-xs text-[var(--ink-6)]">
                       {l.remainingKg}kg of {l.quantityKg}kg left · {l.bids} bid{l.bids !== 1 ? 's' : ''}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="mono text-lg font-extrabold text-[#1B4332]">
+                    <div className="serial text-lg font-bold text-[var(--gold-deep)]">
                       {l.askingPricePerKg !== null ? ghs(l.askingPricePerKg) : 'market'}
                     </div>
-                    <div className="text-[10px] text-gray-400">{l.askingPricePerKg !== null ? 'ask /kg' : 'reference priced'}</div>
+                    <div className="smallcaps text-[var(--ink-6)]">
+                      {l.askingPricePerKg !== null ? 'ask /kg' : 'reference priced'}
+                    </div>
                   </div>
-                  <span className="mono text-[10px] text-gray-400">{l.lotCode}</span>
+                  <span className="serial text-[11px] text-[var(--ink-6)]">{l.lotCode}</span>
                 </div>
               ))
           )}
         </div>
 
         {/* Payout history */}
-        <h2 className="mb-3 text-base font-extrabold text-gray-900">Payout History</h2>
-        <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+        <h2 className="rule-double mb-3 pb-1.5 text-base font-bold text-[var(--ink)]">Payout History</h2>
+        <div className="certificate overflow-hidden bg-[var(--paper-lift)] p-3">
           {payouts.length === 0 ? (
-            <p className="p-4 text-sm text-gray-400">No payouts yet — they land here (and on your MoMo) at settlement.</p>
+            <p className="p-2 text-sm text-[var(--ink-6)]">No payouts yet — they land here (and on your MoMo) at settlement.</p>
           ) : (
             <table className={tableCls}>
-              <thead className="border-b border-gray-100">
+              <thead>
                 <tr>
-                  <th className={thCls}>Lot</th>
+                  <th className={thCls}>Lot №</th>
                   <th className={thCls}>Amount</th>
                   <th className={thCls}>MoMo</th>
                   <th className={thCls}>Date</th>
                   <th className={thCls}>Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody>
                 {payouts.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className={`${tdCls} mono text-xs font-bold text-gray-700`}>{p.lotCode}</td>
-                    <td className={`${tdCls} ${numCls} font-extrabold text-[#1B4332]`}>{ghs(p.amount)}</td>
-                    <td className={`${tdCls} mono text-xs text-gray-500`}>{p.counterpartyMsisdn}</td>
-                    <td className={`${tdCls} text-xs text-gray-500`}>{shortDate(p.createdAt)}</td>
+                  <tr key={p.id} className="hover:bg-[var(--paper)]">
+                    <td className={`${tdCls} serial text-xs font-bold`}>{p.lotCode}</td>
+                    <td className={`${tdCls} ${numCls} font-bold text-[var(--gold-deep)]`}>{ghs(p.amount)}</td>
+                    <td className={`${tdCls} serial text-xs text-[var(--ink-6)]`}>{p.counterpartyMsisdn}</td>
+                    <td className={`${tdCls} text-xs text-[var(--ink-6)]`}>{shortDate(p.createdAt)}</td>
                     <td className={tdCls}>
                       <StateBadge state={p.status} />
                     </td>

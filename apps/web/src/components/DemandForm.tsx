@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type PriceTerms, type Registries } from '../api';
-import { btnCls, btnGhostCls, Card, CROP_EMOJI, Field, inputCls } from './ui';
+import { btnCls, btnGhostCls, Card, Field, GradeBadge, inputCls } from './ui';
 
 const MULTIPLIERS: Record<'A' | 'B' | 'C', number> = { A: 1.0, B: 0.88, C: 0.7 };
 
@@ -107,7 +107,8 @@ export function NewDemandForm({
           >
             {registries.commodities.map((c) => (
               <option key={c.code} value={c.code}>
-                {CROP_EMOJI[c.code] ?? ''} {c.name} {c.clockType === 'perishable' ? '· perishable' : ''}
+                {c.name}
+                {c.clockType === 'perishable' ? ' · perishable' : ''}
               </option>
             ))}
           </select>
@@ -123,32 +124,31 @@ export function NewDemandForm({
               ))}
             </select>
           </div>
-          <span className="mono mt-1 block text-[10px] text-gray-400">= {kg} kg</span>
+          <span className="serial mt-1 block text-[11px] text-[var(--ink-6)]">= {kg} kg</span>
         </Field>
         <Field label="Minimum Grade">
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2 py-1">
             {(['A', 'B', 'C'] as const).map((g) => (
               <button
                 key={g}
                 type="button"
                 onClick={() => setMinBand(g)}
-                className={`flex-1 rounded-lg border-2 py-1.5 text-sm font-bold transition-colors ${
-                  minBand === g
-                    ? g === 'A'
-                      ? 'border-green-700 bg-green-700 text-white'
-                      : g === 'B'
-                        ? 'border-amber-600 bg-amber-600 text-white'
-                        : 'border-red-600 bg-red-600 text-white'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-400'
-                }`}
+                className={`flex flex-1 items-center justify-center py-1 transition-opacity ${minBand === g ? '' : 'opacity-30 hover:opacity-60'}`}
+                aria-pressed={minBand === g}
               >
-                {g}
+                <GradeBadge grade={g} />
               </button>
             ))}
           </div>
         </Field>
         <Field label={`Base Price GHS/kg (grade ${minBand})`}>
-          <input className={inputCls} type="number" step="0.01" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} />
+          <input
+            className={`${inputCls} serial`}
+            type="number"
+            step="0.01"
+            value={basePrice}
+            onChange={(e) => setBasePrice(e.target.value)}
+          />
         </Field>
         <Field label="Window Start">
           <input className={inputCls} type="date" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} />
@@ -156,8 +156,8 @@ export function NewDemandForm({
         <Field label="Window End">
           <input className={inputCls} type="date" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} />
           {commodity?.clockType === 'perishable' && (
-            <span className="mt-1 block text-[10px] font-semibold text-[#D97706]">
-              ⚡ Perishable — window limited to {commodity.clock.maxWindowDays} days
+            <span className="mt-1 block text-[11px] font-semibold text-[var(--gold-deep)]">
+              Perishable — window limited to {commodity.clock.maxWindowDays} days
             </span>
           )}
         </Field>
@@ -172,36 +172,30 @@ export function NewDemandForm({
         </Field>
       </div>
 
-      <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
-        <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-gray-400">
-          Price per grade — this full schedule is what the farmer accepts
-        </p>
+      <div className="certificate mt-4 bg-[var(--paper)] p-4">
+        <p className="smallcaps mb-3 text-[var(--ink-6)]">Price per grade — this full schedule is what the farmer accepts</p>
         <div className="flex flex-wrap items-center gap-4">
           {(['A', 'B', 'C'] as const).map((band) => (
             <label key={band} className="flex items-center gap-2 text-sm">
-              <span
-                className={`flex h-6 w-6 items-center justify-center rounded text-[11px] font-extrabold text-white ${
-                  band === 'A' ? 'bg-green-700' : band === 'B' ? 'bg-amber-600' : 'bg-red-600'
-                }`}
-              >
-                {band}
-              </span>
+              <GradeBadge grade={band} />
               <input
-                className={`${inputCls} mono w-24`}
+                className={`${inputCls} serial w-24`}
                 type="number"
                 step="0.01"
                 value={terms[band] ?? (derived[band] / 100).toFixed(2)}
                 onChange={(e) => setTerms((t) => ({ ...t, [band]: e.target.value }))}
               />
-              <span className="text-[10px] text-gray-400">/kg</span>
+              <span className="smallcaps text-[var(--ink-6)]">/kg</span>
             </label>
           ))}
-          <span className="ml-auto text-[10px] font-semibold uppercase text-gray-400">Reject pays 0</span>
+          <span className="smallcaps ml-auto text-[var(--ink-6)]">Reject pays 0</span>
         </div>
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>
+        <p className="stamp mt-3 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
+          {error}
+        </p>
       )}
       <div className="mt-4 flex gap-3">
         <button className={`${btnCls} flex-1 py-2.5`} onClick={() => create.mutate()} disabled={create.isPending}>

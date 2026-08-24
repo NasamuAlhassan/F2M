@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-24T00:00:00Z",
+  "title": "Design System: Farm to Market — The Trade Instrument",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "primary",
+        "displayName": "Intaglio Green",
+        "canonical": "#14322b",
+        "tonalRamp": ["#14322b", "#2b463d", "#425a4f", "#596d61", "#718074", "#8d998a", "#aab2a0", "#c8cbb6", "#dcd9c4"]
+      },
+      "gold": {
+        "role": "secondary",
+        "displayName": "Bronze-Gold",
+        "canonical": "#a87b23",
+        "tonalRamp": ["#6e4e12", "#8a6318", "#a87b23", "#e9ddbe"]
+      },
+      "stamp": {
+        "role": "tertiary",
+        "displayName": "Oxide Red",
+        "canonical": "#9e3b2c",
+        "tonalRamp": ["#7e2e22", "#9e3b2c", "#ecdcd0"]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Banknote Paper",
+        "canonical": "#efebdd",
+        "tonalRamp": ["#e7e1cd", "#efebdd", "#f4f1e6"]
+      },
+      "gold-ink": {
+        "role": "secondary",
+        "displayName": "Gold Ink",
+        "canonical": "#6e4e12",
+        "tonalRamp": ["#6e4e12", "#8a6318", "#a87b23", "#e9ddbe"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Engraved Capitals (Cinzel)", "purpose": "Mastheads, plate headers, page titles, seal initials, grade letters. Identity only, never body copy." },
+      "body": { "displayName": "Document Text (Public Sans)", "purpose": "Prose, table cells, form controls. Tabular numerals globally." },
+      "serial": { "displayName": "Typed Serials (Courier Prime)", "purpose": "Lot serials, money, timestamps, phone numbers, counts. Money never appears in the document face." },
+      "label": { "displayName": "Smallcaps Label", "purpose": "Ledger column heads, field labels, nav, captions. 11px is the functional-text floor." }
+    },
+    "shadows": [
+      { "name": "rule-double", "value": "0 2px 0 -1px var(--ink-2)", "purpose": "The printed second rule under 1px-bordered ledger column heads. Zero blur, always." },
+      { "name": "stamp-echo", "value": "inset 0 0 0 0.5px currentColor", "purpose": "The rubber stamp's inner border echo inside its 1.5px outer border." },
+      { "name": "seal-rings", "value": "inset 0 0 0 2px var(--paper), inset 0 0 0 3px currentColor", "purpose": "Concentric inset rings on grade seals and avatar seals. REJECT inverts the ring colors." },
+      { "name": "plate-inset", "value": "inset 0 0 0 1px var(--ink), inset 0 0 0 2px color-mix(in srgb, var(--paper) 35%, transparent)", "purpose": "Hairline inset on solid ink plates. No drop shadows exist anywhere in the system." }
+    ],
+    "motion": [
+      { "name": "ease-damped", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "The single authored ease for seal-land and route-ink." },
+      { "name": "seal-land", "value": "seal-land 0.5s cubic-bezier(0.16, 1, 0.3, 1) both", "purpose": "A seal stamps down (scale 1.45 → 0.94 overshoot → 1 with rotation settle). Payout advice, landed confirmations." },
+      { "name": "route-ink", "value": "route-ink 0.9s cubic-bezier(0.16, 1, 0.3, 1) both", "purpose": "Route legs draw themselves in via stroke-dashoffset (--route-len)." },
+      { "name": "ember", "value": "ember 1.8s ease-in-out infinite", "purpose": "Damped gold pulse (opacity 1 → 0.35) on live states. All three families disabled under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "container", "value": "1400px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid ink action; the certificate's Place Bid.",
+      "html": "<button class=\"ds-btn-primary\">Place Bid</button>",
+      "css": ".ds-btn-primary { background: var(--ink, #14322b); color: var(--paper, #efebdd); padding: 8px 16px; border: none; border-radius: 2px; font-family: 'Public Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; transition: background-color 0.15s; } .ds-btn-primary:hover { background: var(--ink-8, #2b463d); } .ds-btn-primary:focus-visible { outline: 2px solid var(--gold, #a87b23); outline-offset: 1px; } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Hairline-bordered secondary action (View Trace).",
+      "html": "<button class=\"ds-btn-ghost\">View Trace</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: var(--ink, #14322b); padding: 8px 16px; border: 1px solid var(--ink-5, #718074); border-radius: 2px; font-family: 'Public Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: background-color 0.15s; } .ds-btn-ghost:hover { background: var(--paper-deep, #e7e1cd); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--gold, #a87b23); outline-offset: 1px; } .ds-btn-ghost:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Labeled Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Smallcaps-labeled field on lifted paper; focus shifts the border, caret is gold.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Ask Price</span><input class=\"ds-input\" placeholder=\"GHS 0.00\" /></label>",
+      "css": ".ds-field { display: block; font-family: 'Public Sans', 'Segoe UI', system-ui, sans-serif; } .ds-field-label { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-6, #596d61); } .ds-input { width: 100%; border: 1px solid var(--ink-3, #aab2a0); border-radius: 2px; background: var(--paper-lift, #f4f1e6); padding: 8px 12px; font-size: 14px; color: var(--ink, #14322b); caret-color: var(--gold, #a87b23); } .ds-input::placeholder { color: var(--ink-6, #596d61); opacity: 1; } .ds-input:focus { border-color: var(--ink-6, #596d61); outline: none; }"
+    },
+    {
+      "name": "Certificate Card",
+      "kind": "card",
+      "refersTo": "card-certificate",
+      "description": "The framed certificate panel: doubled frame, smallcaps title over a double ledger rule.",
+      "html": "<section class=\"ds-certificate\"><div class=\"ds-cert-title\">Transaction Flow — Mobile Money Escrow</div><p class=\"ds-cert-body\">Every lot a certificate, every payment a banknote-grade receipt.</p></section>",
+      "css": ".ds-certificate { position: relative; background: var(--paper-lift, #f4f1e6); border: 1px solid var(--ink-7, #425a4f); border-radius: 2px; padding: 16px; font-family: 'Public Sans', 'Segoe UI', system-ui, sans-serif; } .ds-certificate::before { content: ''; position: absolute; inset: 3px; border: 1px solid var(--ink-2, #c8cbb6); border-radius: 1px; pointer-events: none; } .ds-cert-title { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-6, #596d61); padding-bottom: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--ink-7, #425a4f); box-shadow: 0 2px 0 -1px var(--ink-2, #c8cbb6); } .ds-cert-body { margin: 0; font-size: 14px; color: var(--ink, #14322b); }"
+    },
+    {
+      "name": "State Stamp (live)",
+      "kind": "chip",
+      "refersTo": "stamp-live",
+      "description": "A stamped state ticket; live states burn gold with an ember dot.",
+      "html": "<span class=\"ds-stamp ds-stamp-live\"><span class=\"ds-ember\"></span>Offered</span>",
+      "css": ".ds-stamp { display: inline-flex; align-items: center; gap: 6px; font-family: 'Courier Prime', 'Courier New', monospace; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; line-height: 16px; padding: 2px 6px; border: 1.5px solid currentColor; border-radius: 3px; box-shadow: inset 0 0 0 0.5px currentColor; } .ds-stamp-live { color: var(--gold-ink, #6e4e12); background: var(--gold-wash, #e9ddbe); } .ds-ember { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: ds-ember 1.8s ease-in-out infinite; } @keyframes ds-ember { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } } @media (prefers-reduced-motion: reduce) { .ds-ember { animation: none; } }"
+    },
+    {
+      "name": "Grade Seal",
+      "kind": "custom",
+      "refersTo": "card-certificate",
+      "description": "A/B/C as an engraved double-ring seal; REJECT inverts to paper-on-ink.",
+      "html": "<span class=\"ds-seal ds-seal-a\">A</span> <span class=\"ds-seal ds-seal-b\">B</span> <span class=\"ds-seal ds-seal-c\">C</span>",
+      "css": ".ds-seal { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid currentColor; background: var(--paper, #efebdd); box-shadow: inset 0 0 0 2px var(--paper, #efebdd), inset 0 0 0 3px currentColor; font-family: 'Cinzel', 'Times New Roman', serif; font-size: 11px; font-weight: 700; } .ds-seal-a { color: var(--ink, #14322b); } .ds-seal-b { color: var(--gold-deep, #8a6318); } .ds-seal-c { color: var(--stamp, #9e3b2c); }"
+    },
+    {
+      "name": "Stat Figure",
+      "kind": "custom",
+      "refersTo": "card-certificate",
+      "description": "Typed figure over a tracked caption — the instrument's stat idiom.",
+      "html": "<div class=\"ds-stat\"><div class=\"ds-stat-value\">GHS 4,820.00</div><div class=\"ds-stat-caption\">Escrow Held</div></div>",
+      "css": ".ds-stat { text-align: center; font-family: 'Public Sans', 'Segoe UI', system-ui, sans-serif; } .ds-stat-value { font-family: 'Courier Prime', 'Courier New', monospace; font-size: 18px; font-weight: 700; color: var(--gold-deep, #8a6318); font-variant-numeric: tabular-nums; } .ds-stat-caption { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-6, #596d61); }"
+    },
+    {
+      "name": "Masthead Nav Tab",
+      "kind": "nav",
+      "refersTo": "button-primary",
+      "description": "Smallcaps tab on the ink plate; active carries the gold underline.",
+      "html": "<nav class=\"ds-plate-nav\"><a class=\"ds-nav-tab ds-nav-active\" href=\"#\">Marketplace</a><a class=\"ds-nav-tab\" href=\"#\">Orders</a><a class=\"ds-nav-tab\" href=\"#\">Contracts</a></nav>",
+      "css": ".ds-plate-nav { display: flex; gap: 24px; background: var(--ink, #14322b); padding: 12px 16px; } .ds-nav-tab { font-family: 'Public Sans', 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none; color: var(--ink-3, #aab2a0); padding-bottom: 4px; border-bottom: 2px solid transparent; transition: color 0.15s; } .ds-nav-tab:hover { color: var(--paper, #efebdd); } .ds-nav-tab:focus-visible { outline: 2px solid var(--gold, #a87b23); outline-offset: 1px; } .ds-nav-active { color: var(--paper, #efebdd); border-bottom-color: var(--gold, #a87b23); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Trade Instrument",
+    "overview": "Farm to Market's buyer, farmer, and driver portals are drawn as a security-printed trade instrument (D-039, seed 222cf785): every lot is a certificate, every payment a banknote-grade receipt, every state a stamped seal on ruled paper. The world borrows the cedi banknote's grammar — tinted paper under intaglio-green ink, bronze-gold value figures, oxide-red stamps, engraved guilloché and rosettes as line-work at frames — and applies it to a working marketplace where a trader reads lots the way a teller reads notes. It explicitly refuses two defaults: the white-card agri-SaaS dashboard and its dark-terminal opposite.\n\nDensity is document-dense: ledger tables with hairline rows, tracked capital column heads over double rules, typed serials and money in a monospace receipt voice. Ornament is confined to frames and seals; inside the frame, content works without decoration in the way. The same page must survive a sunlit market stall on a mid-range Android phone and an institutional desk on a laptop, so legibility floors (11px functional text, --ink-6 as the lightest functional ink) are part of the system, not an accessibility afterthought.",
+    "keyCharacteristics": [
+      "Tinted banknote paper (#efebdd) under intaglio-green ink (#14322b); no white, no black, no gray.",
+      "A fixed 9-step ink-on-paper ramp is the only neutral scale.",
+      "Bronze-gold for value and live states; oxide-red for stamps, refusals, and disputes.",
+      "Engraving (guilloché, rosettes, hatching, line-art vignettes) lives at frames and seals only.",
+      "Three type voices: engraved capitals, document text, typed serials — money is always typed.",
+      "Square-cornered, double-ruled print furniture; depth is printed, never cast."
+    ],
+    "rules": [
+      { "name": "The One Ramp Rule", "body": "The nine-step ink ramp and the three paper tints are the only neutrals. No gray hex ever enters the file; every \"gray\" is green ink diluting into paper.", "section": "colors" },
+      { "name": "The Gold-Ink Rule", "body": "Gold text at small sizes on tinted washes is set in --gold-ink (#6e4e12), never --gold. Raw --gold (#a87b23) is reserved for strokes, seals, carets, focus rings, large figures, and accents on the dark plate.", "section": "colors" },
+      { "name": "The Four Stamps Rule", "body": "Every lifecycle state renders as a stamped ticket in exactly one of four tone families: settled money is intaglio ink on paper, live states burn gold-ink on gold-wash (with an ember dot), refusals and disputes are oxide red on stamp-wash, dormant states fade to --ink-6 on paper. No fifth family.", "section": "colors" },
+      { "name": "The Three Voices Rule", "body": "Cinzel speaks identity, Public Sans speaks the document, Courier Prime speaks serials, money, and timestamps. Money and serials never appear in the document face.", "section": "typography" },
+      { "name": "The 11px Floor Rule", "body": "Functional text never drops below 11px (.smallcaps is the floor), and --ink-6 (#596d61) is the lightest ink permitted on functional small text and placeholders. Sunlight legibility on a market-stall phone is the reason; the floor is detector-enforced.", "section": "typography" },
+      { "name": "The Printed Depth Rule", "body": "Depth is drawn with lines, tints, and plates — never cast with blur. box-shadow may only appear with zero blur as an inset ring or a printed second rule.", "section": "elevation" },
+      { "name": "The Doubled Line Rule", "body": "Importance is marked by doubling a hairline, never by merely thickening it. Frames, rules, stamps, and seals all carry their second line.", "section": "shapes" },
+      { "name": "The One Plate Rule", "body": "No emoji, no icon fonts, no filled glyph sets — a new icon is drawn on the same plate at the same stroke: 24-unit viewBox, currentColor, strokeWidth 1.4, round caps and joins.", "section": "components" },
+      { "name": "The Three Motions Rule", "body": "No fourth animation family; anything that moves is a seal landing, ink drawing, or an ember burning. All three are disabled under prefers-reduced-motion.", "section": "components" }
+    ],
+    "dos": [
+      "Do frame every content panel as a certificate: 1px --ink-7 outer rule, 1px --ink-2 hairline inset 3px, 2px corners, --paper-lift interior.",
+      "Do set every serial, money figure, timestamp, and phone number in Courier Prime (.serial); large money is serial bold in --gold-deep with a smallcaps unit beside it.",
+      "Do keep guilloché, rosettes, and hatching at frames, seals, and empty media wells only — never as content-area texture.",
+      "Do stamp every lifecycle state with StateBadge in one of the four tone families; live states get the ember dot.",
+      "Do render seller and place identity through the sellerName() / placeName() guards in src/api.ts, so a raw parser string renders as \"Verified farmer\" — never as a person.",
+      "Do keep all three faces self-hosted from public/fonts with real fallback stacks."
+    ],
+    "donts": [
+      "Don't introduce a gray, a white, or a black — every neutral is an ink-ramp step or a paper tint.",
+      "Don't cast drop shadows or blurs; depth is printed (see The Printed Depth Rule).",
+      "Don't round rectangle corners beyond 3px; circles belong to seals alone.",
+      "Don't set functional text below 11px or lighter than --ink-6; small gold type on washes uses --gold-ink.",
+      "Don't use emoji, icon fonts, or filled glyphs — new icons are engraved on the one plate at stroke 1.4.",
+      "Don't add a fourth motion family or any animation that ignores prefers-reduced-motion."
+    ]
+  }
+}

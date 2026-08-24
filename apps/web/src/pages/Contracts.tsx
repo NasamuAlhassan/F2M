@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type ContractListRow, type PriceTerms } from '../api';
-import { CROP_EMOJI, GradeBadge, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
+import { CropMark, Glyph } from '../components/engrave';
+import { GradeBadge, numCls, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
 interface Row extends ContractListRow {
   quantityKg: number;
@@ -10,38 +11,38 @@ interface Row extends ContractListRow {
   priceTerms: PriceTerms;
 }
 
-/** Every contract in one compact list — traceability and the QR live on each detail page. */
+/** Every contract in one ledger — the QR and full instrument live on each detail page. */
 export function ContractsPage() {
   const { data } = useQuery({
     queryKey: ['contracts'],
     queryFn: () => api<{ contracts: Row[] }>('/api/contracts'),
     refetchInterval: 6000,
   });
-  if (!data) return <p className="text-sm text-gray-400">Loading…</p>;
+  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
 
   return (
     <div>
       <div className="mb-4">
-        <h1 className="text-xl font-extrabold text-gray-900">Contracts</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">Contracts</h1>
+        <p className="mt-1 text-sm text-[var(--ink-6)]">
           Every contract with its live state — open one for the escrow flow, grading, transport, and the traceability QR
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+      <div className="certificate overflow-hidden bg-[var(--paper-lift)] p-3">
         {data.contracts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 text-gray-400">
-            <div className="mb-2 text-4xl">📄</div>
-            <div className="font-semibold text-gray-500">No contracts yet</div>
-            <div className="mt-1 text-sm">They appear here the moment the engine matches one of your demands</div>
+          <div className="flex flex-col items-center justify-center py-14">
+            <Glyph name="scale" className="mb-3 h-11 w-11 text-[var(--ink-4)]" />
+            <div className="font-semibold text-[var(--ink-6)]">No contracts yet</div>
+            <div className="mt-1 text-sm text-[var(--ink-6)]">They appear the moment the engine matches one of your demands</div>
           </div>
         ) : (
           <table className={tableCls}>
-            <thead className="border-b border-gray-100">
+            <thead>
               <tr>
                 <th className={thCls}>Commodity</th>
                 <th className={thCls}>Farmer</th>
-                <th className={thCls}>Lot</th>
+                <th className={thCls}>Lot №</th>
                 <th className={thCls}>Quantity</th>
                 <th className={thCls}>Grade</th>
                 <th className={thCls}>Amount</th>
@@ -50,29 +51,34 @@ export function ContractsPage() {
                 <th className={thCls} />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody>
               {data.contracts.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50">
-                  <td className={`${tdCls} font-bold text-gray-900`}>
-                    {CROP_EMOJI[c.commodityCode] ?? '📦'} {c.commodityName}
-                  </td>
-                  <td className={`${tdCls} text-sm text-gray-700`}>{c.farmerName ?? '—'}</td>
-                  <td className={`${tdCls} mono text-xs text-gray-500`}>{c.lotCode}</td>
-                  <td className={`${tdCls} ${numCls} text-xs`}>{c.quantityKg}kg</td>
-                  <td className={tdCls}>{c.finalGrade ? <GradeBadge grade={c.finalGrade} /> : <span className="text-xs text-gray-300">—</span>}</td>
-                  <td className={`${tdCls} ${numCls} font-bold text-[#1B4332]`}>
-                    {c.finalAmount !== null ? ghs(c.finalAmount) : ghs(c.holdAmount)}
-                    <span className="ml-1 text-[9px] font-medium uppercase text-gray-400">
-                      {c.finalAmount !== null ? 'final' : 'hold'}
+                <tr key={c.id} className="hover:bg-[var(--paper)]">
+                  <td className={`${tdCls} font-bold`}>
+                    <span className="flex items-center gap-2">
+                      <CropMark code={c.commodityCode} className="h-5 w-5 flex-shrink-0 text-[var(--ink-7)]" />
+                      {c.commodityName}
                     </span>
+                  </td>
+                  <td className={`${tdCls} text-sm text-[var(--ink-7)]`}>{c.farmerName ?? '—'}</td>
+                  <td className={`${tdCls} serial text-xs text-[var(--ink-6)]`}>{c.lotCode}</td>
+                  <td className={`${tdCls} ${numCls} text-xs`}>{c.quantityKg} kg</td>
+                  <td className={tdCls}>
+                    {c.finalGrade ? <GradeBadge grade={c.finalGrade} /> : <span className="text-xs text-[var(--ink-4)]">—</span>}
+                  </td>
+                  <td className={tdCls}>
+                    <span className="serial font-bold text-[var(--gold-deep)]">
+                      {c.finalAmount !== null ? ghs(c.finalAmount) : ghs(c.holdAmount)}
+                    </span>
+                    <span className="smallcaps ml-1.5 text-[var(--ink-6)]">{c.finalAmount !== null ? 'final' : 'hold'}</span>
                   </td>
                   <td className={tdCls}>
                     <StateBadge state={c.state} />
                   </td>
-                  <td className={`${tdCls} text-xs text-gray-500`}>{shortDate(c.createdAt)}</td>
+                  <td className={`${tdCls} text-xs text-[var(--ink-6)]`}>{shortDate(c.createdAt)}</td>
                   <td className={`${tdCls} text-right`}>
                     <Link
-                      className="rounded-lg border border-[#1B4332] px-3 py-1.5 text-xs font-semibold text-[#1B4332] transition-colors hover:bg-green-50"
+                      className="rounded-[2px] border border-[var(--ink-5)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
                       to={`/contracts/${c.id}`}
                     >
                       Open

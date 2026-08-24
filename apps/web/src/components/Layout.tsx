@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, dateTime, getRole, setToken, type MarketLot, type Me } from '../api';
+import { F2MSeal, Glyph } from './engrave';
 
 interface NotificationRow {
   id: string;
@@ -11,9 +12,8 @@ interface NotificationRow {
   createdAt: number;
 }
 
-// The prototype's language switcher. Only English is farmer/buyer-ready today:
-// tw/ee/dag are machine-drafted simulation subsets (D-029) and ha doesn't exist
-// yet, so the rest stay visibly present but disabled until native review.
+// The language switcher. Only English is farmer/buyer-ready today (D-029);
+// the rest stay visibly present but disabled until native review.
 const LANGS: Array<{ code: string; label: string; ready: boolean }> = [
   { code: 'en', label: 'English', ready: true },
   { code: 'tw', label: 'Twi', ready: false },
@@ -22,7 +22,7 @@ const LANGS: Array<{ code: string; label: string; ready: boolean }> = [
   { code: 'ha', label: 'Hausa', ready: false },
 ];
 
-/** The autonomous engine's voice to the buyer: alerts land here as they happen. */
+/** The engine's alerts, filed like incoming correspondence. */
 function NotificationBell() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -40,26 +40,29 @@ function NotificationBell() {
   return (
     <div className="relative">
       <button
-        className={`flex items-center gap-1.5 font-medium transition-colors ${open ? 'text-white' : 'text-green-400 hover:text-white'}`}
+        className={`smallcaps flex items-center gap-1.5 transition-colors ${
+          open ? 'text-[var(--paper)]' : 'text-[var(--ink-3)] hover:text-[var(--paper)]'
+        }`}
         onClick={() => setOpen((v) => !v)}
       >
+        <Glyph name="bell" className="h-3.5 w-3.5" />
         Alerts
         {unread > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#D97706] px-1 text-[9px] font-bold text-white">
+          <span className="serial flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--gold)] px-1 text-[11px] font-bold text-[var(--ink)]">
             {unread}
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-96 overflow-hidden rounded-2xl border border-gray-100 bg-white text-gray-900 shadow-2xl">
-          <div className="flex items-center justify-between bg-[#1B4332] px-5 py-3">
+        <div className="certificate absolute right-0 z-30 mt-3 w-96 overflow-hidden bg-[var(--paper-lift)] text-[var(--ink)]">
+          <div className="plate flex items-center justify-between px-5 py-3">
             <div>
-              <div className="text-sm font-bold text-white">Notifications</div>
-              <div className="text-[11px] text-green-300">The engine, reporting in</div>
+              <div className="display text-sm font-semibold tracking-[0.06em]">NOTICES</div>
+              <div className="smallcaps text-[var(--ink-3)]">the engine, reporting in</div>
             </div>
             {unread > 0 && (
               <button
-                className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold text-white hover:bg-white/20"
+                className="stamp px-2 py-0.5 text-[11px] text-[var(--paper)] hover:bg-[var(--ink-8)]"
                 onClick={() => markRead.mutate()}
               >
                 Mark all read
@@ -68,23 +71,25 @@ function NotificationBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {!data?.notifications.length ? (
-              <p className="px-5 py-4 text-sm text-gray-400">Nothing yet — alerts appear as the engine works.</p>
+              <p className="px-5 py-4 text-sm text-[var(--ink-6)]">Nothing filed yet — alerts land as the engine works.</p>
             ) : (
               data.notifications.map((n) => (
                 <div
                   key={n.id}
-                  className={`border-b border-gray-50 px-5 py-3 text-sm last:border-b-0 ${n.readAt ? 'text-gray-400' : 'text-gray-700'}`}
+                  className={`border-b border-[var(--ink-2)] px-5 py-3 text-sm last:border-b-0 ${
+                    n.readAt ? 'text-[var(--ink-6)]' : 'text-[var(--ink)]'
+                  }`}
                 >
                   <p className="leading-snug">{n.message}</p>
-                  <p className="mono mt-1 flex items-baseline justify-between text-[10px] text-gray-400">
-                    <span>{dateTime(n.createdAt)}</span>
+                  <p className="mt-1 flex items-baseline justify-between">
+                    <span className="serial text-[11px] text-[var(--ink-6)]">{dateTime(n.createdAt)}</span>
                     {n.contractId && (
                       <Link
                         to={`/contracts/${n.contractId}`}
-                        className="font-semibold text-[#1B4332] hover:underline"
+                        className="text-xs font-semibold text-[var(--gold-deep)] underline decoration-[var(--gold)] decoration-1 underline-offset-2 hover:text-[var(--gold)]"
                         onClick={() => setOpen(false)}
                       >
-                        View contract →
+                        View contract
                       </Link>
                     )}
                   </p>
@@ -98,8 +103,12 @@ function NotificationBell() {
   );
 }
 
-function subNavCls({ isActive }: { isActive: boolean }): string {
-  return `font-medium transition-colors ${isActive ? 'border-b-2 border-[#D97706] pb-0.5 text-[#D97706]' : 'text-green-400 hover:text-white'}`;
+function navCls({ isActive }: { isActive: boolean }): string {
+  return `smallcaps pb-1 transition-colors border-b-2 ${
+    isActive
+      ? 'border-[var(--gold)] text-[var(--paper)]'
+      : 'border-transparent text-[var(--ink-3)] hover:text-[var(--paper)]'
+  }`;
 }
 
 const initials = (name: string): string =>
@@ -153,24 +162,25 @@ export function Layout() {
   const homePath = role === 'driver' ? '/driver/jobs' : role === 'farmer' ? '/farmer/dashboard' : '/market';
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6]">
-      <header className="flex-shrink-0 bg-[#1B4332] text-white shadow-lg">
-        <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-5 px-6">
+    <div className="min-h-screen bg-[var(--paper)]">
+      <header className="plate">
+        <div className="mx-auto flex min-h-[72px] max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 sm:px-6">
           <Link to={homePath} className="flex flex-shrink-0 items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#D97706] text-sm font-extrabold text-white">
-              F2M
-            </div>
+            <F2MSeal className="h-11 w-11" dark />
             <div>
-              <div className="text-base font-extrabold leading-tight">Farm to Market</div>
-              <div className="text-[10px] leading-tight text-green-300">Agritech Marketplace · Ghana</div>
+              <div className="display text-lg font-semibold leading-tight tracking-[0.1em]">FARM TO MARKET</div>
+              <div className="smallcaps leading-tight text-[var(--ink-3)]">Agritech Marketplace · Ghana</div>
             </div>
           </Link>
 
           {role === 'buyer' && (
-            <div className="relative hidden max-w-xl flex-1 md:block">
-              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-green-300">🔍</span>
+            <div className="relative order-last w-full basis-full md:order-none md:w-auto md:max-w-lg md:flex-1 md:basis-auto">
+              <Glyph
+                name="search"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ink-4)]"
+              />
               <input
-                className="w-full rounded-full bg-white/10 py-2 pl-10 pr-4 text-sm text-white placeholder-green-300/80 outline-none transition-colors focus:bg-white/15 focus:ring-2 focus:ring-[#D97706]"
+                className="w-full rounded-[2px] border border-[var(--ink-7)] bg-[var(--paper-lift)] py-2 pl-9 pr-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
                 placeholder="Search crops, regions…"
                 value={searchParams.get('q') ?? ''}
                 onChange={(e) => {
@@ -181,18 +191,18 @@ export function Layout() {
             </div>
           )}
 
-          <div className="ml-auto flex flex-shrink-0 items-center gap-4">
+          <div className="ml-auto flex flex-shrink-0 items-center gap-5">
             {role === 'buyer' && (
-              <div className="hidden items-center gap-1 lg:flex">
+              <div className="hidden items-center gap-3 lg:flex">
                 {LANGS.map((l) =>
                   l.ready ? (
-                    <span key={l.code} className="rounded-md bg-[#D97706] px-2.5 py-1 text-xs font-bold text-white">
+                    <span key={l.code} className="smallcaps border-b-2 border-[var(--gold)] pb-0.5 text-[var(--paper)]">
                       {l.label}
                     </span>
                   ) : (
                     <span
                       key={l.code}
-                      className="cursor-not-allowed px-2 py-1 text-xs font-medium text-green-400/70"
+                      className="smallcaps cursor-not-allowed text-[var(--ink-4)]"
                       title="Machine-drafted only — awaiting native-speaker review (Khaya AI integration)"
                     >
                       {l.label}
@@ -202,9 +212,9 @@ export function Layout() {
               </div>
             )}
             <div className="flex items-center gap-3">
-              <div className="text-right">
-                <div className="text-xs font-semibold">{displayName}</div>
-                <div className="text-[10px] text-green-400">
+              <div className="hidden text-right sm:block">
+                <div className="text-sm font-semibold text-[var(--paper)]">{displayName}</div>
+                <div className="smallcaps text-[var(--ink-3)]">
                   {role === 'driver'
                     ? 'Verified Driver'
                     : role === 'farmer'
@@ -212,40 +222,42 @@ export function Layout() {
                       : `Verified Buyer${me?.regionCode ? ` · ${prettyRegion(me.regionCode)}` : ''}`}
                 </div>
               </div>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D97706] text-sm font-bold">
+              <span className="display flex h-10 w-10 items-center justify-center rounded-full border-[1.5px] border-[var(--gold)] text-sm font-semibold text-[var(--gold)] shadow-[inset_0_0_0_2.5px_var(--ink),inset_0_0_0_3.5px_var(--gold)]">
                 {initials(displayName)}
-              </div>
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="border-t border-green-900 bg-[#14532d]">
-          <div className="mx-auto flex h-10 max-w-[1440px] items-center gap-6 px-6 text-sm">
+        <div className="guilloche h-[10px] w-full opacity-90" />
+
+        <div className="border-t border-[var(--ink-8)]">
+          <div className="mx-auto flex min-h-11 max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-1.5 sm:gap-x-6 sm:px-6">
             {role === 'driver' ? (
-              <NavLink to="/driver/jobs" className={subNavCls}>
+              <NavLink to="/driver/jobs" className={navCls}>
                 Dispatch Board
               </NavLink>
             ) : role === 'farmer' ? (
               <>
-                <NavLink to="/farmer/dashboard" className={subNavCls}>
-                  Seller Dashboard
+                <NavLink to="/farmer/dashboard" className={navCls}>
+                  Seller Desk
                 </NavLink>
-                <NavLink to="/prices" className={subNavCls}>
-                  Price Intelligence
+                <NavLink to="/prices" className={navCls}>
+                  Prices
                 </NavLink>
               </>
             ) : (
               <>
-                <NavLink to="/market" className={subNavCls}>
+                <NavLink to="/market" className={navCls}>
                   Marketplace
                 </NavLink>
-                <NavLink to="/orders" className={subNavCls}>
+                <NavLink to="/orders" className={navCls}>
                   Orders
                 </NavLink>
-                <NavLink to="/contracts" className={subNavCls}>
+                <NavLink to="/contracts" className={navCls}>
                   Contracts
                 </NavLink>
-                <NavLink to="/prices" className={subNavCls}>
+                <NavLink to="/prices" className={navCls}>
                   Prices
                 </NavLink>
                 <NotificationBell />
@@ -253,13 +265,13 @@ export function Layout() {
             )}
             <div className="ml-auto flex items-center gap-5">
               {role === 'buyer' && lotCount !== null && (
-                <span className="flex items-center gap-1.5 text-xs text-green-400">
-                  <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-green-400" />
-                  {lotCount} lot{lotCount === 1 ? '' : 's'}
+                <span className="smallcaps flex items-center gap-1.5 text-[var(--ink-3)]">
+                  <span className="ember inline-block h-1.5 w-1.5 rounded-full bg-[var(--gold)]" />
+                  {lotCount} lot{lotCount === 1 ? '' : 's'} live
                 </span>
               )}
               <button
-                className="font-medium text-green-400 transition-colors hover:text-white"
+                className="smallcaps text-[var(--ink-3)] transition-colors hover:text-[var(--paper)]"
                 onClick={() => {
                   setToken(null);
                   navigate(role === 'driver' ? '/driver/login' : role === 'farmer' ? '/farmer/login' : '/login');
@@ -271,7 +283,7 @@ export function Layout() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1440px] px-6 py-6">
+      <main className="mx-auto max-w-[1400px] px-6 py-6">
         <Outlet />
       </main>
     </div>

@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, dateTime, ghs } from '../api';
+import { Glyph } from './engrave';
 import { btnCls, btnGhostCls, Stat, StateBadge } from './ui';
 
-// The AI Intent & Auto-Matching Engine's shared pieces (Frame 06), consumed by
-// the Orders page. Extracted verbatim in M26's consolidation.
+// The AI Intent & Auto-Matching Engine's shared pieces, in the Trade
+// Instrument world: a match arrives as an advice note under a gold plate.
 
 export interface FeedLot {
   lotCode: string;
@@ -60,36 +61,37 @@ export interface AlertPreview {
   callStatus: string | null;
 }
 
-/** Animated SVG score ring — the prototype's match-score dial. */
+/** Engraved score gauge — ink track, gold arc, engraved figure. */
 export function ScoreRing({ pct }: { pct: number }) {
   const r = 30;
   const c = 2 * Math.PI * r;
   return (
     <div className="relative h-20 w-20 flex-shrink-0">
       <svg viewBox="0 0 72 72" className="h-full w-full -rotate-90">
-        <circle cx="36" cy="36" r={r} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="6" />
+        <circle cx="36" cy="36" r={r} fill="none" stroke="var(--ink-2)" strokeWidth="2" />
+        <circle cx="36" cy="36" r={r - 4.5} fill="none" stroke="var(--ink-2)" strokeWidth="0.75" />
         <circle
           cx="36"
           cy="36"
           r={r}
           fill="none"
-          stroke="#fff"
-          strokeWidth="6"
-          strokeLinecap="round"
+          stroke="var(--gold-deep)"
+          strokeWidth="3.5"
+          strokeLinecap="butt"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - pct / 100)}
-          style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+          style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16,1,0.3,1)' }}
         />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-        <span className="mono text-lg font-extrabold leading-none">{pct}%</span>
-        <span className="text-[8px] font-bold uppercase tracking-widest opacity-80">match</span>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="display text-lg font-semibold leading-none text-[var(--ink)]">{pct}%</span>
+        <span className="smallcaps text-[11px] text-[var(--ink-6)]">match</span>
       </div>
     </div>
   );
 }
 
-/** Frame 06's "AI Match Found" banner — amber gradient, score ring, terms chips. */
+/** The advice of match — the engine's find, presented as a sealed notice. */
 export function MatchBanner({
   match,
   simulateEnabled,
@@ -104,57 +106,50 @@ export function MatchBanner({
   simulating: boolean;
 }) {
   return (
-    <div
-      className="slide-in mb-4 overflow-hidden rounded-2xl shadow-lg"
-      style={{ background: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)' }}
-    >
-      <div className="flex items-center gap-2 px-5 pt-4">
-        <span className="pulse-dot inline-block h-2 w-2 rounded-full bg-white" />
-        <span className="text-[11px] font-extrabold uppercase tracking-widest text-white">🤖 AI Match Found</span>
-        <span className="mono ml-auto text-[10px] text-amber-100">{dateTime(match.createdAt)}</span>
+    <div className="certificate seal-land mb-4 overflow-hidden bg-[var(--gold-wash)]">
+      <div className="flex items-center gap-2 bg-[var(--gold)] px-5 py-2 text-[var(--ink)]">
+        <span className="ember inline-block h-2 w-2 rounded-full bg-[var(--ink)]" />
+        <span className="display text-xs font-semibold tracking-[0.18em]">ADVICE OF MATCH</span>
+        <span className="serial ml-auto text-[11px]">{dateTime(match.createdAt)}</span>
       </div>
       <div className="flex flex-wrap items-center gap-5 px-5 py-4">
         {match.scorePct !== null && <ScoreRing pct={match.scorePct} />}
-        <div className="min-w-48 flex-1 text-white">
-          <p className="text-lg font-extrabold leading-tight">
+        <div className="min-w-52 flex-1">
+          <p className="text-lg font-bold leading-tight text-[var(--ink)]">
             {match.quantityKg}kg {match.commodityName}
           </p>
-          <p className="text-sm text-amber-100">
-            from {match.farmerName ?? 'farmer'} <span className="mono text-[11px]">({match.lotCode})</span>
+          <p className="text-sm text-[var(--ink-6)]">
+            from {match.farmerName ?? 'farmer'} <span className="serial text-xs">({match.lotCode})</span>
           </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <TermChip label="up to" value={`${ghs(match.bestPricePerKg)}/kg`} />
-            <TermChip label="escrow hold" value={ghs(match.holdAmount)} />
-            {match.distanceKm !== null && <TermChip label="route" value={`≈ ${match.distanceKm}km`} />}
-            {match.logisticsEstimate !== null && <TermChip label="logistics est." value={ghs(match.logisticsEstimate)} />}
+          <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-1.5">
+            <TermLine label="up to" value={`${ghs(match.bestPricePerKg)}/kg`} />
+            <TermLine label="escrow hold" value={ghs(match.holdAmount)} />
+            {match.distanceKm !== null && <TermLine label="route" value={`≈ ${match.distanceKm} km`} />}
+            {match.logisticsEstimate !== null && <TermLine label="logistics est." value={ghs(match.logisticsEstimate)} />}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
           <StateBadge state={match.state} />
           <div className="flex flex-wrap justify-end gap-2">
             {match.state === 'OFFERED' && simulateEnabled && (
-              <button
-                className="rounded-xl bg-white px-4 py-2 text-sm font-extrabold text-[#B45309] transition-colors hover:bg-amber-50 disabled:opacity-40"
-                onClick={onSimulate}
-                disabled={simulating}
-              >
-                {simulating ? 'Accepting…' : '✓ Accept Contract'}
+              <button className={btnCls} onClick={onSimulate} disabled={simulating}>
+                {simulating ? 'Accepting…' : 'Accept Contract'}
               </button>
             )}
-            <button
-              className="rounded-xl border border-white/40 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
-              onClick={onPreview}
-            >
-              📞 Voice & SMS
+            <button className={btnGhostCls} onClick={onPreview}>
+              Voice & SMS
             </button>
           </div>
           {match.state === 'OFFERED' && (
-            <p className="text-right text-[10px] text-amber-100">
-              {simulateEnabled ? 'demo: farmer presses 1 on the IVR call' : 'awaiting farmer acceptance (SMS + voice sent)'}
+            <p className="text-right text-[11px] text-[var(--ink-6)]">
+              {simulateEnabled ? 'demo: plays the farmer pressing 1 on the IVR call' : 'awaiting farmer acceptance (SMS + voice sent)'}
             </p>
           )}
-          <Link to={`/contracts/${match.contractId}`} className="text-xs font-bold text-white underline-offset-2 hover:underline">
-            View Contract →
+          <Link
+            to={`/contracts/${match.contractId}`}
+            className="text-xs font-semibold text-[var(--ink)] underline decoration-[var(--gold-deep)] underline-offset-2 hover:text-[var(--gold-deep)]"
+          >
+            View Contract
           </Link>
         </div>
       </div>
@@ -162,15 +157,16 @@ export function MatchBanner({
   );
 }
 
-function TermChip({ label, value }: { label: string; value: string }) {
+function TermLine({ label, value }: { label: string; value: string }) {
   return (
-    <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white">
-      <span className="opacity-70">{label}</span> <span className="mono font-extrabold">{value}</span>
+    <span className="text-sm">
+      <span className="smallcaps mr-1.5 text-[var(--ink-6)]">{label}</span>
+      <span className="serial font-bold text-[var(--ink)]">{value}</span>
     </span>
   );
 }
 
-/** Quieter row for older matches below the banner. */
+/** Quieter ledger row for earlier matches below the notice. */
 export function MatchRow({
   match,
   simulateEnabled,
@@ -185,17 +181,17 @@ export function MatchRow({
   simulating: boolean;
 }) {
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-3 last:mb-0 hover:bg-gray-50">
+    <div className="mb-0 flex flex-wrap items-center gap-4 border-b border-[var(--ink-2)] py-3 last:border-b-0">
       {match.scorePct !== null && <Stat value={`${match.scorePct}%`} caption="match" accent />}
       <div className="min-w-48 flex-1">
-        <p className="text-sm font-bold text-gray-900">
+        <p className="text-sm font-bold text-[var(--ink)]">
           {match.quantityKg}kg {match.commodityName}
-          <span className="mono ml-2 text-[10px] font-medium text-gray-400">{match.lotCode}</span>
+          <span className="serial ml-2 text-[11px] font-normal text-[var(--ink-6)]">{match.lotCode}</span>
         </p>
-        <p className="text-xs text-gray-500">
-          {match.farmerName ?? 'farmer'} · up to <span className="mono font-bold">{ghs(match.bestPricePerKg)}/kg</span> ·
-          hold <span className="mono font-bold">{ghs(match.holdAmount)}</span>
-          {match.distanceKm !== null && <> · ≈ {match.distanceKm}km</>}
+        <p className="text-xs text-[var(--ink-6)]">
+          {match.farmerName ?? 'farmer'} · up to <span className="serial font-bold">{ghs(match.bestPricePerKg)}/kg</span> ·
+          hold <span className="serial font-bold">{ghs(match.holdAmount)}</span>
+          {match.distanceKm !== null && <> · ≈ {match.distanceKm} km</>}
           {match.logisticsEstimate !== null && <> · logistics {ghs(match.logisticsEstimate)}</>}
         </p>
       </div>
@@ -208,8 +204,8 @@ export function MatchRow({
       <button className={btnGhostCls} onClick={onPreview}>
         Voice & SMS
       </button>
-      <Link to={`/contracts/${match.contractId}`} className="text-sm font-semibold text-[#1B4332] hover:underline">
-        Contract →
+      <Link to={`/contracts/${match.contractId}`} className="text-sm font-semibold text-[var(--gold-deep)] hover:underline">
+        Contract
       </Link>
     </div>
   );
@@ -224,35 +220,35 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
 
   return (
     <div className="fixed inset-0 z-30" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40" />
+      <div className="absolute inset-0 bg-[var(--ink)]/70" />
       <aside
-        className="slide-in absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl"
+        className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto border-l border-[var(--ink-7)] bg-[var(--paper)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between bg-[#1B4332] px-5 py-4">
+        <div className="plate flex items-center justify-between px-5 py-4">
           <div>
-            <h2 className="text-sm font-bold text-white">Voice & SMS Simulation</h2>
-            <p className="text-[11px] text-green-300">what the farmer's basic phone receives</p>
+            <h2 className="display text-sm font-semibold tracking-[0.1em]">VOICE & SMS SIMULATION</h2>
+            <p className="smallcaps mt-0.5 text-[var(--ink-3)]">what the farmer's basic phone receives</p>
           </div>
-          <button className="rounded-full bg-white/10 px-2.5 py-1 text-white hover:bg-white/20" onClick={onClose}>
-            ✕
+          <button className="stamp px-2 py-0.5 text-[11px] text-[var(--paper)] hover:bg-[var(--ink-8)]" onClick={onClose}>
+            Close
           </button>
         </div>
 
         <div className="p-5">
-          <p className="mb-4 text-sm text-gray-600">
+          <p className="mb-4 text-sm text-[var(--ink-6)]">
             When the engine finds this match, {data?.farmerName ?? 'the farmer'}{' '}
-            <span className="mono text-[11px] text-gray-400">{data?.farmerPhone}</span> is alerted instantly:
+            <span className="serial text-xs text-[var(--ink-6)]">{data?.farmerPhone}</span> is alerted instantly:
           </p>
 
-          <div className="mb-4 flex gap-1.5">
+          <div className="mb-4 flex border border-[var(--ink-3)]">
             {(data?.locales ?? [{ code: 'tw', label: 'Twi' }]).map((l) => (
               <button
                 key={l.code}
-                className={`rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
+                className={`smallcaps flex-1 py-1.5 transition-colors ${
                   locale === l.code
-                    ? 'border-[#1B4332] bg-[#1B4332] text-white'
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    ? 'bg-[var(--ink)] text-[var(--paper)]'
+                    : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'
                 }`}
                 onClick={() => setLocale(l.code)}
               >
@@ -262,41 +258,32 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
           </div>
 
           {data?.reviewNote && (
-            <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800">
-              Machine-drafted translation — requires native-speaker review (Khaya AI integration) before farmer-facing
-              use.
+            <p className="stamp mb-4 px-3 py-2 text-[11px] normal-case tracking-normal text-[var(--gold-deep)]">
+              Machine-drafted translation — requires native-speaker review (Khaya AI) before farmer-facing use.
             </p>
           )}
 
-          <p className="mb-1.5 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">
-            💬 SMS {data?.smsStatus && <StateBadge state={data.smsStatus} />}
+          <p className="smallcaps mb-1.5 flex items-center gap-2 text-[var(--ink-6)]">
+            <Glyph name="sms" className="h-3.5 w-3.5" /> SMS {data?.smsStatus && <StateBadge state={data.smsStatus} />}
           </p>
-          <div className="mb-5 rounded-2xl rounded-tl-sm bg-[#1B4332] px-4 py-3 text-sm leading-relaxed text-white shadow-sm">
+          <div className="certificate mb-5 bg-[var(--paper-lift)] p-3.5 text-sm leading-relaxed text-[var(--ink)]">
             {data?.sms ?? '…'}
           </div>
 
-          <p className="mb-1.5 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">
-            📞 Automated IVR call {data?.callStatus && <StateBadge state={data.callStatus} />}
+          <p className="smallcaps mb-1.5 flex items-center gap-2 text-[var(--ink-6)]">
+            <Glyph name="phone" className="h-3.5 w-3.5" /> Automated IVR call{' '}
+            {data?.callStatus && <StateBadge state={data.callStatus} />}
           </p>
           <div className="space-y-2">
             {(data?.voice ?? []).map((line, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-              >
-                <span className="mt-0.5 flex gap-0.5">
-                  <span className="wave-bar inline-block w-0.5 rounded bg-[#D97706]" style={{ animationDelay: '0ms' }} />
-                  <span className="wave-bar inline-block w-0.5 rounded bg-[#D97706]" style={{ animationDelay: '150ms' }} />
-                  <span className="wave-bar inline-block w-0.5 rounded bg-[#D97706]" style={{ animationDelay: '300ms' }} />
-                </span>
+              <div key={i} className="flex items-start gap-2.5 border border-[var(--gold)] bg-[var(--gold-wash)] px-3.5 py-3 text-sm text-[var(--ink)]">
+                <Glyph name="speak" className="ember mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--gold-deep)]" />
                 {line}
               </div>
             ))}
-            <div className="flex items-center gap-2 pl-1 text-xs text-gray-400">
-              <span className="mono rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 font-bold text-gray-700">1</span>
-              accept
-              <span className="mono ml-2 rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 font-bold text-gray-700">2</span>
-              decline
+            <div className="flex items-center gap-2 pl-1 text-xs text-[var(--ink-6)]">
+              <span className="stamp px-1.5 py-0.5 text-[11px] text-[var(--ink)]">1</span> accept
+              <span className="stamp ml-2 px-1.5 py-0.5 text-[11px] text-[var(--ink)]">2</span> decline
             </div>
           </div>
         </div>

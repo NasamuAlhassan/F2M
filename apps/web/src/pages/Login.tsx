@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, setToken } from '../api';
+import { F2MSeal } from '../components/engrave';
 import { btnCls, Field, inputCls } from '../components/ui';
 
 export function LoginPage() {
@@ -29,18 +30,17 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#1B4332] px-4">
-      <form onSubmit={submit} className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center gap-3 bg-[#1B4332] px-6 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#D97706] text-sm font-extrabold text-white">
-            F2M
-          </div>
+    <div className="plate flex min-h-screen items-center justify-center px-4">
+      <form onSubmit={submit} className="certificate w-full max-w-md bg-[var(--paper)] p-8">
+        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+          <F2MSeal className="h-16 w-16" />
           <div>
-            <div className="text-sm font-bold text-white">Farm to Market</div>
-            <div className="text-[11px] text-green-300">Buyer Portal · Agritech Marketplace Ghana</div>
+            <h1 className="display text-xl font-semibold tracking-[0.12em] text-[var(--ink)]">FARM TO MARKET</h1>
+            <p className="smallcaps mt-1 text-[var(--ink-6)]">Buyer Portal · Agritech Marketplace Ghana</p>
           </div>
+          <div className="guilloche-ink h-[10px] w-40" />
         </div>
-        <div className="flex flex-col gap-4 p-6">
+        <div className="flex flex-col gap-4">
           <Field label="Email">
             <input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </Field>
@@ -54,18 +54,18 @@ export function LoginPage() {
             />
           </Field>
           {error && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>
+            <p className="stamp px-3 py-2 text-[11px] text-[var(--stamp)]">{error}</p>
           )}
           <button className={`${btnCls} w-full py-2.5`} disabled={busy}>
             {busy ? 'Signing in…' : 'Sign In'}
           </button>
-          <p className="text-center text-[11px] text-gray-400">
+          <p className="text-center text-xs text-[var(--ink-6)]">
             Demo account: buyer@demo.ftm ·{' '}
-            <Link to="/farmer/login" className="font-semibold text-[#1B4332] hover:underline">
+            <Link to="/farmer/login" className="font-semibold text-[var(--gold-deep)] hover:underline">
               Farmer login
             </Link>{' '}
             ·{' '}
-            <Link to="/driver/login" className="font-semibold text-[#1B4332] hover:underline">
+            <Link to="/driver/login" className="font-semibold text-[var(--gold-deep)] hover:underline">
               Driver login
             </Link>
           </p>

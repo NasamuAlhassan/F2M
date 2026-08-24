@@ -326,6 +326,13 @@ export async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+// Voice/USSD parsing can mis-capture identity fields; never print raw parser
+// output as a person. Anything without letters falls back honestly.
+export const sellerName = (name: string | null): string =>
+  name && /[a-z]/i.test(name) ? name : 'Verified farmer';
+export const placeName = (place: string | null): string | null =>
+  place && /[a-z]/i.test(place) ? place : null;
+
 export const ghs = (pesewas: number): string =>
   `GHS ${(pesewas / 100).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

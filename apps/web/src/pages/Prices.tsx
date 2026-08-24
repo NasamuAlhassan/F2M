@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, ghs, shortDate } from '../api';
-import { Card, CROP_EMOJI, tableCls, tdCls, thCls } from '../components/ui';
+import { CropMark } from '../components/engrave';
+import { Card, tableCls, tdCls, thCls } from '../components/ui';
 
 interface PriceRow {
   commodityCode: string;
@@ -16,7 +17,7 @@ export function PricesPage() {
     queryKey: ['market-prices'],
     queryFn: () => api<{ prices: PriceRow[] }>('/api/market-prices'),
   });
-  if (!data) return <p className="text-sm text-gray-400">Loading…</p>;
+  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
 
   const markets = [...new Set(data.prices.map((p) => p.market))];
   const commodities = [...new Map(data.prices.map((p) => [p.commodityCode, p.commodityName]))];
@@ -39,18 +40,18 @@ export function PricesPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-extrabold text-gray-900">Price Intelligence</h1>
-      <p className="mb-5 mt-0.5 text-sm text-gray-500">
+      <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">Price Intelligence</h1>
+      <p className="mb-4 mt-1 text-sm text-[var(--ink-6)]">
         Published reference prices per kg — the same numbers farmers hear on USSD before agreeing to a farm-gate offer.
       </p>
 
-      <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
         <Kpi label="Commodities Tracked" value={String(commodities.length)} sub="registered crops" />
         <Kpi label="Markets Reporting" value={String(markets.length)} sub={markets.join(' · ')} />
         <Kpi
           label="Widest Spread"
           value={widest ? ghs(Math.round(widest.spread)) : '—'}
-          sub={widest ? `${CROP_EMOJI[widest.code] ?? ''} ${widest.name} — best arbitrage` : ''}
+          sub={widest ? `${widest.name} — best arbitrage` : ''}
           accent
         />
         <Kpi label="Last Updated" value={shortDate(latest)} sub="latest reference feed" />
@@ -59,7 +60,7 @@ export function PricesPage() {
       <Card title="Regional Price Matrix — vs cross-market average">
         <div className="overflow-x-auto">
           <table className={tableCls}>
-            <thead className="border-b border-gray-100">
+            <thead>
               <tr>
                 <th className={thCls}>Commodity</th>
                 {markets.map((m) => (
@@ -70,41 +71,44 @@ export function PricesPage() {
                 <th className={thCls}>Average</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody>
               {commodities.map(([code, name]) => {
                 const mean = avg.get(code) ?? 0;
                 return (
-                  <tr key={code} className="hover:bg-gray-50">
-                    <td className={`${tdCls} font-bold text-gray-900`}>
-                      {CROP_EMOJI[code] ?? '📦'} {name}
+                  <tr key={code} className="hover:bg-[var(--paper)]">
+                    <td className={`${tdCls} font-bold`}>
+                      <span className="flex items-center gap-2">
+                        <CropMark code={code} className="h-5 w-5 flex-shrink-0 text-[var(--ink-7)]" />
+                        {name}
+                      </span>
                     </td>
                     {markets.map((m) => {
                       const p = lookup.get(`${code}|${m}`);
-                      if (!p) return <td key={m} className={`${tdCls} text-gray-300`}>—</td>;
+                      if (!p) return <td key={m} className={`${tdCls} text-[var(--ink-3)]`}>—</td>;
                       const below = p.pricePerKg <= mean;
                       return (
                         <td key={m} className={tdCls}>
                           <span
-                            className={`mono inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
-                              below ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
-                            }`}
+                            className={`serial text-sm font-bold ${below ? 'text-[var(--ink)]' : 'text-[var(--stamp)]'}`}
                           >
                             {ghs(p.pricePerKg)}
-                            <span className="text-[9px]">{below ? '▼' : '▲'}</span>
+                          </span>
+                          <span className={`ml-1 text-[11px] ${below ? 'text-[var(--ink-6)]' : 'text-[var(--stamp)]'}`}>
+                            {below ? '▼' : '▲'}
                           </span>
                         </td>
                       );
                     })}
-                    <td className={`${tdCls} mono text-xs font-semibold text-gray-500`}>{ghs(Math.round(mean))}</td>
+                    <td className={`${tdCls} serial text-xs font-semibold text-[var(--ink-6)]`}>{ghs(Math.round(mean))}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[10px] text-gray-400">
-          <span className="font-bold text-green-700">▼ green</span> = at or below the commodity's cross-market average
-          (buyer-favourable) · <span className="font-bold text-red-600">▲ red</span> = above average.
+        <p className="mt-3 text-[11px] text-[var(--ink-6)]">
+          <span className="font-bold text-[var(--ink)]">▼ ink</span> = at or below the commodity's cross-market average
+          (buyer-favourable) · <span className="font-bold text-[var(--stamp)]">▲ red</span> = above average.
         </p>
       </Card>
     </div>
@@ -113,10 +117,10 @@ export function PricesPage() {
 
 function Kpi({ label, value, sub, accent }: { label: string; value: string; sub: string; accent?: boolean }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-      <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">{label}</p>
-      <p className={`mono mt-1 text-2xl font-extrabold ${accent ? 'text-[#D97706]' : 'text-gray-900'}`}>{value}</p>
-      <p className="mt-0.5 truncate text-[10px] text-gray-400">{sub}</p>
+    <div className="certificate bg-[var(--paper-lift)] p-4">
+      <p className="smallcaps text-[var(--ink-6)]">{label}</p>
+      <p className={`serial mt-1.5 text-2xl font-bold ${accent ? 'text-[var(--gold-deep)]' : 'text-[var(--ink)]'}`}>{value}</p>
+      <p className="mt-0.5 truncate text-[11px] text-[var(--ink-6)]">{sub}</p>
     </div>
   );
 }

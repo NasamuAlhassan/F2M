@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, dateTime, ghs, type JobView, type Registries } from '../api';
-import { btnCls, btnGhostCls, Card, CROP_EMOJI, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, tdCls, thCls, VEHICLE_EMOJI } from '../components/ui';
+import { CropMark, VehicleMark } from '../components/engrave';
+import { btnCls, btnGhostCls, Card, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, tdCls, thCls } from '../components/ui';
 
 interface OfferView extends JobView {
   jobId: string;
@@ -17,7 +18,7 @@ interface DriverProfile {
   routeRegions: string[];
 }
 
-/** Frame 05's sidebar: identity, ONLINE toggle switch, vehicle icon buttons, route checklist. */
+/** The driver's book: identity, availability lever, vehicle, route checklist. */
 function ProfileSidebar() {
   const queryClient = useQueryClient();
   const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
@@ -48,61 +49,62 @@ function ProfileSidebar() {
 
   return (
     <aside className="w-full flex-shrink-0 lg:w-72">
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-        <div className="bg-[#1B4332] px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#D97706] text-lg">
-              {VEHICLE_EMOJI[profile.vehicleClassCode] ?? '🚚'}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-white">{profile.name}</p>
-              <p className="mono text-[10px] text-green-300">{profile.phone}</p>
-            </div>
+      <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
+        <div className="plate flex items-center gap-3 px-5 py-4">
+          <VehicleMark code={profile.vehicleClassCode} className="h-9 w-9 flex-shrink-0 text-[var(--paper)]" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-[var(--paper)]">{profile.name}</p>
+            <p className="serial text-[11px] text-[var(--ink-3)]">{profile.phone}</p>
           </div>
         </div>
+        <div className="guilloche h-[10px] w-full bg-[var(--ink)] opacity-90" />
 
         <div className="space-y-5 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Availability</p>
-              <p className={`text-sm font-extrabold ${profile.active ? 'text-green-700' : 'text-gray-400'}`}>
-                {profile.active ? 'ONLINE' : 'OFFLINE'}
+              <p className="smallcaps text-[var(--ink-6)]">Availability</p>
+              <p className={`display text-sm font-semibold tracking-[0.1em] ${profile.active ? 'text-[var(--ink)]' : 'text-[var(--ink-4)]'}`}>
+                {profile.active ? 'ON DUTY' : 'OFF DUTY'}
               </p>
             </div>
             <button
               aria-label="Toggle availability"
-              className={`relative h-7 w-13 rounded-full transition-colors ${profile.active ? 'bg-green-600' : 'bg-gray-300'}`}
+              className={`relative h-7 rounded-full border transition-colors ${
+                profile.active ? 'border-[var(--ink)] bg-[var(--ink)]' : 'border-[var(--ink-4)] bg-[var(--paper)]'
+              }`}
               style={{ width: 52 }}
               onClick={() => save.mutate({ active: !profile.active })}
             >
               <span
-                className="absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all"
-                style={{ left: profile.active ? 26 : 4 }}
+                className={`absolute top-[3px] h-5 w-5 rounded-full transition-all ${
+                  profile.active ? 'bg-[var(--gold)]' : 'bg-[var(--ink-4)]'
+                }`}
+                style={{ left: profile.active ? 27 : 4 }}
               />
             </button>
           </div>
 
           <div>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">Vehicle Type</p>
+            <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">Vehicle Type</p>
             <div className="space-y-2">
               {vehicleClasses.map((v) => {
                 const on = profile.vehicleClassCode === v.code;
                 return (
                   <button
                     key={v.code}
-                    className={`flex w-full items-center gap-3 rounded-xl border-2 px-3 py-2 text-left transition-colors ${
-                      on ? 'border-[#1B4332] bg-green-50' : 'border-gray-100 hover:border-gray-300'
+                    className={`flex w-full items-center gap-3 border px-3 py-2 text-left transition-colors ${
+                      on ? 'border-[var(--ink)] bg-[var(--gold-wash)]' : 'border-[var(--ink-2)] hover:border-[var(--ink-5)]'
                     }`}
                     onClick={() => save.mutate({ vehicleClassCode: v.code })}
                   >
-                    <span className="text-xl">{VEHICLE_EMOJI[v.code] ?? '🚚'}</span>
+                    <VehicleMark code={v.code} className="h-8 w-8 flex-shrink-0 text-[var(--ink)]" />
                     <span className="min-w-0 flex-1">
-                      <span className={`block text-sm font-bold ${on ? 'text-[#1B4332]' : 'text-gray-700'}`}>{v.name}</span>
-                      <span className="mono block text-[10px] text-gray-400">
+                      <span className="block text-sm font-bold text-[var(--ink)]">{v.name}</span>
+                      <span className="serial block text-[11px] text-[var(--ink-6)]">
                         ≤{v.capacityKg}kg · {ghs(v.baseFee)} + {ghs(v.perKmRate)}/km
                       </span>
                     </span>
-                    {on && <span className="text-sm font-extrabold text-[#1B4332]">✓</span>}
+                    {on && <span className="serial text-sm font-bold text-[var(--ink)]">✓</span>}
                   </button>
                 );
               })}
@@ -110,23 +112,23 @@ function ProfileSidebar() {
           </div>
 
           <div>
-            <p className="mb-2 flex items-baseline justify-between text-[11px] font-bold uppercase tracking-widest text-gray-400">
+            <p className="rule-double smallcaps mb-2 flex items-baseline justify-between pb-1.5 text-[var(--ink-6)]">
               Regional Routes
-              <span className="mono text-[#D97706]">{routes.length || 'all'}</span>
+              <span className="serial text-[var(--gold-deep)]">{routes.length || 'all'}</span>
             </p>
-            <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
+            <div className="max-h-52 space-y-0.5 overflow-y-auto pr-1">
               {(registries?.regions ?? []).map((r) => {
                 const on = routes.includes(r.code);
                 return (
                   <label
                     key={r.code}
-                    className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors ${
+                    className={`flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm transition-colors ${
                       on ? rowOnCls : rowOffCls
                     }`}
                   >
                     <input
                       type="checkbox"
-                      className="h-4 w-4 accent-[#1B4332]"
+                      className="h-3.5 w-3.5 accent-[var(--ink)]"
                       checked={on}
                       onChange={() => {
                         const next = on ? routes.filter((c) => c !== r.code) : [...routes, r.code];
@@ -139,29 +141,29 @@ function ProfileSidebar() {
                 );
               })}
             </div>
-            <p className="mt-1.5 text-[10px] text-gray-400">None selected = serve anywhere</p>
+            <p className="mt-1.5 text-[11px] text-[var(--ink-6)]">None selected = serve anywhere</p>
           </div>
 
-          {saved && <p className="text-xs font-bold text-green-700">Saved ✓</p>}
+          {saved && <p className="text-xs font-bold text-[var(--ink)]">Saved ✓</p>}
         </div>
       </div>
     </aside>
   );
 }
 
-/** Dispatch-board row: emoji cargo tile, big stat numbers, from↓to route, action buttons. */
+/** Waybill row: crop vignette, serial, typed figures. */
 function JobStats({ job }: { job: JobView }) {
   return (
     <>
-      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-green-50 text-xl">
-        {CROP_EMOJI[job.commodityCode] ?? '📦'}
-      </div>
+      <span className="hatch flex h-11 w-11 flex-shrink-0 items-center justify-center border border-[var(--ink-2)]">
+        <CropMark code={job.commodityCode} className="h-7 w-7 text-[var(--ink-7)]" />
+      </span>
       <div className="w-24 min-w-0">
-        <p className="mono truncate text-xs font-extrabold text-gray-900">{job.jobCode}</p>
-        <p className="text-[10px] text-gray-400">{job.commodityCode}</p>
+        <p className="serial truncate text-xs font-bold text-[var(--ink)]">{job.jobCode}</p>
+        <p className="smallcaps text-[var(--ink-6)]">{job.commodityCode}</p>
       </div>
-      <Stat value={`${job.quantityKg}kg`} caption="cargo" />
-      <Stat value={`${job.distanceKm}km`} caption="distance" />
+      <Stat value={`${job.quantityKg} kg`} caption="cargo" />
+      <Stat value={`${job.distanceKm} km`} caption="distance" />
       <Stat value={ghs(job.quoteAmount)} caption="escrow payout" accent />
     </>
   );
@@ -194,49 +196,43 @@ export function DriverJobsPage() {
     onError,
   });
 
-  if (!data) return <p className="text-sm text-gray-400">Loading…</p>;
+  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
   const active = data.jobs.filter((j) => ['ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'DELIVERED'].includes(j.state));
   const history = data.jobs.filter((j) => !active.some((a) => a.id === j.id));
 
   return (
-    <div className="flex flex-col gap-5 lg:flex-row">
+    <div className="flex flex-col gap-6 lg:flex-row">
       <ProfileSidebar />
 
       <div className="min-w-0 flex-1">
-        <div className="mb-5">
-          <h1 className="text-xl font-extrabold text-gray-900">Logistics Dispatch Board</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
+        <div className="mb-4">
+          <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">Dispatch Board</h1>
+          <p className="mt-1 text-sm text-[var(--ink-6)]">
             Escrowed pickups on your routes — the fee is locked before you load and released when the buyer confirms
             delivery
           </p>
         </div>
         {error && (
-          <p
-            className="mb-4 cursor-pointer rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
-            onClick={() => setError(null)}
-          >
+          <p className="stamp mb-4 cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
             {error}
           </p>
         )}
 
         <Card title={`Pickup Offers for You (${data.offers.length})`}>
           {data.offers.length === 0 ? (
-            <p className="text-sm text-gray-400">No offers right now. Offers arrive by SMS and appear here.</p>
+            <p className="text-sm text-[var(--ink-6)]">No offers right now. Offers arrive by SMS and appear here.</p>
           ) : (
             <div className="space-y-3">
               {data.offers.map((o) => (
-                <div
-                  key={o.jobId}
-                  className="slide-in flex flex-wrap items-center gap-5 rounded-xl border-2 border-amber-300 bg-amber-50/50 p-4"
-                >
+                <div key={o.jobId} className="certificate seal-land flex flex-wrap items-center gap-5 bg-[var(--gold-wash)] p-4">
                   <JobStats job={o} />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Expires</p>
-                    <p className="mono text-xs font-bold text-red-600">{dateTime(o.expiresAt)}</p>
+                    <p className="smallcaps text-[var(--ink-6)]">Expires</p>
+                    <p className="serial text-xs font-bold text-[var(--stamp)]">{dateTime(o.expiresAt)}</p>
                   </div>
                   <div className="ml-auto flex gap-2">
                     <button className={btnCls} onClick={() => accept.mutate(o.jobId)} disabled={accept.isPending}>
-                      ✓ Accept Pickup
+                      Accept Pickup
                     </button>
                     <button className={btnGhostCls} onClick={() => decline.mutate(o.jobId)} disabled={decline.isPending}>
                       Decline
@@ -250,22 +246,24 @@ export function DriverJobsPage() {
 
         <Card title="Active Job">
           {active.length === 0 ? (
-            <p className="text-sm text-gray-400">No active job.</p>
+            <p className="text-sm text-[var(--ink-6)]">No active job.</p>
           ) : (
             active.map((j) => (
-              <div key={j.id} className="flex flex-wrap items-center gap-5 rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <div key={j.id} className="flex flex-wrap items-center gap-5 border border-[var(--ink-2)] bg-[var(--paper)] p-3.5">
                 <JobStats job={j} />
                 <StateBadge state={j.state} />
                 <div className="ml-auto">
                   {j.state === 'FUNDS_HELD' && (
                     <button className={btnCls} onClick={() => pickup.mutate(j.id)} disabled={pickup.isPending}>
-                      📦 Confirm goods loaded
+                      Confirm goods loaded
                     </button>
                   )}
                   {j.state === 'PICKED_UP' && (
-                    <span className="text-sm font-bold text-amber-700">Awaiting buyer delivery confirmation…</span>
+                    <span className="text-sm font-bold text-[var(--gold-deep)]">Awaiting buyer delivery confirmation…</span>
                   )}
-                  {j.state === 'DELIVERED' && <span className="text-sm font-semibold text-gray-500">Payout on the way…</span>}
+                  {j.state === 'DELIVERED' && (
+                    <span className="text-sm font-semibold text-[var(--ink-6)]">Payout on the way…</span>
+                  )}
                 </div>
               </div>
             ))
@@ -274,20 +272,18 @@ export function DriverJobsPage() {
 
         <Card title="Dispatch Queue — open requests on your routes">
           {data.openRequests.length === 0 ? (
-            <p className="text-sm text-gray-400">No other open pickup requests match your vehicle and routes.</p>
+            <p className="text-sm text-[var(--ink-6)]">No other open pickup requests match your vehicle and routes.</p>
           ) : (
             <>
               <div className="space-y-2">
                 {data.openRequests.map((j) => (
-                  <div key={j.id} className="flex flex-wrap items-center gap-5 rounded-xl border border-gray-100 p-3 opacity-70">
+                  <div key={j.id} className="flex flex-wrap items-center gap-5 border border-[var(--ink-2)] p-3 opacity-60">
                     <JobStats job={j} />
-                    <span className="ml-auto text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                      queued for dispatch
-                    </span>
+                    <span className="smallcaps ml-auto text-[var(--ink-6)]">queued for dispatch</span>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-[10px] text-gray-400">
+              <p className="mt-3 text-[11px] text-[var(--ink-6)]">
                 Dispatch is sequential nearest-first — these reach you automatically if drivers ahead of you decline or
                 time out.
               </p>
@@ -297,30 +293,33 @@ export function DriverJobsPage() {
 
         <Card title="History">
           {history.length === 0 ? (
-            <p className="text-sm text-gray-400">No completed jobs yet.</p>
+            <p className="text-sm text-[var(--ink-6)]">No completed jobs yet.</p>
           ) : (
             <table className={tableCls}>
               <thead>
                 <tr>
-                  <th className={thCls}>Job</th>
+                  <th className={thCls}>Job №</th>
                   <th className={thCls}>Load</th>
                   <th className={thCls}>Fee</th>
                   <th className={thCls}>Status</th>
                   <th className={thCls}>Paid</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody>
                 {history.map((j) => (
-                  <tr key={j.id} className="hover:bg-gray-50">
-                    <td className={`${tdCls} mono text-xs font-bold text-gray-900`}>{j.jobCode}</td>
+                  <tr key={j.id} className="hover:bg-[var(--paper)]">
+                    <td className={`${tdCls} serial text-xs font-bold`}>{j.jobCode}</td>
                     <td className={tdCls}>
-                      {CROP_EMOJI[j.commodityCode] ?? '📦'} {j.quantityKg}kg {j.commodityCode}
+                      <span className="flex items-center gap-2">
+                        <CropMark code={j.commodityCode} className="h-5 w-5 flex-shrink-0 text-[var(--ink-7)]" />
+                        {j.quantityKg}kg {j.commodityCode}
+                      </span>
                     </td>
-                    <td className={`${tdCls} ${numCls} font-bold text-[#1B4332]`}>{ghs(j.quoteAmount)}</td>
+                    <td className={`${tdCls} ${numCls} font-bold text-[var(--gold-deep)]`}>{ghs(j.quoteAmount)}</td>
                     <td className={tdCls}>
                       <StateBadge state={j.state} />
                     </td>
-                    <td className={`${tdCls} mono text-[11px] text-gray-500`}>{dateTime(j.paidAt)}</td>
+                    <td className={`${tdCls} serial text-[11px] text-[var(--ink-6)]`}>{dateTime(j.paidAt)}</td>
                   </tr>
                 ))}
               </tbody>

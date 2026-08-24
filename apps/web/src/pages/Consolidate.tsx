@@ -1,16 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, ghs, type MarketLot, type Registries } from '../api';
-import { CROP_EMOJI, GradeBadge, VEHICLE_EMOJI } from '../components/ui';
+import { api, ghs, placeName, sellerName, type MarketLot, type Registries } from '../api';
+import { CropMark, Glyph, VehicleMark } from '../components/engrave';
+import { GradeBadge } from '../components/ui';
 
 const BAND_ORDER: Record<string, number> = { A: 3, B: 2, C: 1 };
 
 /**
- * Frame 10: bundle small same-crop lots toward one truck. "Dispatch" here is a
- * pool bid — ONE demand sized to the selection; the engine already splits a
- * demand across lots, so each farmer still consents to their own offer (D-034).
- * Rendered as the Marketplace's "Pool builder" mode since M26.
+ * The Pool Builder: bundle small same-crop lots toward one truck. "Dispatch"
+ * is a pool bid — ONE demand sized to the selection; the engine splits it, so
+ * each farmer still consents to their own offer (D-034).
  */
 export function PoolBuilder() {
   const navigate = useNavigate();
@@ -87,58 +87,67 @@ export function PoolBuilder() {
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
-      {/* Sidebar: truck + capacity + pool summary */}
+      {/* ── The waybill manifest ─────────────────────────────── */}
       <aside className="w-full flex-shrink-0 lg:w-72">
-        <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-          <div className="bg-[#1B4332] px-5 py-4">
-            <div className="text-base font-extrabold text-white">Co-op Consolidation</div>
-            <div className="mt-0.5 text-[11px] text-green-300">Bundle small lots into one dispatch</div>
+        <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
+          <div className="plate px-5 py-4">
+            <div className="display text-base font-semibold tracking-[0.08em]">CONSOLIDATION</div>
+            <div className="smallcaps mt-0.5 text-[var(--ink-3)]">bundle small lots into one dispatch</div>
           </div>
+          <div className="guilloche h-[10px] w-full bg-[var(--ink)] opacity-90" />
           <div className="flex flex-col gap-5 p-5">
             <div>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">Target Truck</p>
+              <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">Target Truck</p>
               {vehicles.map((v) => (
                 <button
                   key={v.code}
                   onClick={() => setTruckCode(v.code)}
-                  className={`mb-2 flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left transition-colors ${
-                    truck?.code === v.code ? 'border-[#1B4332] bg-green-50' : 'border-gray-100 hover:border-gray-300'
+                  className={`mb-2 flex w-full items-center gap-3 border p-3 text-left transition-colors ${
+                    truck?.code === v.code
+                      ? 'border-[var(--ink)] bg-[var(--gold-wash)]'
+                      : 'border-[var(--ink-2)] hover:border-[var(--ink-5)]'
                   }`}
                 >
-                  <span className="text-xl">{VEHICLE_EMOJI[v.code] ?? '🚚'}</span>
+                  <VehicleMark code={v.code} className="h-8 w-8 flex-shrink-0 text-[var(--ink)]" />
                   <span>
-                    <span className={`block text-sm font-bold ${truck?.code === v.code ? 'text-[#1B4332]' : 'text-gray-800'}`}>
-                      {v.name}
+                    <span className="block text-sm font-bold text-[var(--ink)]">{v.name}</span>
+                    <span className="serial block text-[11px] text-[var(--ink-6)]">
+                      up to {v.capacityKg.toLocaleString()} kg
                     </span>
-                    <span className="mono block text-[10px] text-gray-500">up to {v.capacityKg.toLocaleString()} kg</span>
                   </span>
                 </button>
               ))}
             </div>
 
             <div>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">Load Capacity</p>
+              <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">Load Capacity</p>
               <div className="mb-1.5 flex items-end justify-between">
-                <span className={`mono text-2xl font-extrabold ${overload ? 'text-red-600' : full ? 'text-green-700' : 'text-gray-800'}`}>
+                <span
+                  className={`serial text-2xl font-bold ${
+                    overload ? 'text-[var(--stamp)]' : full ? 'text-[var(--ink)]' : 'text-[var(--ink-7)]'
+                  }`}
+                >
                   {pct}%
                 </span>
-                <span className="mono text-xs text-gray-400">
+                <span className="serial text-xs text-[var(--ink-6)]">
                   {totalKg.toLocaleString()} / {capacity.toLocaleString()} kg
                 </span>
               </div>
-              <div className="h-4 overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+              <div className="h-4 border border-[var(--ink-3)] bg-[var(--paper)] p-[2px]">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    overload ? 'bg-red-500' : full ? 'bg-green-600' : 'bg-[#D97706]'
+                  className={`h-full transition-all duration-500 ${
+                    overload ? 'bg-[var(--stamp)]' : full ? 'bg-[var(--ink)]' : 'bg-[var(--gold)]'
                   }`}
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              {overload && <p className="mt-1 text-[10px] font-semibold text-red-600">⚠ Exceeds truck capacity — remove lots</p>}
-              {full && <p className="mt-1 text-[10px] font-semibold text-green-600">✓ Good load — ready to bid</p>}
+              {overload && (
+                <p className="mt-1.5 text-[11px] font-semibold text-[var(--stamp)]">Exceeds truck capacity — remove lots</p>
+              )}
+              {full && <p className="mt-1.5 text-[11px] font-semibold text-[var(--ink)]">Good load — ready to bid</p>}
             </div>
 
-            <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-4">
+            <div className="flex flex-col gap-1.5 border-t border-[var(--ink-2)] pt-4">
               {(
                 [
                   ['Lots selected', `${chosen.length} / ${lots.length}`],
@@ -149,27 +158,24 @@ export function PoolBuilder() {
                 ] as const
               ).map(([k, v]) => (
                 <div key={k} className="flex justify-between text-xs">
-                  <span className="text-gray-400">{k}</span>
-                  <span className="mono font-semibold text-gray-800">{v}</span>
+                  <span className="smallcaps text-[var(--ink-6)]">{k}</span>
+                  <span className="serial font-semibold text-[var(--ink)]">{v}</span>
                 </div>
               ))}
             </div>
 
             {error && (
-              <p
-                className="cursor-pointer rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700"
-                onClick={() => setError(null)}
-              >
+              <p className="stamp cursor-pointer px-3 py-2 text-[11px] text-[var(--stamp)]" onClick={() => setError(null)}>
                 {error}
               </p>
             )}
             <button
               disabled={chosen.length === 0 || overload || poolBid.isPending}
               onClick={() => poolBid.mutate()}
-              className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${
+              className={`rounded-[2px] py-2.5 text-sm font-semibold transition-colors ${
                 chosen.length && !overload
-                  ? 'bg-[#1B4332] text-white hover:bg-green-900'
-                  : 'cursor-not-allowed bg-gray-200 text-gray-500'
+                  ? 'bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--ink-8)]'
+                  : 'cursor-not-allowed bg-[var(--ink-2)] text-[var(--ink-6)]'
               }`}
             >
               {poolBid.isPending
@@ -178,22 +184,22 @@ export function PoolBuilder() {
                   ? `Place Pool Bid — ${totalKg.toLocaleString()} kg`
                   : 'Select lots to build a load'}
             </button>
-            <p className="text-[10px] leading-relaxed text-gray-400">
+            <p className="text-[11px] leading-relaxed text-[var(--ink-6)]">
               A pool bid posts one demand for the whole load. The engine offers each farmer their share — every farmer
-              accepts (or declines) their own contract, then transport dispatches per contract.
+              accepts their own contract, then transport dispatches per contract.
             </p>
           </div>
         </div>
       </aside>
 
-      {/* Board */}
+      {/* ── The board ────────────────────────────────────────── */}
       <div className="min-w-0 flex-1">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-gray-500">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <p className="text-sm text-[var(--ink-6)]">
             Select same-crop lots to consolidate into one truck-sized pool bid — each farmer still accepts their own
             offer
           </p>
-          <div className="flex gap-1.5">
+          <div className="flex border border-[var(--ink-3)]">
             {commodityCodes.map((code) => (
               <button
                 key={code}
@@ -201,22 +207,23 @@ export function PoolBuilder() {
                   setCommodity(code);
                   setSelected(new Set());
                 }}
-                className={`rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
+                className={`smallcaps flex items-center gap-1.5 px-3 py-1.5 transition-colors ${
                   activeCommodity === code
-                    ? 'border-[#1B4332] bg-[#1B4332] text-white'
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    ? 'bg-[var(--ink)] text-[var(--paper)]'
+                    : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'
                 }`}
               >
-                {CROP_EMOJI[code] ?? ''} {code}
+                <CropMark code={code} className="h-4 w-4" />
+                {code}
               </button>
             ))}
           </div>
         </div>
 
         {lots.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-gray-100 bg-white py-20 text-gray-400 shadow-sm">
-            <div className="mb-2 text-4xl">🌾</div>
-            <p className="font-semibold text-gray-500">No open lots to consolidate</p>
+          <div className="certificate flex flex-col items-center justify-center bg-[var(--paper-lift)] py-20">
+            <Glyph name="scale" className="mb-3 h-12 w-12 text-[var(--ink-4)]" />
+            <p className="font-semibold text-[var(--ink-6)]">No open lots to consolidate</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -227,53 +234,53 @@ export function PoolBuilder() {
                 <div
                   key={lot.id}
                   onClick={() => !wouldOverload && toggle(lot.id)}
-                  className={`rounded-xl border-2 bg-white p-4 shadow-sm transition-all ${
+                  className={`certificate p-4 transition-colors ${
                     sel
-                      ? 'border-[#1B4332] bg-green-50'
+                      ? 'bg-[var(--gold-wash)]'
                       : wouldOverload
-                        ? 'cursor-not-allowed border-gray-100 opacity-40'
-                        : 'cursor-pointer border-gray-100 hover:border-gray-300 hover:shadow-md'
+                        ? 'cursor-not-allowed bg-[var(--paper-lift)] opacity-40'
+                        : 'cursor-pointer bg-[var(--paper-lift)] hover:bg-[var(--paper)]'
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div
-                      className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                        sel ? 'border-[#1B4332] bg-[#1B4332]' : 'border-gray-300'
+                    <span
+                      className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors ${
+                        sel ? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]' : 'border-[var(--ink-3)] text-[var(--ink-6)]'
                       }`}
                     >
-                      {sel ? (
-                        <span className="text-sm font-extrabold text-white">✓</span>
-                      ) : (
-                        <span className="text-lg">{CROP_EMOJI[lot.commodityCode] ?? '📦'}</span>
-                      )}
-                    </div>
+                      {sel ? <Glyph name="check" className="h-4 w-4" /> : <CropMark code={lot.commodityCode} className="h-5 w-5" />}
+                    </span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-gray-900">{lot.farmerName ?? 'Farmer'}</span>
+                        <span className="text-sm font-bold text-[var(--ink)]">{sellerName(lot.farmerName)}</span>
                         <GradeBadge grade={lot.declaredBand} />
                       </div>
-                      <div className="mt-0.5 text-xs text-gray-500">
-                        {lot.district ? `${lot.district}, ` : ''}
-                        {lot.regionName} · {lot.distanceKm} km · <span className="mono">{lot.lotCode}</span>
+                      <div className="mt-0.5 text-xs text-[var(--ink-6)]">
+                        {placeName(lot.district) ? `${placeName(lot.district)}, ` : ''}
+                        {lot.regionName} · {lot.distanceKm} km · <span className="serial">{lot.lotCode}</span>
                         {lot.farmerPhone && (
                           <>
                             {' · '}
-                            <a href={`tel:${lot.farmerPhone}`} className="mono font-semibold text-[#B45309] hover:underline">
-                              📞 {lot.farmerPhone}
+                            <a
+                              href={`tel:${lot.farmerPhone}`}
+                              className="serial font-semibold text-[var(--stamp)] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {lot.farmerPhone}
                             </a>
                           </>
                         )}
                       </div>
                       <div className="mt-2 flex items-center gap-5">
                         <div>
-                          <div className="mono text-lg font-extrabold text-gray-800">{lot.remainingKg.toLocaleString()}</div>
-                          <div className="text-[10px] text-gray-400">kg available</div>
+                          <div className="serial text-lg font-bold text-[var(--ink)]">{lot.remainingKg.toLocaleString()}</div>
+                          <div className="smallcaps text-[var(--ink-6)]">kg available</div>
                         </div>
                         <div>
-                          <div className="text-base font-bold text-[#1B4332]">
+                          <div className="serial text-base font-bold text-[var(--gold-deep)]">
                             {lot.pricePerUnit !== null ? ghs(lot.pricePerUnit) : '—'}
                           </div>
-                          <div className="text-[10px] text-gray-400">/ {lot.unitName}</div>
+                          <div className="smallcaps text-[var(--ink-6)]">/ {lot.unitName}</div>
                         </div>
                       </div>
                     </div>
