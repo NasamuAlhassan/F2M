@@ -27,6 +27,30 @@ const DEFAULT_MSISDN: Record<Persona, string> = {
 
 const SHORTCODE = '*384*7247#';
 
+/** Multi-tap letter cycles per key, the way a real feature-phone keypad reads
+ *  (`*` switches case/mode instead of contributing a character; `#` types
+ *  itself literally). A USSD or DTMF reply is free text on the wire either
+ *  way, so this is what makes typing a name — not just a menu digit —
+ *  possible at all. */
+const TAP_CYCLE: Record<string, string[]> = {
+  '1': ['1'],
+  '2': ['a', 'b', 'c', '2'],
+  '3': ['d', 'e', 'f', '3'],
+  '4': ['g', 'h', 'i', '4'],
+  '5': ['j', 'k', 'l', '5'],
+  '6': ['m', 'n', 'o', '6'],
+  '7': ['p', 'q', 'r', 's', '7'],
+  '8': ['t', 'u', 'v', '8'],
+  '9': ['w', 'x', 'y', 'z', '9'],
+  '0': [' ', '0', '+'],
+};
+type InputMode = 'abc' | 'ABC' | '123';
+const NEXT_MODE: Record<InputMode, InputMode> = { abc: 'ABC', ABC: '123', '123': 'abc' };
+/** A pause this long commits the pending letter, so the next tap of the same
+ *  key starts a fresh character instead of continuing the cycle — "hello"
+ *  needs the two Ls to land as two taps of 5, not one held cycle. */
+const TAP_TIMEOUT_MS = 650;
+
 interface VoiceCall {
   id: string;
   flow: string;
@@ -114,6 +138,16 @@ export function PhonePage() {
   const [awaitingDigits, setAwaitingDigits] = useState(false);
   const [transcript, setTranscript] = useState('');
 
+  // Composed reply — the line being typed for the current USSD prompt or DTMF
+  // gather, built up over one or more keypad taps and sent as a whole on OK
+  // (a menu digit is just a one-character line; a name is a longer one).
+  const [compose, setCompose] = useState('');
+  // Most prompts are numbered menus, so default to plain digits each screen —
+  // switching to letters (for a name, say) is one tap of `*` away.
+  const [inputMode, setInputMode] = useState<InputMode>('123');
+  const tapRef = useRef<{ key: string; cycleIndex: number } | null>(null);
+  const tapTimerRef = useRef<number | null>(null);
+
   // Swapping persona swaps SIM: a different number, and any live session dies.
   useEffect(() => {
     setMsisdn(storedMsisdn(persona));
@@ -122,6 +156,8 @@ export function PhonePage() {
     callRef.current = null;
     setMode('idle');
     setScreen('');
+    setCompose('');
+    tapRef.current = null;
   }, [persona]);
 
   useEffect(() => {
@@ -208,6 +244,11 @@ export function PhonePage() {
   }, [msisdn]);
 
   const applyUssd = (text: string) => {
+    // A fresh prompt starts a fresh reply — the line just sent, and whatever
+    // key was mid-cycle, belong to the screen that's gone now.
+    setCompose('');
+    setInputMode('123');
+    tapRef.current = null;
     if (text.startsWith('CON ')) {
       setScreen(text.slice(4));
     } else if (text.startsWith('END ')) {
@@ -251,6 +292,8 @@ export function PhonePage() {
     historyRef.current = [];
     setMode('idle');
     setScreen('');
+    setCompose('');
+    tapRef.current = null;
     if (id) {
       try {
         await fetch('/api/dev/ussd-end', {
@@ -289,6 +332,9 @@ export function PhonePage() {
     setSpeaking(true);
     window.setTimeout(() => setSpeaking(false), 1200);
     setAwaitingDigits(Boolean(gather));
+    setCompose('');
+    setInputMode('123');
+    tapRef.current = null;
 
     if (!gather && !record) {
       window.setTimeout(() => {
@@ -358,14 +404,61 @@ export function PhonePage() {
     }
   }, [msisdn, transcript]);
 
-  /* ── Key routing: one keypad, three jobs ── */
+  /* ── Key routing: one keypad, three jobs ──
+     Every tap composes onto the current line rather than sending straight
+     away — the only way a name, not just a menu digit, can ever get typed.
+     OK/Send submits the composed line as this step's whole reply, same as a
+     real handset. A tap cycles that key's letters (again within the timeout
+     to advance, or after it to start a fresh character); a press-and-hold
+     skips the cycle and drops in the digit directly — the two-speed input a
+     real keypad gives you, not just single presses. */
+  const composing = mode === 'ussd' || (mode === 'incall' && awaitingDigits);
+
   const onKey = useCallback(
-    (k: string) => {
-      if (mode === 'ussd') void sendUssd(k);
-      else if (mode === 'incall' && awaitingDigits) void answer(k);
+    (k: string, held: boolean) => {
+      if (!composing) return;
+      if (k === '*') {
+        if (!held) setInputMode((m) => NEXT_MODE[m]);
+        tapRef.current = null;
+        return;
+      }
+      if (tapTimerRef.current !== null) window.clearTimeout(tapTimerRef.current);
+
+      if (held || inputMode === '123' || k === '#') {
+        setCompose((c) => c + k);
+        tapRef.current = null;
+        return;
+      }
+
+      const cycle = TAP_CYCLE[k] ?? [k];
+      const cased = (ch: string) => (inputMode === 'ABC' ? ch.toUpperCase() : ch);
+      if (tapRef.current && tapRef.current.key === k) {
+        const cycleIndex = (tapRef.current.cycleIndex + 1) % cycle.length;
+        setCompose((c) => c.slice(0, -1) + cased(cycle[cycleIndex] ?? k));
+        tapRef.current = { key: k, cycleIndex };
+      } else {
+        setCompose((c) => c + cased(cycle[0] ?? k));
+        tapRef.current = { key: k, cycleIndex: 0 };
+      }
+      tapTimerRef.current = window.setTimeout(() => {
+        tapRef.current = null;
+      }, TAP_TIMEOUT_MS);
     },
-    [mode, awaitingDigits, sendUssd, answer],
+    [composing, inputMode],
   );
+
+  const backspace = useCallback(() => {
+    tapRef.current = null;
+    setCompose((c) => c.slice(0, -1));
+  }, []);
+
+  const sendCompose = useCallback(() => {
+    tapRef.current = null;
+    const line = compose;
+    setCompose('');
+    if (mode === 'ussd') void sendUssd(line);
+    else if (mode === 'incall' && awaitingDigits) void answer(line);
+  }, [mode, awaitingDigits, compose, sendUssd, answer]);
 
   const softLeft: SoftKey | undefined =
     mode === 'idle'
@@ -386,7 +479,15 @@ export function PhonePage() {
         ? { label: 'End', onClick: () => void hangUp() }
         : undefined;
 
-  const screenBody =
+  const softRight: SoftKey | undefined = composing
+    ? { label: 'Clear', onClick: backspace, disabled: busy || compose.length === 0 }
+    : undefined;
+
+  const ok: SoftKey | undefined = composing
+    ? { label: 'OK — send', onClick: sendCompose, disabled: busy || compose.length === 0 }
+    : undefined;
+
+  const promptBody =
     mode === 'ringing' ? (
       <span className="ember font-semibold">
         ☎ INCOMING CALL{'\n'}Farm to Market{'\n'}
@@ -410,6 +511,23 @@ export function PhonePage() {
         {SHORTCODE}
       </span>
     );
+
+  // The line being typed, live — a real handset always shows what you have
+  // typed so far, plus which of abc/ABC/123 the `*` key would switch to.
+  const screenBody = composing ? (
+    <>
+      {promptBody}
+      <div className="mt-2 flex items-baseline justify-between gap-2 border-t border-[#1a2005]/25 pt-1.5">
+        <span className="font-bold">
+          {compose}
+          <span className="opacity-60">▏</span>
+        </span>
+        <span className="text-[9px] tracking-wide opacity-70">{inputMode}</span>
+      </div>
+    </>
+  ) : (
+    promptBody
+  );
 
   return (
     <div className="min-h-screen bg-[var(--paper)]">
@@ -457,19 +575,28 @@ export function PhonePage() {
       </header>
 
       <main className="mx-auto flex max-w-[1100px] flex-wrap items-start gap-8 px-5 py-8">
-        <Handset
-          statusRight={clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-          ringing={mode === 'ringing'}
-          powered={mode !== 'idle' || Boolean(screen)}
-          softLeft={softLeft}
-          softRight={mode === 'ussd' ? { label: 'Menu', disabled: true } : undefined}
-          onKey={onKey}
-          keysDisabled={busy || (mode !== 'ussd' && !(mode === 'incall' && awaitingDigits))}
-          call={call}
-          end={end}
-        >
-          {screenBody}
-        </Handset>
+        <div className="flex-shrink-0">
+          <Handset
+            statusRight={clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+            ringing={mode === 'ringing'}
+            powered={mode !== 'idle' || Boolean(screen)}
+            softLeft={softLeft}
+            softRight={softRight}
+            onKey={onKey}
+            keysDisabled={busy || !composing}
+            call={call}
+            end={end}
+            ok={ok}
+          >
+            {screenBody}
+          </Handset>
+          {composing && (
+            <p className="mt-3 w-[330px] text-center text-[11px] leading-relaxed text-[var(--ink-6)]">
+              Tap a key to cycle its letters, hold to type the digit instead. <span className="text-[var(--gold)]">*</span>{' '}
+              switches abc / ABC / 123.
+            </p>
+          )}
+        </div>
 
         <div className="flex min-w-[300px] flex-1 flex-col gap-5">
           {offline && (

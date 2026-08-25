@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 
 /**
  * The handset — a feature phone rendered as an object rather than a rectangle.
@@ -33,6 +33,9 @@ const KEYS: ReadonlyArray<readonly [string, string]> = [
   ['#', ''],
 ];
 
+/** How long a press has to hold before it counts as a hold instead of a tap. */
+const HOLD_MS = 450;
+
 /** The four-bar waveform shown while the far end is speaking. */
 export function WaveBars({ className }: { className?: string }) {
   return (
@@ -61,12 +64,16 @@ interface HandsetProps {
   powered?: boolean;
   softLeft?: SoftKey;
   softRight?: SoftKey;
-  onKey?: (key: string) => void;
+  /** `held` is true for a press-and-hold — a real keypad's shortcut straight
+   *  to the digit, instead of tapping through that key's letters to reach it. */
+  onKey?: (key: string, held: boolean) => void;
   keysDisabled?: boolean;
   /** Green send key. */
   call?: SoftKey;
   /** Red end key. */
   end?: SoftKey;
+  /** D-pad centre — OK/Send for a composed line, when text entry is live. */
+  ok?: SoftKey;
 }
 
 export function Handset({
@@ -81,6 +88,7 @@ export function Handset({
   keysDisabled = false,
   call,
   end,
+  ok,
 }: HandsetProps) {
   return (
     <div className={`w-[330px] flex-shrink-0 ${ringing ? 'handset-ring' : ''}`}>
@@ -145,33 +153,14 @@ export function Handset({
         {/* ── Call keys flanking the D-pad ── */}
         <div className="mt-2 flex items-center justify-between gap-2">
           <CallKey soft={call} tone="send" />
-          <DPad />
+          <DPad ok={ok} />
           <CallKey soft={end} tone="end" />
         </div>
 
         {/* ── Keypad ── */}
         <div className="mt-3 grid grid-cols-3 gap-x-2.5 gap-y-2">
           {KEYS.map(([digit, letters]) => (
-            <button
-              key={digit}
-              type="button"
-              disabled={keysDisabled || !onKey}
-              onClick={() => onKey?.(digit)}
-              className="group flex h-[42px] flex-col items-center justify-center rounded-[9px] border border-black/45 leading-none text-[var(--paper)] shadow-[0_2.5px_0_#0a1c17] transition-[transform,box-shadow] active:translate-y-[2.5px] active:shadow-none disabled:opacity-35 disabled:active:translate-y-0 disabled:active:shadow-[0_2.5px_0_#0a1c17]"
-              style={{ background: 'linear-gradient(180deg, #2f5449 0%, #1c3b33 100%)' }}
-              aria-label={letters ? `${digit} ${letters}` : digit}
-            >
-              <span
-                className={`text-[15px] font-semibold ${
-                  digit === '*' ? 'text-[var(--gold)]' : digit === '#' ? 'text-[#8fd0a8]' : ''
-                }`}
-              >
-                {digit}
-              </span>
-              {letters && (
-                <span className="mt-[2px] text-[7.5px] tracking-[0.12em] text-[var(--ink-3)]">{letters}</span>
-              )}
-            </button>
+            <KeypadButton key={digit} digit={digit} letters={letters} disabled={keysDisabled || !onKey} onKey={onKey} />
           ))}
         </div>
 
@@ -228,15 +217,100 @@ function CallKey({ soft, tone }: { soft?: SoftKey; tone: 'send' | 'end' }) {
   );
 }
 
-/** Decorative navigation ring — the flows are numeric, so it takes no input. */
-function DPad() {
+/** Navigation ring. Its centre doubles as OK/Send — the one button that submits
+ *  whatever line the keypad just composed, same as the centre key on a real
+ *  feature phone. Decorative (no input) whenever nothing is being composed. */
+function DPad({ ok }: { ok?: SoftKey }) {
   return (
     <div
       className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-black/45 shadow-[0_2.5px_0_#0a1c17]"
       style={{ background: 'linear-gradient(180deg, #2f5449 0%, #1c3b33 100%)' }}
-      aria-hidden="true"
     >
-      <div className="h-[22px] w-[22px] rounded-full border border-black/40 bg-[#14322b] shadow-[inset_0_1px_2px_rgba(0,0,0,.6)]" />
+      {ok ? (
+        <button
+          type="button"
+          disabled={ok.disabled}
+          onClick={ok.onClick}
+          aria-label={ok.label}
+          className="serial flex h-[22px] w-[22px] items-center justify-center rounded-full border border-black/40 bg-[#14322b] text-[8px] font-bold text-[#8fd0a8] shadow-[inset_0_1px_2px_rgba(0,0,0,.6)] transition-opacity active:opacity-70 disabled:opacity-40"
+        >
+          OK
+        </button>
+      ) : (
+        <div
+          aria-hidden="true"
+          className="h-[22px] w-[22px] rounded-full border border-black/40 bg-[#14322b] shadow-[inset_0_1px_2px_rgba(0,0,0,.6)]"
+        />
+      )}
     </div>
+  );
+}
+
+/** One keypad key: a quick tap cycles onto the next letter it carries (the
+ *  same key pressed again advances the cycle), a press-and-hold jumps
+ *  straight to the digit — the two-speed input every feature-phone keypad
+ *  actually offers, letters by tapping, digits by holding. */
+function KeypadButton({
+  digit,
+  letters,
+  disabled,
+  onKey,
+}: {
+  digit: string;
+  letters: string;
+  disabled: boolean;
+  onKey?: (key: string, held: boolean) => void;
+}) {
+  const timerRef = useRef<number | null>(null);
+  const firedRef = useRef(false);
+
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const onPointerDown = () => {
+    if (disabled) return;
+    firedRef.current = false;
+    timerRef.current = window.setTimeout(() => {
+      firedRef.current = true;
+      onKey?.(digit, true);
+    }, HOLD_MS);
+  };
+
+  const onPointerUp = () => {
+    clearTimer();
+    if (!firedRef.current) onKey?.(digit, false);
+  };
+
+  const onPointerLeave = () => {
+    // A drag-off cancels the press entirely, same as any button.
+    clearTimer();
+    firedRef.current = true;
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
+      onContextMenu={(e) => e.preventDefault()}
+      className="group flex h-[42px] flex-col items-center justify-center rounded-[9px] border border-black/45 leading-none text-[var(--paper)] shadow-[0_2.5px_0_#0a1c17] transition-[transform,box-shadow] active:translate-y-[2.5px] active:shadow-none disabled:opacity-35 disabled:active:translate-y-0 disabled:active:shadow-[0_2.5px_0_#0a1c17]"
+      style={{ background: 'linear-gradient(180deg, #2f5449 0%, #1c3b33 100%)', touchAction: 'manipulation' }}
+      aria-label={letters ? `${digit} ${letters} — tap to cycle letters, hold for the digit` : digit}
+    >
+      <span
+        className={`text-[15px] font-semibold ${
+          digit === '*' ? 'text-[var(--gold)]' : digit === '#' ? 'text-[#8fd0a8]' : ''
+        }`}
+      >
+        {digit}
+      </span>
+      {letters && <span className="mt-[2px] text-[7.5px] tracking-[0.12em] text-[var(--ink-3)]">{letters}</span>}
+    </button>
   );
 }
