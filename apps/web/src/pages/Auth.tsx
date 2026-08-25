@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signInWithPassword, signUp } from '../hooks/useAuth';
 import { uploadLicensePhoto } from '../lib/licensePhoto';
-import { type AppRole, supabase } from '../lib/supabase';
+import { isSupabaseConfigured, type AppRole } from '../lib/supabase';
 import { btnCls, btnGhostCls, Field, inputCls } from '../components/ui';
 
 /**
@@ -10,6 +11,12 @@ import { btnCls, btnGhostCls, Field, inputCls } from '../components/ui';
  * tomorrow's design files, not a finished screen — the logic here (role
  * routing, driver verification, the email-confirmation fork below) is the
  * part meant to survive the restyle.
+ *
+ * Talks to signUp/signInWithPassword from hooks/useAuth, not Supabase
+ * directly — that indirection is what lets this whole screen work with zero
+ * external setup: no configured Supabase project means every call here
+ * transparently runs against the mock backend instead (lib/mockAuth.ts),
+ * same mock-first shape as every other provider in this app.
  */
 
 const ROLES: Array<{ value: AppRole; label: string; blurb: string }> = [
@@ -48,32 +55,27 @@ export function AuthPage() {
     setBusy(true);
     setError(null);
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { userId, hasSession } = await signUp({
         email,
         password,
-        options: {
-          data: {
-            role,
-            full_name: fullName,
-            phone: phone || null,
-            company: role === 'buyer' ? company || null : null,
-            vehicle_class: role === 'driver' ? vehicleClass || null : null,
-            license_number: role === 'driver' ? licenseNumber || null : null,
-          },
-        },
+        role,
+        fullName,
+        phone: phone || null,
+        company: role === 'buyer' ? company || null : null,
+        vehicleClass: role === 'driver' ? vehicleClass || null : null,
+        licenseNumber: role === 'driver' ? licenseNumber || null : null,
       });
-      if (signUpError) throw signUpError;
-      if (!data.user) throw new Error('Sign up did not return a user — try again.');
 
-      // Two real Supabase outcomes here, not one: if email confirmation is
-      // off, signUp() hands back an active session immediately and the
-      // driver's license photo can upload right now. If confirmation is
-      // required, there's no session yet — RLS would reject the upload, so
-      // the honest move is to say so and let them add the photo after they
-      // confirm and sign in, not silently drop it or fake success.
-      if (data.session) {
+      // Real Supabase has two outcomes here: with email confirmation off,
+      // signUp() hands back an active session immediately and the driver's
+      // license photo can upload right now; with it on, there's no session
+      // yet (RLS would reject the upload), so the honest move is to say so
+      // and let them add the photo after they confirm and sign in. Mock
+      // mode always takes the first path — signup is instant, no
+      // confirmation step exists to wait on.
+      if (hasSession) {
         if (role === 'driver' && licenseFile) {
-          const { error: uploadErr } = await uploadLicensePhoto(data.user.id, licenseFile);
+          const { error: uploadErr } = await uploadLicensePhoto(userId, licenseFile);
           if (uploadErr) throw new Error(`Account created, but the license photo failed to upload: ${uploadErr}`);
         }
         navigate(HOME_PATH[role]);
@@ -92,10 +94,8 @@ export function AuthPage() {
     setBusy(true);
     setError(null);
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw signInError;
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
-      navigate(profile ? HOME_PATH[profile.role as AppRole] : '/auth');
+      const { role: signedInRole } = await signInWithPassword(email, password);
+      navigate(signedInRole ? HOME_PATH[signedInRole] : '/auth');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed');
     } finally {
@@ -126,6 +126,11 @@ export function AuthPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-4 py-10">
+      {!isSupabaseConfigured() && (
+        <p className="smallcaps self-center rounded-full bg-[var(--gold-wash)] px-3 py-1 text-[var(--gold-ink)]">
+          Demo mode — accounts live in this browser only
+        </p>
+      )}
       <div className="text-center">
         <h1 className="text-2xl font-bold">Farm to Market</h1>
         <p className="text-sm text-[var(--ink-6)]">{mode === 'signup' ? 'Create your account' : 'Sign in'}</p>

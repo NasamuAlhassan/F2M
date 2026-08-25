@@ -17,6 +17,6 @@ Proof/content: real lots with seller photos or engraved crop marks, lot serials,
 
 Constraints: scanability outranks expression; 11px functional floor; engraving lives at frames/edges only; phone + desktop parity.
 
-Direction: The Trade Instrument (seed 222cf785) — lots as security-printed certificates on tinted banknote paper. Memorable moment: the grade seal stamped onto each certificate; the six-step spine as an engraved route.
+Direction: The Market World — lots as white cards lifted off a soft green ground, each commodity in its own true-to-produce color (`cropAccent()`), brand-green pill CTAs. Memorable moment: the filled grade seal on each card; the crop-colored media well replacing the old uniform hatch tint.
 
 Unresolved: none blocking; produce photography for demo lots is seller-supplied only.

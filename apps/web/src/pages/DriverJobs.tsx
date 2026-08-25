@@ -60,20 +60,20 @@ function ProfileSidebar() {
             <p className="serial text-[11px] text-[var(--ink-3)]">{profile.phone}</p>
           </div>
         </div>
-        <div className="guilloche h-[10px] w-full bg-[var(--ink)] opacity-90" />
+        <div className="h-[3px] w-full bg-[var(--gold)]" />
 
         <div className="space-y-5 p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="smallcaps text-[var(--ink-6)]">Availability</p>
-              <p className={`display text-sm font-semibold tracking-[0.1em] ${profile.active ? 'text-[var(--ink)]' : 'text-[var(--ink-4)]'}`}>
+              <p className={`display text-sm font-semibold tracking-[0.1em] ${profile.active ? 'text-[var(--forest)]' : 'text-[var(--ink-4)]'}`}>
                 {profile.active ? 'ON DUTY' : 'OFF DUTY'}
               </p>
             </div>
             <button
               aria-label="Toggle availability"
               className={`relative h-7 rounded-full border transition-colors ${
-                profile.active ? 'border-[var(--ink)] bg-[var(--ink)]' : 'border-[var(--ink-4)] bg-[var(--paper)]'
+                profile.active ? 'border-[var(--forest)] bg-[var(--forest)]' : 'border-[var(--ink-4)] bg-[var(--paper)]'
               }`}
               style={{ width: 52 }}
               onClick={() => save.mutate({ active: !profile.active })}

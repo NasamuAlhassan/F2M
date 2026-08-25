@@ -242,7 +242,7 @@ export function Layout({ role: routeRole }: { role?: Role }) {
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ink-4)]"
               />
               <input
-                className="w-full rounded-lg border border-[var(--ink-7)] bg-[var(--paper-lift)] py-2 pl-9 pr-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
+                className="w-full rounded-full border border-[var(--ink-7)] bg-[var(--paper-lift)] py-2 pl-9 pr-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
                 placeholder="Search crops, regions…"
                 value={searchParams.get('q') ?? ''}
                 onChange={(e) => {
@@ -273,7 +273,7 @@ export function Layout({ role: routeRole }: { role?: Role }) {
           </div>
         </div>
 
-        <div className="guilloche h-[10px] w-full opacity-90" />
+        <div className="h-[3px] w-full bg-[var(--gold)]" />
 
         <div className="border-t border-[var(--ink-8)]">
           <div className="mx-auto flex min-h-11 max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-1.5 sm:gap-x-6 sm:px-6">

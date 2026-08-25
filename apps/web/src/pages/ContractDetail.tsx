@@ -31,7 +31,7 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
       <div className="relative flex min-w-[600px] items-start justify-between">
         <div className="absolute left-0 right-0 top-4 h-px bg-[var(--ink-2)]">
           <div
-            className="h-full bg-[var(--ink)] transition-[width] duration-500"
+            className="h-full bg-[var(--forest)] transition-[width] duration-500"
             style={{ width: `${steps.length > 1 ? (Math.max(0, doneCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
           />
         </div>
@@ -43,7 +43,7 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
               <div
                 className={`serial flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] text-xs font-bold ${
                   done
-                    ? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]'
+                    ? 'border-[var(--forest)] bg-[var(--forest)] text-[var(--paper)]'
                     : active
                       ? 'ember border-[var(--gold)] bg-[var(--gold-wash)] text-[var(--gold-deep)]'
                       : 'border-[var(--ink-3)] bg-[var(--paper)] text-[var(--ink-4)]'
@@ -408,7 +408,7 @@ export function ContractDetailPage() {
                       <Link
                         to={`/t/${lot.id}`}
                         target="_blank"
-                        className="flex-1 rounded-lg bg-[var(--ink)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--paper)] hover:bg-[var(--ink-8)]"
+                        className="flex-1 rounded-lg bg-[var(--forest)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--paper)] hover:bg-[var(--forest-deep)]"
                       >
                         Public page
                       </Link>
@@ -614,7 +614,7 @@ function TransportSection({
                       <Glyph name="phone" className="h-3 w-3" /> Call
                     </a>
                     <button
-                      className="rounded-lg bg-[var(--ink)] px-3 py-1 text-xs font-semibold text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-lg bg-[var(--forest)] px-3 py-1 text-xs font-semibold text-[var(--paper)] transition-colors hover:bg-[var(--forest-deep)] disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={d.busy || request.isPending}
                       onClick={() => request.mutate({ preferredDriverId: d.id })}
                     >

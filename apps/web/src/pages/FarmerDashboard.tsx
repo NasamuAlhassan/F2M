@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type FarmerDashboard, type Registries } from '../api';
 import { POLL } from '../poll';
-import { CropMark, Glyph } from '../components/engrave';
+import { CropMark, cropAccent, cropPhoto, Glyph } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
 import { btnCls, btnGhostCls, ErrorStamp, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
@@ -82,7 +82,7 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
           <div className="display text-base font-semibold tracking-[0.08em]">LIST A NEW LOT</div>
           <div className="smallcaps mt-0.5 text-[var(--ink-3)]">add your produce to the marketplace</div>
         </div>
-        <div className="guilloche h-[10px] w-full bg-[var(--ink)] opacity-90" />
+        <div className="h-[3px] w-full bg-[var(--gold)]" />
         <div className="flex flex-col gap-4 p-5">
           <Field label="Crop">
             <select
@@ -346,13 +346,22 @@ export function FarmerDashboardPage() {
               .filter((l) => ['registered', 'matched'].includes(l.status))
               .map((l) => (
                 <div key={l.id} className="certificate flex flex-wrap items-center gap-4 bg-[var(--paper-lift)] p-4">
-                  {l.photoUrl ? (
+                  {l.photoUrl ?? cropPhoto(l.commodityCode) ? (
                     <span className="block h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg">
-                      <img src={l.photoUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                      <img
+                        src={l.photoUrl ?? cropPhoto(l.commodityCode)!}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
                     </span>
                   ) : (
-                    <span className="hatch flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg">
-                      <CropMark code={l.commodityCode} className="h-7 w-7 text-[var(--forest)]" />
+                    <span
+                      className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg"
+                      style={{ background: cropAccent(l.commodityCode).wash, color: cropAccent(l.commodityCode).ink }}
+                    >
+                      <CropMark code={l.commodityCode} className="h-7 w-7" />
                     </span>
                   )}
                   <div className="min-w-44 flex-1">

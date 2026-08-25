@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ghs, placeName, sellerName, shortDate, type MarketLot, type Registries } from '../api';
 import { POLL } from '../poll';
 import { NewDemandForm } from '../components/DemandForm';
-import { CropMark, Glyph } from '../components/engrave';
+import { CropMark, cropAccent, cropPhoto, Glyph } from '../components/engrave';
 import { Modal } from '../components/Modal';
 import { btnCls, GradeBadge, inputCls, rowOffCls, rowOnCls } from '../components/ui';
 import { PoolBuilder } from './Consolidate';
@@ -66,7 +66,7 @@ export function MarketplacePage() {
   };
 
   const modeSwitch = (
-    <div className="mb-4 inline-flex overflow-hidden rounded-xl border border-[var(--ink-2)] bg-[var(--paper-lift)] shadow-sm">
+    <div className="mb-4 inline-flex overflow-hidden rounded-full border border-[var(--ink-2)] bg-[var(--paper-lift)] shadow-sm">
       {(
         [
           ['browse', 'Browse Lots'],
@@ -77,7 +77,7 @@ export function MarketplacePage() {
           key={m}
           onClick={() => setSearchParams(m === 'pool' ? { mode: 'pool' } : {}, { replace: true })}
           className={`smallcaps min-h-11 px-4 py-2 transition-colors lg:min-h-0 ${
-            mode === m ? 'bg-[var(--ink)] text-[var(--paper)]' : 'text-[var(--ink-6)] hover:text-[var(--ink)]'
+            mode === m ? 'bg-[var(--forest)] text-[var(--paper)]' : 'text-[var(--ink-6)] hover:text-[var(--ink)]'
           }`}
         >
           {label}
@@ -116,23 +116,41 @@ export function MarketplacePage() {
             <div>
               <p className="rule-double smallcaps mb-2.5 pb-1.5 text-[var(--ink-6)]">Crop Type</p>
               <div className="space-y-0.5">
-                {(registries?.commodities ?? []).map((c) => (
-                  <label
-                    key={c.code}
-                    className={`flex cursor-pointer items-center gap-2.5 px-2 py-1.5 text-sm transition-colors ${
-                      crops.has(c.code) ? rowOnCls : rowOffCls
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 accent-[var(--ink)]"
-                      checked={crops.has(c.code)}
-                      onChange={() => toggle(crops, c.code, setCrops)}
-                    />
-                    <CropMark code={c.code} className="h-5 w-5 flex-shrink-0" />
-                    {c.name}
-                  </label>
-                ))}
+                {(registries?.commodities ?? []).map((c) => {
+                  const accent = cropAccent(c.code);
+                  const photo = cropPhoto(c.code);
+                  return (
+                    <label
+                      key={c.code}
+                      className={`flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 text-sm transition-colors ${
+                        crops.has(c.code) ? rowOnCls : rowOffCls
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-[var(--forest)]"
+                        checked={crops.has(c.code)}
+                        onChange={() => toggle(crops, c.code, setCrops)}
+                      />
+                      {photo ? (
+                        <img
+                          src={photo}
+                          alt=""
+                          className="h-7 w-7 flex-shrink-0 rounded-full object-cover"
+                          style={{ boxShadow: `0 0 0 1.5px ${accent.wash}` }}
+                        />
+                      ) : (
+                        <span
+                          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full"
+                          style={{ background: accent.wash, color: accent.ink }}
+                        >
+                          <CropMark code={c.code} className="h-4 w-4" />
+                        </span>
+                      )}
+                      {c.name}
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -240,16 +258,33 @@ export function MarketplacePage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {lots.map((l) => (
                 <article key={l.id} className="certificate flex flex-col overflow-hidden">
-                  {/* media well — full bleed to the card's own rounded corners, a
-                      real photo where the farmer uploaded one, otherwise a
-                      considered brand panel (never a stand-in photo: photoUrl
-                      is null by construction for every USSD/voice listing). */}
+                  {/* media well — full bleed to the card's own rounded corners. A real
+                      seller photo where one was uploaded; otherwise a representative
+                      stock photo of the commodity (D-042 — supersedes D-036's icon-only
+                      placeholder), always labeled "Representative photo" so it's never
+                      mistaken for this specific farmer's own produce. */}
                   <div className="relative h-44 flex-shrink-0">
                     {l.photoUrl ? (
                       <img src={l.photoUrl} alt={l.commodityName} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                    ) : cropPhoto(l.commodityCode) ? (
+                      <>
+                        <img
+                          src={cropPhoto(l.commodityCode)!}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover"
+                        />
+                        <span className="stamp absolute bottom-2 left-2 bg-[var(--ink)]/80 px-1.5 py-0.5 text-[11px] text-[var(--paper)] backdrop-blur-sm">
+                          Representative photo
+                        </span>
+                      </>
                     ) : (
-                      <div className="hatch flex h-full w-full items-center justify-center">
-                        <CropMark code={l.commodityCode} className="h-20 w-20 text-[var(--forest)]" />
+                      <div
+                        className="flex h-full w-full items-center justify-center"
+                        style={{ background: cropAccent(l.commodityCode).wash, color: cropAccent(l.commodityCode).ink }}
+                      >
+                        <CropMark code={l.commodityCode} className="h-20 w-20" />
                       </div>
                     )}
                     <div className="absolute inset-x-0 top-0 flex items-start justify-between p-2.5">
@@ -284,7 +319,7 @@ export function MarketplacePage() {
                         {l.regionName}
                       </p>
                       {l.channel !== 'web' && (
-                        <span className="stamp flex-shrink-0 bg-[var(--paper)] px-1.5 py-0.5 text-[10px] text-[var(--ink-6)]">
+                        <span className="stamp flex-shrink-0 bg-[var(--paper)] px-1.5 py-0.5 text-[11px] text-[var(--ink-6)]">
                           {l.channel === 'ivr' ? 'Voice listing' : 'USSD listing'}
                         </span>
                       )}
@@ -317,7 +352,7 @@ export function MarketplacePage() {
                     {l.farmerPhone && (
                       <a
                         href={`tel:${l.farmerPhone}`}
-                        className="mt-2.5 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--stamp)] py-2 text-sm font-semibold text-[var(--stamp)] transition-colors hover:bg-[var(--stamp-wash)] lg:min-h-0"
+                        className="mt-2.5 flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--stamp)] py-2 text-sm font-semibold text-[var(--stamp)] transition-colors hover:bg-[var(--stamp-wash)] lg:min-h-0"
                       >
                         <Glyph name="phone" className="h-4 w-4" />
                         Call to negotiate <span className="serial text-xs">{l.farmerPhone}</span>
@@ -333,7 +368,7 @@ export function MarketplacePage() {
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <Link
                         to={`/lots/${l.id}/trace`}
-                        className="flex items-center justify-center rounded-xl border border-[var(--ink-5)] py-2 text-center text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+                        className="flex items-center justify-center rounded-full border border-[var(--ink-5)] py-2 text-center text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
                       >
                         View Trace
                       </Link>

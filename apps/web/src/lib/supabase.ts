@@ -18,6 +18,14 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// An explicit pause switch, same shape as GRADING_PROVIDER=mock|hf and
+// every other provider flip in this app — deliberate choice, not implicit
+// "no key means try anyway and fail" detection. Lets real keys stay in
+// .env untouched while auth runs on the mock backend, so "we'll finish the
+// Supabase/Vercel/Render setup later" doesn't mean deleting config you
+// already entered.
+const forceMock = import.meta.env.VITE_FORCE_MOCK_AUTH === 'true';
+
 function missingKeysError(): Error {
   return new Error(
     'Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Copy .env.example to .env at the repo root ' +
@@ -26,7 +34,7 @@ function missingKeysError(): Error {
 }
 
 let client: SupabaseClient | null = null;
-if (url && anonKey) client = createClient(url, anonKey);
+if (!forceMock && url && anonKey) client = createClient(url, anonKey);
 
 export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
   get(_target, prop) {

@@ -95,7 +95,7 @@ export function PoolBuilder() {
             <div className="display text-base font-semibold tracking-[0.08em]">CONSOLIDATION</div>
             <div className="smallcaps mt-0.5 text-[var(--ink-3)]">bundle small lots into one dispatch</div>
           </div>
-          <div className="guilloche h-[10px] w-full bg-[var(--ink)] opacity-90" />
+          <div className="h-[3px] w-full bg-[var(--gold)]" />
           <div className="flex flex-col gap-5 p-5">
             <div>
               <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">Target Truck</p>
@@ -125,7 +125,7 @@ export function PoolBuilder() {
               <div className="mb-1.5 flex items-end justify-between">
                 <span
                   className={`serial text-2xl font-bold ${
-                    overload ? 'text-[var(--stamp)]' : full ? 'text-[var(--ink)]' : 'text-[var(--ink-7)]'
+                    overload ? 'text-[var(--stamp)]' : full ? 'text-[var(--forest)]' : 'text-[var(--ink-7)]'
                   }`}
                 >
                   {pct}%
@@ -137,7 +137,7 @@ export function PoolBuilder() {
               <div className="h-4 border border-[var(--ink-3)] bg-[var(--paper)] p-[2px]">
                 <div
                   className={`h-full transition-[width,background-color] duration-500 ${
-                    overload ? 'bg-[var(--stamp)]' : full ? 'bg-[var(--ink)]' : 'bg-[var(--gold)]'
+                    overload ? 'bg-[var(--stamp)]' : full ? 'bg-[var(--forest)]' : 'bg-[var(--gold)]'
                   }`}
                   style={{ width: `${pct}%` }}
                 />
@@ -145,7 +145,7 @@ export function PoolBuilder() {
               {overload && (
                 <p className="mt-1.5 text-[11px] font-semibold text-[var(--stamp)]">Exceeds truck capacity — remove lots</p>
               )}
-              {full && <p className="mt-1.5 text-[11px] font-semibold text-[var(--ink)]">Good load — ready to bid</p>}
+              {full && <p className="mt-1.5 text-[11px] font-semibold text-[var(--forest)]">Good load — ready to bid</p>}
             </div>
 
             <div className="flex flex-col gap-1.5 border-t border-[var(--ink-2)] pt-4">
@@ -171,9 +171,9 @@ export function PoolBuilder() {
             <button
               disabled={chosen.length === 0 || overload || poolBid.isPending}
               onClick={() => poolBid.mutate()}
-              className={`rounded-lg py-2.5 text-sm font-semibold transition-colors ${
+              className={`rounded-full py-2.5 text-sm font-semibold transition-colors ${
                 chosen.length && !overload
-                  ? 'bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--ink-8)]'
+                  ? 'bg-[var(--forest)] text-[var(--paper)] hover:bg-[var(--forest-deep)]'
                   : 'cursor-not-allowed bg-[var(--ink-2)] text-[var(--ink-6)]'
               }`}
             >
@@ -208,7 +208,7 @@ export function PoolBuilder() {
                 }}
                 className={`smallcaps flex items-center gap-1.5 px-3 py-1.5 transition-colors ${
                   activeCommodity === code
-                    ? 'bg-[var(--ink)] text-[var(--paper)]'
+                    ? 'bg-[var(--forest)] text-[var(--paper)]'
                     : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'
                 }`}
               >

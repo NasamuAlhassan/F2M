@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { api, shortDate, type PublicTrace } from '../api';
-import { CropMark, F2MSeal } from '../components/engrave';
+import { CropMark, cropAccent, F2MSeal } from '../components/engrave';
 import { Card, GradeBadge } from '../components/ui';
 import { SpineStepper, TraceEventLog } from './Trace';
 
@@ -31,7 +31,7 @@ export function PublicTracePage() {
             Public record
           </span>
         </div>
-        <div className="guilloche h-[10px] w-full opacity-90" />
+        <div className="h-[3px] w-full bg-[var(--gold)]" />
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-6">
@@ -45,8 +45,11 @@ export function PublicTracePage() {
           <>
             <div className="certificate mb-4 bg-[var(--paper-lift)]">
               <div className="flex flex-wrap items-center gap-5 p-5">
-                <div className="hatch flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-lg">
-                  <CropMark code={data.lot.commodityCode} className="h-12 w-12 text-[var(--forest)]" />
+                <div
+                  className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-lg"
+                  style={{ background: cropAccent(data.lot.commodityCode).wash, color: cropAccent(data.lot.commodityCode).ink }}
+                >
+                  <CropMark code={data.lot.commodityCode} className="h-12 w-12" />
                 </div>
                 <div className="min-w-44 flex-1">
                   <div className="flex items-center gap-2.5">

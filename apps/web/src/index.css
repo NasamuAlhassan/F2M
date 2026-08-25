@@ -44,10 +44,12 @@
 
   /* The bold brand green — masthead, primary actions, live accents.
      Distinct from --ink: that ramp is neutral text, this is a saturated
-     brand color used deliberately, not diluted into a text ramp. */
-  --forest: #163c2f;
-  --forest-deep: #0f2c22;
-  --forest-wash: #e2ede5;
+     brand color used deliberately, not diluted into a text ramp. Lifted
+     from a near-black forest to a confident, daylight-legible green: the
+     masthead should read as "alive," not as corporate charcoal. */
+  --forest: #158a4a;
+  --forest-deep: #0f6d3a;
+  --forest-wash: #e2f5e8;
 
   /* Amber accent — money, live states, calls to action. More saturated
      than the old muted security-print gold. */
@@ -88,28 +90,43 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Confident display weight — mastheads, big money, brand wordmarks.
-   One face, one extra-bold cut, instead of switching families. */
-.display {
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
+/* Every custom class below that gets combined with Tailwind utilities in a
+   className (e.g. `certificate absolute ...`, `certificate bg-[var(--paper)]`)
+   MUST live in @layer components. Tailwind v4's `@import 'tailwindcss'` sets
+   up cascade layers (theme, base, components, utilities); a rule declared
+   with no @layer at all sits OUTSIDE that stack and beats every layered
+   rule regardless of source order or specificity — so an unlayered
+   `.certificate { position: relative }` silently wins over a combined
+   `absolute` utility instead of losing to it as the className order implies.
+   This bit us for real: the notification dropdown's `absolute` was being
+   overridden back to `.certificate`'s `position: relative`, and several
+   `certificate ... bg-[var(--paper)]` call sites were silently rendering
+   `--paper-lift` instead. @layer components sits below @layer utilities in
+   Tailwind's stack, so a combined utility class overrides these as expected. */
+@layer components {
+  /* Confident display weight — mastheads, big money, brand wordmarks.
+     One face, one extra-bold cut, instead of switching families. */
+  .display {
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
 
-/* Money, lot codes, timestamps, phone numbers — tabular figures so columns
-   of numbers actually line up. No dedicated mono face any more: one voice,
-   carried by weight and spacing instead of a family switch. */
-.serial {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
+  /* Money, lot codes, timestamps, phone numbers — tabular figures so columns
+     of numbers actually line up. No dedicated mono face any more: one voice,
+     carried by weight and spacing instead of a family switch. */
+  .serial {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
 
-/* Small tracked capitals — ledger column heads, field labels, captions.
-   11px floor: functional text never drops below it (sunlight legibility). */
-.smallcaps {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  /* Small tracked capitals — ledger column heads, field labels, captions.
+     11px floor: functional text never drops below it (sunlight legibility). */
+  .smallcaps {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
 }
 
 /* ── Browser surfaces carry the design too ─────────────────── */
@@ -150,48 +167,49 @@ select {
    The two clearest reversals of the paper world: generous rounding
    instead of "2px max, square security-print corners," and a soft
    cast shadow instead of "no drop shadows, depth is printed." */
+@layer components {
+  /* Kept the class name (internal, not user-visible) to cascade through every
+     page that already reads it — redefined the shape entirely: a raised
+     white card instead of a doubled-hairline paper frame. */
+  .certificate {
+    position: relative;
+    background: var(--paper-lift);
+    border: 1px solid var(--ink-1);
+    border-radius: 20px;
+    box-shadow: 0 1px 2px rgba(22, 36, 30, 0.05), 0 12px 28px -14px rgba(22, 36, 30, 0.18);
+  }
 
-/* Kept the class name (internal, not user-visible) to cascade through every
-   page that already reads it — redefined the shape entirely: a raised
-   white card instead of a doubled-hairline paper frame. */
-.certificate {
-  position: relative;
-  background: var(--paper-lift);
-  border: 1px solid var(--ink-1);
-  border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(22, 36, 30, 0.04), 0 8px 24px -12px rgba(22, 36, 30, 0.12);
-}
+  /* Solid brand-green field — masthead, modal headers, dark accents. */
+  .plate {
+    background: var(--forest);
+    color: var(--paper-lift);
+    position: relative;
+  }
+  .plate-inset {
+    box-shadow: inset 0 0 0 1px var(--forest), inset 0 0 0 2px color-mix(in srgb, var(--paper-lift) 25%, transparent);
+  }
 
-/* Solid brand-green field — masthead, modal headers, dark accents. */
-.plate {
-  background: var(--forest);
-  color: var(--paper-lift);
-  position: relative;
-}
-.plate-inset {
-  box-shadow: inset 0 0 0 1px var(--forest), inset 0 0 0 2px color-mix(in srgb, var(--paper-lift) 25%, transparent);
-}
+  /* Header rule under column heads / card titles — one soft line, not a
+     doubled ledger rule (that discipline was paper's signature, not this
+     world's). */
+  .rule-double {
+    border-bottom: 1px solid var(--ink-2);
+  }
 
-/* Header rule under column heads / card titles — one soft line, not a
-   doubled ledger rule (that discipline was paper's signature, not this
-   world's). */
-.rule-double {
-  border-bottom: 1px solid var(--ink-2);
-}
+  /* No-photo panel for a lot that genuinely has none (every USSD/voice
+     listing, by construction — see photos.ts). Never a stand-in photo:
+     a considered brand-colored ground carrying the crop's line icon. */
+  .hatch {
+    background: var(--forest-wash);
+  }
 
-/* No-photo panel for a lot that genuinely has none (every USSD/voice
-   listing, by construction — see photos.ts). Never a stand-in photo:
-   a considered brand-colored ground carrying the crop's line icon. */
-.hatch {
-  background: var(--forest-wash);
-}
-
-/* State pill — a solid rounded chip instead of a doubled rubber-stamp
-   border. Kept the class name; the whole shape underneath changed. */
-.stamp {
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  border-radius: 999px;
+  /* State pill — a solid rounded chip instead of a doubled rubber-stamp
+     border. Kept the class name; the whole shape underneath changed. */
+  .stamp {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border-radius: 999px;
+  }
 }
 
 /* ── Motion — unchanged grammar, new palette underneath ─────── */

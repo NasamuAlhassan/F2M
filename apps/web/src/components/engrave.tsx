@@ -90,6 +90,50 @@ export function CropMark({ code, className }: { code: string; className?: string
   return <Mark className={className}>{CROP_PATHS[code] ?? <circle cx="12" cy="12" r="7" />}</Mark>;
 }
 
+/**
+ * Each commodity gets its own true-to-produce color instead of one uniform
+ * green wash: a market stall of maize, tomato, and pepper isn't monochrome,
+ * and neither should its cards be. Falls back to the brand green for any
+ * commodity not in the registry yet.
+ */
+const CROP_ACCENTS: Record<string, { wash: string; ink: string }> = {
+  MAIZE: { wash: '#fdf1d3', ink: '#a3690c' },
+  TOMATO: { wash: '#ffe1da', ink: '#c8482d' },
+  YAM: { wash: '#f5e3d1', ink: '#96602c' },
+  RICE: { wash: '#f7ecd4', ink: '#a8862c' },
+  GROUNDNUT: { wash: '#f2e0cd', ink: '#8a5a34' },
+  PEPPER: { wash: '#fde1e1', ink: '#c23434' },
+  ONION: { wash: '#f4e2f2', ink: '#8a3f82' },
+  PLANTAIN: { wash: '#eef4d3', ink: '#6d8a1f' },
+};
+
+export function cropAccent(code: string): { wash: string; ink: string } {
+  return CROP_ACCENTS[code] ?? { wash: 'var(--forest-wash)', ink: 'var(--forest)' };
+}
+
+/**
+ * A real representative photo per commodity (self-hosted under
+ * public/images/crops — see public/images/CREDITS.md for sourcing/license),
+ * used for category chrome and as a labeled stand-in when a lot has no
+ * seller-submitted photo. Never claims to be a specific lot's own photo —
+ * callers must keep it visually distinct from `l.photoUrl` (see the
+ * "Representative photo" caption in Marketplace.tsx).
+ */
+const CROP_PHOTOS: Record<string, string> = {
+  MAIZE: '/images/crops/maize.jpg',
+  TOMATO: '/images/crops/tomato.jpg',
+  YAM: '/images/crops/yam.jpg',
+  RICE: '/images/crops/rice.jpg',
+  GROUNDNUT: '/images/crops/groundnut.jpg',
+  PEPPER: '/images/crops/pepper.jpg',
+  ONION: '/images/crops/onion.jpg',
+  PLANTAIN: '/images/crops/plantain.jpg',
+};
+
+export function cropPhoto(code: string): string | null {
+  return CROP_PHOTOS[code] ?? null;
+}
+
 /* ── Vehicle vignettes ──────────────────────────────────────── */
 
 const VEHICLE_PATHS: Record<string, ReactNode> = {

@@ -1,52 +1,60 @@
 ---
-name: Farm to Market — The Trade Instrument
-description: Security-printed trade-instrument UI — every lot a certificate, every payment a banknote-grade receipt.
+name: Farm to Market — The Market World
+description: A confident agritech marketplace — deep brand green, white cards on a soft green ground, true-to-produce color per crop.
 colors:
-  paper: "#efebdd"
-  paper-deep: "#e7e1cd"
-  paper-lift: "#f4f1e6"
-  ink: "#14322b"
-  ink-8: "#2b463d"
-  ink-7: "#425a4f"
-  ink-6: "#596d61"
-  ink-5: "#718074"
-  ink-4: "#8d998a"
-  ink-3: "#aab2a0"
-  ink-2: "#c8cbb6"
-  ink-1: "#dcd9c4"
-  gold: "#a87b23"
-  gold-deep: "#8a6318"
-  gold-ink: "#6e4e12"
-  gold-wash: "#e9ddbe"
-  stamp: "#9e3b2c"
-  stamp-deep: "#7e2e22"
-  stamp-wash: "#ecdcd0"
+  paper: "#f5f8f3"
+  paper-deep: "#eaf0e6"
+  paper-lift: "#ffffff"
+  ink: "#16241e"
+  ink-8: "#2a3d34"
+  ink-7: "#3e544a"
+  ink-6: "#58705f"
+  ink-5: "#748b7a"
+  ink-4: "#93a696"
+  ink-3: "#b3c2b3"
+  ink-2: "#d2ddcf"
+  ink-1: "#e6ede3"
+  forest: "#158a4a"
+  forest-deep: "#0f6d3a"
+  forest-wash: "#e2f5e8"
+  gold: "#d97a1f"
+  gold-deep: "#b3620f"
+  gold-ink: "#8a4c0c"
+  gold-wash: "#fbe9d3"
+  stamp: "#c0392b"
+  stamp-deep: "#962c21"
+  stamp-wash: "#f8dcd7"
+  info: "#1d5fd9"
+  info-wash: "#dbe7fb"
+  transit: "#6d3fc4"
+  transit-wash: "#e7ddf7"
+  success: "#1f8a4c"
+  success-wash: "#dcf0e2"
 typography:
   display:
-    fontFamily: "Cinzel, Times New Roman, serif"
+    fontFamily: "Hanken Grotesk, Segoe UI, system-ui, sans-serif"
     fontSize: "20px"
-    fontWeight: 600
+    fontWeight: 800
     lineHeight: 1.2
-    letterSpacing: "0.1em"
+    letterSpacing: "-0.01em"
   body:
-    fontFamily: "Public Sans, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Hanken Grotesk, Segoe UI, system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.45
   serial:
-    fontFamily: "Courier Prime, Courier New, monospace"
+    fontFamily: "Hanken Grotesk, Segoe UI, system-ui, sans-serif"
     fontSize: "14px"
-    fontWeight: 400
-  label:
-    fontFamily: "Public Sans, Segoe UI, system-ui, sans-serif"
-    fontSize: "11px"
     fontWeight: 600
-    letterSpacing: "0.14em"
+  label:
+    fontFamily: "Hanken Grotesk, Segoe UI, system-ui, sans-serif"
+    fontSize: "11px"
+    fontWeight: 700
+    letterSpacing: "0.08em"
 rounded:
-  hairline: "1px"
-  frame: "2px"
-  stamp: "3px"
-  seal: "9999px"
+  control: "8px"
+  card: "20px"
+  pill: "9999px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -55,195 +63,186 @@ spacing:
   xl: "24px"
 components:
   button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.paper}"
-    rounded: "{rounded.frame}"
+    backgroundColor: "{colors.forest}"
+    textColor: "{colors.paper-lift}"
+    rounded: "{rounded.pill}"
     padding: "8px 16px"
   button-primary-hover:
-    backgroundColor: "{colors.ink-8}"
+    backgroundColor: "{colors.forest-deep}"
   button-ghost:
     textColor: "{colors.ink}"
-    rounded: "{rounded.frame}"
+    rounded: "{rounded.pill}"
     padding: "8px 16px"
   input:
     backgroundColor: "{colors.paper-lift}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.frame}"
+    rounded: "{rounded.control}"
     padding: "8px 12px"
-  card-certificate:
+  card:
     backgroundColor: "{colors.paper-lift}"
-    rounded: "{rounded.frame}"
+    rounded: "{rounded.card}"
     padding: "16px"
   stamp-live:
     backgroundColor: "{colors.gold-wash}"
     textColor: "{colors.gold-ink}"
-    rounded: "{rounded.stamp}"
+    rounded: "{rounded.pill}"
     padding: "2px 6px"
 ---
 
-# Design System: Farm to Market — The Trade Instrument
+# Design System: Farm to Market — The Market World
 
 ## Overview
 
-**Creative North Star: "The Trade Instrument"**
+**Creative North Star: "The Market World"**
 
-Farm to Market's buyer, farmer, and driver portals are drawn as a security-printed trade instrument (D-039, seed 222cf785): every lot is a certificate, every payment a banknote-grade receipt, every state a stamped seal on ruled paper. The world borrows the cedi banknote's grammar — tinted paper under intaglio-green ink, bronze-gold value figures, oxide-red stamps, engraved guilloché and rosettes as line-work at frames — and applies it to a working marketplace where a trader reads lots the way a teller reads notes. It explicitly refuses two defaults: the white-card agri-SaaS dashboard and its dark-terminal opposite.
+Farm to Market's buyer, farmer, and driver portals read as a confident, modern agritech product: white cards lifted off a soft green-tinted ground, a bold brand green carrying identity and every primary action, and true-to-produce color on every commodity — a market stall of maize, tomato, and pepper isn't monochrome, and neither is a lot grid. This retired **The Trade Instrument** (D-039's cedi-banknote security-print world: tinted paper, engraved line-art, square corners, no drop shadows), which the owner judged too austere and "basic"-reading against the product's actual energy — a live marketplace, not a printed certificate.
 
-Density is document-dense: ledger tables with hairline rows, tracked capital column heads over double rules, typed serials and money in a monospace receipt voice. Ornament is confined to frames and seals; inside the frame, content works without decoration in the way. The same page must survive a sunlit market stall on a mid-range Android phone and an institutional desk on a laptop, so legibility floors (11px functional text, `--ink-6` as the lightest functional ink) are part of the system, not an accessibility afterthought.
+The world keeps what worked from the instrument metaphor — line-drawn crop and vehicle iconography, the F2M rosette seal, stamped state pills, a six-station transaction spine — and drops the printed-depth discipline for real elevation: soft cast shadows, generous rounding, and a saturated palette that commits at page scale (the masthead is a solid green plate, not a neutral bar with a green accent). Legibility floors carry over unchanged: 11px minimum for functional text, sunlight-legible on a market-stall Android phone.
 
 **Key Characteristics:**
-- Tinted banknote paper (`#efebdd`) under intaglio-green ink (`#14322b`); no white, no black, no gray.
-- A fixed 9-step ink-on-paper ramp is the only neutral scale.
-- Bronze-gold for value and live states; oxide-red for stamps, refusals, and disputes.
-- Engraving (guilloché, rosettes, hatching, line-art vignettes) lives at frames and seals only.
-- Three type voices: engraved capitals, document text, typed serials — money is always typed.
-- Square-cornered, double-ruled print furniture; depth is printed, never cast.
+- Deep brand green (`--forest` #158a4a) as a bold, page-scale color — masthead, every primary button, "live"/positive states — not diluted into a neutral ramp.
+- White cards (`--paper-lift`) on a soft green-tinted ground (`--paper` #f5f8f3), lifted with real soft shadows, not printed frames.
+- **True-to-produce color per commodity**: each crop gets its own accent wash + ink (maize gold, tomato red-orange, yam terracotta, pepper red, onion plum, plantain yellow-green, …) — see Crop Accents below. Applied to hero media wells and category icon chips; left neutral in dense ledger rows so tables stay scannable.
+- Bronze-gold (`--gold`) for money, live-state pulses, and small brand flourishes; a five-color state vocabulary (gold/info/transit/success/stamp) for lifecycle badges.
+- Generous rounding: `rounded-full` pill buttons and segmented controls, 20px cards. No square security-print corners.
+- One typeface, one family: Hanken Grotesk (variable, 400–800), self-hosted. Hierarchy comes from weight and size, not a font switch — display and money are both Hanken Grotesk, at 800 and 600 respectively, with tabular figures throughout.
 
 ## Colors
 
-An intaglio palette: one green ink diluting into tinted paper, with gold reserved for value and red reserved for stamps.
+A green brand identity on white, with true produce color doing the work a printed-paper texture used to do.
 
 ### Primary
-- **Intaglio Green** (`--ink` #14322b): the ink. All primary text, solid "plate" fields (masthead, modal headers), filled buttons, settled-state stamps, done route legs. Selection color inverts it (`::selection` is ink on paper).
+- **Forest** (`--forest` #158a4a): the brand. Masthead plate, every primary button (`btnCls`), segmented-control active states, "done"/positive indicators (transaction-spine steps, on-duty toggles, "good load"). Distinct from `--ink`: this is a deliberate saturated brand color, not a neutral.
+- **Forest Deep** (`--forest-deep` #0f6d3a): hover/pressed state for every forest-filled control.
+- **Forest Wash** (`--forest-wash` #e2f5e8): fallback media-well tint for a commodity with no dedicated crop accent (see below).
 
 ### Secondary
-- **Bronze-Gold** (`--gold` #a87b23): the value figure and the live signal — rosette strokes, focus outlines (2px), input carets, active nav underlines, the ember dot on live states, active route stations.
-- **Bronze-Gold Deep** (`--gold-deep` #8a6318): large money figures (the GH₵ line on certificates), grade-B seals, gold links at rest.
-- **Gold Ink** (`--gold-ink` #6e4e12): small gold type on washes — the contrast-safe voice for gold text at or below body size.
-- **Gold Wash** (`--gold-wash` #e9ddbe): the tint behind live-state stamps and selected ledger rows.
+- **Gold** (`--gold` #d97a1f): money figures, live-state ember pulses, focus caret, small brand flourishes (the 3px accent bar under login seals and plate headers).
+- **Gold Deep** (`--gold-deep` #b3620f): large money figures, grade-B seals.
+- **Gold Ink** (`--gold-ink` #8a4c0c): small gold text on washes.
+- **Gold Wash** (`--gold-wash` #fbe9d3): tint behind live-state stamps and selected filter rows.
 
-### Tertiary
-- **Oxide Red** (`--stamp` #9e3b2c): the rubber stamp — refusals, disputes, cancellations, grade-C seals, the call-to-negotiate affordance.
-- **Oxide Red Deep** (`--stamp-deep` #7e2e22): red stamp text on its wash.
-- **Stamp Wash** (`--stamp-wash` #ecdcd0): the tint behind red stamps.
+### State vocabulary (five tones, `StateBadge`)
+Contracts and delivery jobs move through more states than a simple "settled vs. refused" binary, so state pills get five distinct tones instead of the four-stamp system the paper world used: **gold** (live/pending, ember dot), **info** (`--info` #1d5fd9, assigned/in-progress), **transit** (`--transit` #6d3fc4, en route/picked up), **success** (`--success` #1f8a4c, settled/delivered/paid — distinct from brand `--forest` so "the money landed" reads unambiguously), **stamp/alert** (`--stamp` #c0392b, disputed/declined/cancelled). Faded/expired states drop to `--ink-6` on paper.
 
 ### Neutral
-- **Banknote Paper** (`--paper` #efebdd): the page ground and certificate ground.
-- **Paper Deep** (`--paper-deep` #e7e1cd): tint zones, alternating ledger rows, ghost-button hover.
-- **Paper Lift** (`--paper-lift` #f4f1e6): raised panels — inputs, card interiors, media wells.
-- **The ink ramp** (`--ink-8` #2b463d → `--ink-1` #dcd9c4): the only neutral scale. `--ink-8` button hover; `--ink-7` frame rules and secondary serials; `--ink-6` captions, labels, placeholders (the lightest functional ink); `--ink-5` ghost borders; `--ink-4` disabled/dormant marks; `--ink-3` input borders, scrollbar thumbs, dark-plate secondary text; `--ink-2` hairline row rules and inner frames; `--ink-1` faintest ruling.
+- **Paper** (`--paper` #f5f8f3): page ground — a soft green-white, not tinted banknote paper.
+- **Paper Deep** (`--paper-deep` #eaf0e6): tint zones, alternating rows, ghost-button hover.
+- **Paper Lift** (`--paper-lift` #ffffff): cards, inputs — true white, literally raised off the green-tinted ground.
+- **The ink ramp** (`--ink-8` #2a3d34 → `--ink-1` #e6ede3): body text and structural neutrals, recalibrated for white cards with a faint green bias. `--ink-6` is the lightest ink permitted on functional small text (the 11px floor rule, unchanged from the prior world).
+
+### Crop Accents (`cropAccent()`, `src/components/engrave.tsx`)
+Every commodity carries its own `{ wash, ink }` pair instead of one uniform green, used for card media wells and filter category chips — never for dense ledger rows, which stay in the neutral ink ramp for scannability:
+
+| Crop | Wash | Ink |
+|---|---|---|
+| Maize | `#fdf1d3` | `#a3690c` |
+| Tomato | `#ffe1da` | `#c8482d` |
+| Yam | `#f5e3d1` | `#96602c` |
+| Rice | `#f7ecd4` | `#a8862c` |
+| Groundnut | `#f2e0cd` | `#8a5a34` |
+| Pepper | `#fde1e1` | `#c23434` |
+| Onion | `#f4e2f2` | `#8a3f82` |
+| Plantain | `#eef4d3` | `#6d8a1f` |
+
+A commodity outside this table falls back to `forest-wash` / `forest`. Adding a crop to the registry should add it here too.
+
+### Crop Photography (`cropPhoto()`, D-043)
+Each commodity also has a real, self-hosted representative photo (`public/images/crops/`, credited in `public/images/CREDITS.md`) — pure iconography on filter chips and farmer-dashboard thumbnails, but on a **Marketplace lot card** it stands in only when a lot has no seller-submitted photo, and always carries a "Representative photo" label overlaid on the image. It is never used on `PublicTrace.tsx` (the public chain-of-custody page), where a stock photo would read as verified evidence rather than illustration — that surface keeps the `cropAccent()` icon-only treatment.
 
 ### Named Rules
-**The One Ramp Rule.** The nine-step ink ramp and the three paper tints are the only neutrals. No gray hex ever enters the file; every "gray" is green ink diluting into paper.
+**The Brand-Green Rule.** `--forest` is reserved for the masthead, primary actions, and positive/live/done states. It is never diluted into the neutral ink ramp and never used for a merely-decorative fill.
 
-**The Gold-Ink Rule.** Gold text at small sizes on tinted washes is set in `--gold-ink` (#6e4e12), never `--gold`. Raw `--gold` (#a87b23) is reserved for strokes, seals, carets, focus rings, large figures, and accents on the dark plate.
+**The Produce-Color Rule.** A commodity's own accent (wash + ink) applies to hero media wells and category icon chips — the surfaces where "what is this" matters at a glance. Dense list/table rows keep neutral `--ink-7` icons so a ledger of many rows stays calm and scannable, not a wall of clashing color.
 
-**The Four Stamps Rule.** Every lifecycle state renders as a stamped ticket in exactly one of four tone families: settled money is intaglio ink on paper, live states burn gold-ink on gold-wash (with an ember dot), refusals and disputes are oxide red on stamp-wash, dormant states fade to `--ink-6` on paper. No fifth family.
+**The Gold-Ink Rule.** Gold text at small sizes on tinted washes is set in `--gold-ink`, never raw `--gold`. Raw `--gold` is reserved for money figures, carets, focus rings, and accent flourishes.
 
 ## Typography
 
-**Display Font:** Cinzel 600/700 (with Times New Roman, serif)
-**Body Font:** Public Sans 400/500/600/700 (with Segoe UI, system-ui)
-**Label/Mono Font:** Courier Prime 400/700 (with Courier New)
+**Face:** Hanken Grotesk, one variable file (weight 400–800), self-hosted woff2, no network fonts.
 
-**Character:** An engraved certificate speaking three voices — carved capitals for identity, a plain civic document face for prose, and a typewriter for everything the teller would verify. All three faces are self-hosted woff2 in `public/fonts` (no network fonts); the body sets `font-variant-numeric: tabular-nums` globally.
+**Character:** One confident grotesque doing every job — mastheads, body copy, money, labels — differentiated by weight and tracking rather than a family switch. `font-variant-numeric: tabular-nums` is set globally so money and counts always align.
 
 ### Hierarchy
-- **Display** (`.display`, Cinzel 600, 18–20px, tracking 0.05–0.12em, often uppercase): mastheads ("FARM TO MARKET"), plate headers, page titles, seal initials, grade letters. Identity only — never body copy.
-- **Subject** (Public Sans 700, 16px): the commodity name on a certificate card.
-- **Body** (Public Sans 400/600, 14px): document text, table cells, form controls. Secondary prose drops to 12px in `--ink-6`.
-- **Serial** (`.serial`, Courier Prime, 11–24px): lot serials ("LOT № …"), money, timestamps, phone numbers, counts. Large money is serial bold 24px in `--gold-deep`; stat figures serial bold 18px.
-- **Label** (`.smallcaps`, Public Sans 600, 11px, tracking 0.14em, uppercase): ledger column heads, field labels, nav items, captions, document furniture — usually in `--ink-6` (or `--ink-3` on the dark plate).
+- **Display** (`.display`, weight 800, tracking -0.01em): mastheads, plate headers, page titles, big brand moments.
+- **Body** (weight 400/600, 14px): document text, table cells, form controls. Secondary prose drops to 12–13px in `--ink-6`.
+- **Serial** (`.serial`, tabular figures, weight 600): money, lot codes, timestamps, phone numbers, distances. Large money is 24px bold in `--gold-deep`.
+- **Label** (`.smallcaps`, weight 700, 11px, tracking 0.08em, uppercase): column heads, field labels, nav items, captions.
 
 ### Named Rules
-**The Three Voices Rule.** Cinzel speaks identity, Public Sans speaks the document, Courier Prime speaks serials, money, and timestamps. Money and serials never appear in the document face.
-
-**The 11px Floor Rule.** Functional text never drops below 11px (`.smallcaps` is the floor), and `--ink-6` (#596d61) is the lightest ink permitted on functional small text and placeholders. Sunlight legibility on a market-stall phone is the reason; the floor is detector-enforced.
+**The 11px Floor Rule.** Functional text never drops below 11px, and `--ink-6` is the lightest ink permitted on functional small text and placeholders — unchanged from the prior world; still sunlight-legibility-driven and still detector-enforced.
 
 ## Layout
 
-A centered document sheet: content is capped at **1400px** (`max-w-[1400px]`), main content padded 24px (`px-6 py-6`). The masthead is a solid ink plate in three printed bands — identity row (min 72px: F2M seal, Cinzel wordmark, search, verified-identity chip), a 10px gold guilloché band, then a nav strip separated by an `--ink-8` rule with gold-underlined active tabs.
+A centered document sheet, unchanged in structure from the prior world: content capped at **1400px**, main content padded 24px. The masthead is a solid forest-green plate in two bands — an identity row (F2M seal, wordmark, search, verified-identity chip, language legend) and a nav strip below a 3px gold accent line, with gold-underlined active tabs.
 
-The marketplace composes as a **filter ledger + certificate grid**: a fixed 208px (`w-52`) left aside of ruled filter groups (each headed by a smallcaps label over a double rule), and a responsive card grid — 1 column on phones, 2 at `md` (768px), 3 at `xl` (1280px), 16px gaps. Detail pages stack `Card` sections vertically.
-
-Responsive behavior is parity, not degradation (a product requirement): on phones the certificates lead — the filter ledger folds behind a "Filters" summary toggle showing an active count, and the masthead search drops to a full-width last row. Wide content (route spines, tables) scrolls inside its own container (`overflow-x-auto`, min-width 600px for the spine).
-
-Spacing rhythm is the Tailwind 4px scale used at **4 / 8 / 12 / 16 / 24**: card padding 12–16px, table cells 12×10px (`px-3 py-2.5`), section gaps 16px, gutter 24px. Density is ledger-like throughout; whitespace is ruled, not empty.
+The marketplace composes as a **filter sidebar + card grid**: a 208px (`w-52`) left aside of grouped filters (crop-type checkboxes now carry a colored icon chip per commodity), and a responsive card grid — 1 column on phones, 2 at `md`, 3 at `xl`, 16px gaps. Responsive behavior is parity, not degradation: on phones the filter sidebar folds behind a "Filters" summary toggle; wide tables scroll inside their own frame rather than the page.
 
 ## Elevation & Depth
 
-**No drop shadows.** Nothing floats above the paper; depth is printed. Layers are conveyed by paper tints (`--paper` → `--paper-deep` → `--paper-lift`), hairline rules, inset double frames, and fields of solid ink (`.plate`). The only `box-shadow` usage is flat inset line-work: the ledger's second rule (`0 2px 0 -1px var(--ink-2)` under a 1px border), the stamp's inner border (`inset 0 0 0 0.5px currentColor`), the grade seal's and avatar's concentric inset rings, and `.plate-inset`'s hairline. Modal scrims are ink at 70% opacity — dimmed paper, not glass.
-
-### Named Rules
-**The Printed Depth Rule.** Depth is drawn with lines, tints, and plates — never cast with blur. `box-shadow` may only appear with zero blur as an inset ring or a printed second rule.
+**Real cast shadows**, the clearest reversal of the paper world's "depth is printed" rule: `.certificate` cards carry a soft two-layer shadow (`0 1px 2px rgba(22,36,30,.05), 0 12px 28px -14px rgba(22,36,30,.18)`) and a 20px radius. Buttons and filter chips carry a light `shadow-sm`. Modal scrims stay ink at 70% opacity.
 
 ## Shapes
 
-Square security-print geometry. Rectangles carry a 2px radius at most (certificate frames, buttons, inputs); the inner hairline is 1px; rubber stamps get 3px. Full circles are reserved for seals — grade badges, rosettes, route stations, avatar rings, ember dots. Corners never round beyond that: softness would break the engraved register.
-
-The signature silhouette is the **doubled line**: certificate = 1px `--ink-7` outer rule + 1px `--ink-2` hairline inset 3px; column heads sit on a double ledger rule; stamps carry a 1.5px border plus a 0.5px inset echo; seals and avatars wear concentric rings. Engraved texture appears only as frame furniture: the gold guilloché band (tiled interlaced sines), its ink variant, and the 45° hatch ground for photo-less media wells.
+Rounded, not square. Three radius steps: **control** (8–12px: inputs, small row chips), **card** (20px: `.certificate`), **pill** (`rounded-full`: every button — primary, ghost, segmented controls, the call-to-negotiate action, category icon chips, the small brand accent bar). Full circles remain reserved for seals, grade badges, avatars, and crop-icon chips.
 
 ### Named Rules
-**The Doubled Line Rule.** Importance is marked by doubling a hairline, never by merely thickening it. Frames, rules, stamps, and seals all carry their second line.
+**The Pill Rule.** Every clickable action — primary, ghost, or segmented — is `rounded-full`. Structural containers (cards, panels) use the 20px card radius. Nothing in between; a stray `rounded-lg`/`rounded-xl` control reads as a regression to the retired world, not a new intentional step.
 
 ## Components
 
-Component APIs are frozen in `src/components/ui.tsx` (the skin); pages own layout only. Icons live in `src/components/engrave.tsx`.
+Component APIs live in `src/components/ui.tsx`; pages own layout only. Icons live in `src/components/engrave.tsx`.
 
 ### Buttons
-- **Shape:** near-square (2px radius), semibold 14px, tracking 0.02em.
-- **Primary** (`btnCls`): solid ink on paper text, 16×8px padding; hover deepens to `--ink-8`; disabled 40% opacity + not-allowed cursor.
-- **Ghost** (`btnGhostCls`): 1px `--ink-5` border, ink text; hover tints `--paper-deep`.
-- **Call-to-negotiate** (channel lots): oxide-red bordered, red text, phone glyph + typed number; hover tints `--stamp-wash`.
+- **Primary** (`btnCls`): solid `--forest`, pill radius, `shadow-sm`, white text; hover deepens to `--forest-deep`; disabled 40% opacity.
+- **Ghost** (`btnGhostCls`): pill radius, 1px `--ink-5` border, ink text; hover tints `--paper-deep`.
+- **Call-to-negotiate** (channel lots): pill, oxide-red bordered, red text, phone glyph + typed number.
 - **Focus:** global `:focus-visible` — 2px `--gold` outline, 1px offset.
 
 ### Cards / Containers
-- **The Certificate** (`.certificate`, `Card`): outer 1px `--ink-7` rule + inset 1px `--ink-2` hairline, `--paper-lift` interior, 12–16px padding. `Card` titles are smallcaps `--ink-6` over a double ledger rule with optional right-aligned actions. Market lot cards compose: serial + grade-seal head, engraved-framed media well (photo, or hatch ground with a crop vignette), subject line, ruled value line (serial-bold gold money + smallcaps unit), then Trace (ghost) and **Place Bid** (primary).
-- **The Plate** (`.plate`): solid ink field with paper text — masthead, modal and payout headers; smallcaps on plates lighten to `--ink-3`.
+- **The Certificate** (`.certificate`, `Card`): white interior, 20px radius, soft cast shadow, thin `--ink-1` border. `Card` titles are smallcaps `--ink-6` over a hairline rule. Market lot cards compose: crop-accented media well (real photo, or the crop's own wash + line icon) with grade seal and ready-date pill overlaid, subject line, ruled value line (serial-bold gold money), then a ghost "View Trace" + primary "Place Bid" pill pair.
+- **The Plate** (`.plate`): solid forest field with white text — masthead, modal and payout headers.
 
 ### Inputs / Fields
-- **Style** (`inputCls`): 1px `--ink-3` border on `--paper-lift`, 2px radius, 12×8px padding, 14px ink text; placeholders `--ink-6`; caret gold.
-- **Focus:** border shifts to `--ink-6` (outline suppressed); on the dark plate the search input focuses to a `--gold` border instead.
-- **Field:** every input is labeled by a smallcaps `--ink-6` caption above it.
-- **Error:** message set as a red `.stamp` ticket, not bare red text.
+- **Style** (`inputCls`): 1px `--ink-3` border on white, 12px radius, 14px ink text; caret gold.
+- **Search fields** (masthead, filter): pill radius, not the 12px control radius — a search box is closer to a button in affordance.
+- **Field:** every input labeled by a smallcaps `--ink-6` caption above it.
 
 ### State Stamps (`StateBadge`, `.stamp`)
-- **Style:** Courier Prime bold uppercase 11px, tracking 0.08em, 1.5px doubled border in currentColor, 3px radius, wash background per the Four Stamps Rule.
-- **Live states** carry a 6px `ember`-pulsing dot in currentColor.
+- Pill-radius chip, bold uppercase 11px, wash background per the five-tone state vocabulary above. Live states carry a 6px `ember`-pulsing dot.
 
 ### Grade Seals (`GradeBadge`)
-- 24px circle, Cinzel bold 11px letter, 1.5px ring plus concentric inset rings. A = ink, B = `--gold-deep`, C = `--stamp`, REJECT inverts to paper "R" on solid ink.
+- 24px filled circle (not an outline ring): A = `--forest`, B = `--gold-deep`, C = `--stamp`, REJECT = `--ink`, white letter, `shadow-sm`. A small stamp of color, legible at a glance across a whole grid of cards.
+
+### Crop & Category Icons
+- Filter-sidebar rows and hero media wells wrap the existing line-art `CropMark` in a `cropAccent()`-colored circle/panel (wash background, ink-colored stroke via `currentColor`). Dense ledger rows (Orders, Contracts, Prices tables) keep the icon in neutral `--ink-7` — color is reserved for surfaces where identifying the crop at a glance is the point.
 
 ### Ledger Tables (`tableCls` family)
-- Smallcaps `--ink-6` column heads over the double rule (`thCls`); 12×10px cells ruled by 1px `--ink-2` bottom hairlines (`tdCls`); numerics in `.serial` (`numCls`). Selectable rows: on = `--gold-wash` + semibold ink (`rowOnCls`); off = `--ink-6`, hover `--paper-deep` (`rowOffCls`).
+- Unchanged from the prior world: smallcaps `--ink-6` column heads over a hairline rule, 12×10px cells, numerics in `.serial`. Selectable rows: on = `--gold-wash` + semibold ink, off = `--ink-6` with `--paper-deep` hover.
 
-### Navigation
-- Smallcaps tabs on the ink plate: rest `--ink-3`, hover paper, active paper over a 2px gold underline. The live-lot count sits right with an ember gold dot.
+### The Engraving Plate (icon system, `engrave.tsx`)
+Unchanged: 24-unit viewBox line art, `stroke="currentColor"`, strokeWidth 1.4, `fill="none"`. **CropMark** (8 crop vignettes, now paired with `cropAccent()` for color), **VehicleMark**, **Glyph** (document glyphs), **Rosette**/**F2MSeal**. No emoji, no icon fonts.
 
-### Meters & Stats
-- **Bar:** smallcaps label, 7px hairline-bordered track with 1.5px paper inset, solid ink fill, typed two-decimal value.
-- **Stat:** serial-bold figure (18px; gold-deep when accented) over a smallcaps caption.
-
-### The Engraving Plate (signature icon system, `engrave.tsx`)
-All iconography is drawn from one plate: 24-unit viewBox, `stroke="currentColor"`, strokeWidth 1.4 (detail strokes 0.8–1.1), round caps and joins, `fill="none"`, `aria-hidden`. **CropMark** (8 crop vignettes), **VehicleMark** (tricycle/van/light truck), **Glyph** (document glyphs: search, bell, phone, camera, scale, farmer, driver, check, cross, route, sms, speak), **Rosette** (16-petal double-ring engraved seal), **F2MSeal** (rosette + Cinzel "F2M"; gold-on-paper or paper-on-plate). **The One Plate Rule.** No emoji, no icon fonts, no filled glyph sets — a new icon is drawn on the same plate at the same stroke.
-
-### The Route Spine (`RouteSpine`)
-The six-station transaction spine (Register → Match → Contract → Grade → Pay → Trace) as an engraved transit line: done legs solid ink (2px, `route-ink` draw-on), pending legs dotted `--ink-2`, done stations solid ink discs with paper checks, the active station a gold `ember` ring, labels tracked 10px caps colored by state (`--ink` / `--gold-ink` / `--ink-6`).
+### The Route Spine (`RouteSpine`, `ContractDetail`'s stepper)
+Six stations (Register → Match → Contract → Grade → Pay → Trace): done legs and stations are solid `--forest` (was `--ink`) — a completed step reads as a positive green checkmark, not a neutral mark; the active station burns a gold `ember` ring; pending stays `--ink-2`/`--ink-3`.
 
 ### Motion
-Exactly three authored families, all in `index.css`, all disabled under `prefers-reduced-motion`:
-- **seal-land** (0.5s `cubic-bezier(0.16,1,0.3,1)`): a seal stamps down (scale 1.45 → overshoot 0.94 → 1 with rotation settle) — payout advice, landed confirmations.
-- **route-ink** (0.9s, same ease): route legs draw themselves in via dash-offset.
-- **ember** (1.8s ease-in-out infinite, opacity 1 → 0.35): the damped gold pulse on live states.
-Everything else is micro `transition-colors` on hover/active. **The Three Motions Rule.** No fourth animation family; anything that moves is a seal landing, ink drawing, or an ember burning.
-
-### Browser Surfaces
-The world extends to browser chrome: ink-on-paper `::selection`, gold caret and gold 2px `:focus-visible` outline, scrollbars as `--ink-3` thumbs bordered by `--paper-deep` track.
+Unchanged three families, all `prefers-reduced-motion`-guarded: **seal-land** (a confirmation lands with scale-overshoot), **route-ink** (spine legs draw themselves in), **ember** (damped gold pulse on live states).
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** frame every content panel as a certificate: 1px `--ink-7` outer rule, 1px `--ink-2` hairline inset 3px, 2px corners, `--paper-lift` interior.
-- **Do** set every serial, money figure, timestamp, and phone number in Courier Prime (`.serial`); large money is serial bold in `--gold-deep` with a smallcaps unit beside it.
-- **Do** keep guilloché, rosettes, and hatching at frames, seals, and empty media wells only — never as content-area texture.
-- **Do** stamp every lifecycle state with `StateBadge` in one of the four tone families; live states get the ember dot.
-- **Do** render seller and place identity through the `sellerName()` / `placeName()` guards in `src/api.ts`, so a raw parser string renders as "Verified farmer" — never as a person.
-- **Do** keep all three faces self-hosted from `public/fonts` with real fallback stacks.
+- **Do** use `--forest` for the masthead, every primary action, and positive/done/live states — and only those.
+- **Do** give every commodity its own `cropAccent()` wash+ink on hero media wells and category chips; keep dense table rows neutral.
+- **Do** make every clickable action `rounded-full`; keep structural containers at the 20px card radius.
+- **Do** set money and counts in `.serial` (tabular figures); large money is serial bold `--gold-deep`.
+- **Do** render seller/place identity through the `sellerName()` / `placeName()` guards in `src/api.ts`.
+- **Do** keep Hanken Grotesk self-hosted from `public/fonts` with a real fallback stack.
 
 ### Don't:
-- **Don't** introduce a gray, a white, or a black — every neutral is an ink-ramp step or a paper tint.
-- **Don't** cast drop shadows or blurs; depth is printed (see The Printed Depth Rule).
-- **Don't** round rectangle corners beyond 3px; circles belong to seals alone.
-- **Don't** set functional text below 11px or lighter than `--ink-6`; small gold type on washes uses `--gold-ink`.
-- **Don't** use emoji, icon fonts, or filled glyphs — new icons are engraved on the one plate at stroke 1.4.
+- **Don't** reintroduce the retired paper world's square corners, printed-only depth, or Cinzel/Courier Prime multi-font voice — that world is evidence of what this product isn't, not a fallback to blend with.
+- **Don't** fill a primary action or a positive/done state with neutral `--ink` — that reads as the retired world's flat charcoal, not this one's brand green.
+- **Don't** color every small inline icon in a dense list — crop color is for hero surfaces, not ledger noise.
+- **Don't** set functional text below 11px or lighter than `--ink-6`.
+- **Don't** use emoji, icon fonts, or filled glyphs — new icons are drawn on the existing engraved plate at stroke 1.4.
 - **Don't** add a fourth motion family or any animation that ignores `prefers-reduced-motion`.

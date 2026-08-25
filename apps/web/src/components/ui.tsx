@@ -97,24 +97,19 @@ export function StateBadge({ state }: { state: string }) {
   );
 }
 
-/** A/B/C/REJECT as an engraved grade seal — double ring, engraved letter. */
+/** A/B/C/REJECT as a solid-filled grade seal — a small stamp of color, not an outline. */
 export function GradeBadge({ grade }: { grade: string }) {
-  const tone =
+  const fill =
     grade === 'A'
-      ? 'text-[var(--ink)]'
+      ? 'bg-[var(--forest)]'
       : grade === 'B'
-        ? 'text-[var(--gold-deep)]'
+        ? 'bg-[var(--gold-deep)]'
         : grade === 'C'
-          ? 'text-[var(--stamp)]'
-          : 'text-[var(--paper)]';
-  const fill = grade === 'REJECT' ? 'bg-[var(--ink)]' : 'bg-[var(--paper)]';
-  const ring =
-    grade === 'REJECT'
-      ? 'shadow-[inset_0_0_0_2px_var(--ink),inset_0_0_0_3px_var(--paper)]'
-      : 'shadow-[inset_0_0_0_2px_var(--paper),inset_0_0_0_3px_currentColor]';
+          ? 'bg-[var(--stamp)]'
+          : 'bg-[var(--ink)]';
   return (
     <span
-      className={`display inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-[1.5px] border-current text-[11px] font-bold ${tone} ${fill} ${ring}`}
+      className={`display inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-[var(--paper)] shadow-sm ${fill}`}
       aria-label={`Grade ${grade}`}
     >
       {grade === 'REJECT' ? 'R' : grade}
@@ -151,9 +146,9 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 export const inputCls =
   'w-full rounded-xl border border-[var(--ink-3)] bg-[var(--paper-lift)] px-3 py-2 text-base text-[var(--ink)] focus:border-[var(--ink-6)] focus:outline-none sm:text-sm';
 export const btnCls =
-  'min-h-11 rounded-xl bg-[var(--ink)] px-4 py-2 text-sm font-semibold tracking-[0.02em] text-[var(--paper)] transition-colors hover:bg-[var(--ink-8)] disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-0';
+  'min-h-11 rounded-full bg-[var(--forest)] px-4 py-2 text-sm font-semibold tracking-[0.02em] text-[var(--paper)] shadow-sm transition-colors hover:bg-[var(--forest-deep)] disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-0';
 export const btnGhostCls =
-  'min-h-11 rounded-xl border border-[var(--ink-5)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)] disabled:opacity-40 lg:min-h-0';
+  'min-h-11 rounded-full border border-[var(--ink-5)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)] disabled:opacity-40 lg:min-h-0';
 
 /**
  * A dismissible error, stamped in oxide. role="alert" announces it to screen
