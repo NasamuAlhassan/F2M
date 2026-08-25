@@ -1,0 +1,71 @@
+# Render Blueprint — the backend half of the Vercel (web) + Render (server)
+# split. Dashboard → New → Blueprint → point at this repo, and Render reads
+# this file directly. See docs/DEPLOY.md for the full sequence, including
+# the chicken-and-egg order this and the Vercel side have to go in.
+
+services:
+  - type: web
+    name: farm-to-market-server
+    runtime: docker
+    dockerfilePath: ./Dockerfile.server
+    plan: starter # Render's free tier has no persistent disk and sleeps
+      # after 15 minutes idle — both fatal here for the same reason
+      # explained in Dockerfile.server: USSD sessions and the sweep loops
+      # need a disk that survives redeploys and a process that never sleeps.
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: ftm-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: DATABASE_PATH
+        value: /data/ftm.db
+      - key: STORAGE_DIR
+        value: /data/storage
+      # Set once the Vercel deploy has a real URL — CORS isn't configured on
+      # this server (see docs/DEPLOY.md: Vercel rewrites proxy every /api,
+      # /ussd, /voice, /photos request through its own origin, so the
+      # browser never makes a cross-origin request the server would need to
+      # allow). This var exists for anything that still needs to know its
+      # own public URL — QR codes, IVR <Play> audio, voice callbacks.
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # Every provider below defaults to mock (docs/DEPLOY.md, docs/COSTS.md
+      # cover what each real flip needs and costs). Flip only what you're
+      # ready to pay for and configure — a var left unset here just falls
+      # back to the mock default in packages/core/src/config.ts.
+      - key: GRADING_PROVIDER
+        value: mock
+      - key: PAYMENT_PROVIDER
+        value: mock
+      - key: NOTIFY_PROVIDER
+        value: mock
+      - key: VOICE_PROVIDER
+        value: mock
+      - key: ASR_PROVIDER
+        value: mock
+      - key: MT_PROVIDER
+        value: mock
+      - key: TTS_PROVIDER
+        value: mock
+      - key: I18N_DRAFT_LOCALES_LIVE
+        value: 'false'
+      # Secrets for the providers you do flip on — set by hand in the
+      # Render dashboard (Environment tab), never committed here.
+      - key: HF_TOKEN
+        sync: false
+      - key: AT_API_KEY
+        sync: false
+      - key: AT_USERNAME
+        sync: false
+      - key: AT_VOICE_NUMBER
+        sync: false
+      - key: USSD_SHORTCODE
+        sync: false
+      - key: KHAYA_API_KEY
+        sync: false

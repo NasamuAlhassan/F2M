@@ -1,0 +1,62 @@
+# Farm to Market — backend only: the REST API, the Africa's Talking
+# USSD/Voice webhooks, and the sweep jobs. Built for Render as the other
+# half of the Vercel (web) + Render (server) split — see docs/DEPLOY.md.
+#
+# Why not Vercel for this half too: USSD sessions live in SQLite on disk
+# (Africa's Talking posts every keypress as a separate request, so session
+# state must outlive the request — serverless can't guarantee that), the
+# sweep loops in apps/server/src/jobs are setInterval timers that must keep
+# ticking between requests, and photos plus cached TTS audio are written to
+# disk and served back by URL. All three need a persistent process, which is
+# exactly what Render's Web Service is (unlike Vercel's serverless
+# functions) — the same reasoning that picked Fly.io for the single-origin
+# path in the plain Dockerfile at the repo root.
+#
+# Deliberately does NOT build apps/web — Vercel does that half. Render never
+# serves the portal, so app.ts's SPA-fallback guard (checks whether
+# public/index.html exists) correctly no-ops here.
+
+FROM node:24-slim AS build
+WORKDIR /app
+
+# better-sqlite3 and sharp resolve prebuilt binaries for this platform;
+# the toolchain is the fallback if a prebuild is ever missing.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 make g++ ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# npm workspaces needs every workspace's package.json present to resolve the
+# install, even ones this image never builds — apps/web's package.json is
+# metadata for that resolution, not an invitation to build the portal here.
+COPY package.json package-lock.json ./
+COPY packages/core/package.json packages/core/
+COPY apps/server/package.json apps/server/
+COPY apps/web/package.json apps/web/
+RUN npm ci
+
+# Only the workspaces this image actually runs — apps/web's source (and any
+# Supabase build-time env it would need) never enters this build at all.
+COPY packages/core packages/core
+COPY apps/server apps/server
+COPY tsconfig.base.json ./
+
+
+FROM node:24-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# @ftm/core exports raw TypeScript ("exports": "./src/index.ts"), so tsx is a
+# RUNTIME dependency, not a build-time one. This image keeps devDependencies
+# on purpose — pruning them would remove the thing that starts the server.
+COPY --from=build /app /app
+
+# Mount point for Render's persistent disk. DATABASE_PATH and STORAGE_DIR
+# point in here (render.yaml) so the database, produce photos and TTS cache
+# survive a redeploy.
+RUN mkdir -p /data
+
+EXPOSE 3000
+CMD ["npm", "run", "start", "-w", "@ftm/server"]

@@ -47,7 +47,10 @@ Nothing in this phase needs it.
 
 ## 4. Wire it into the app
 
-Copy `apps/web/.env.example` to `apps/web/.env` and fill in:
+One `.env` for the whole project, at the repo root — same file
+`apps/server/src/config.ts` already reads (`vite.config.ts` points Vite's
+`envDir` there too, so there's no second `apps/web/.env` to keep in sync).
+Copy `.env.example` to `.env` at the repo root and fill in:
 
 ```
 VITE_SUPABASE_URL=https://<project-ref>.supabase.co

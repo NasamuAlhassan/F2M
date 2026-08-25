@@ -20,8 +20,8 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 function missingKeysError(): Error {
   return new Error(
-    'Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Copy apps/web/.env.example to ' +
-      'apps/web/.env and fill in your Supabase project\'s URL and anon key — see supabase/README.md.',
+    'Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Copy .env.example to .env at the repo root ' +
+      'and fill in your Supabase project\'s URL and anon key — see supabase/README.md.',
   );
 }
 

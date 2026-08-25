@@ -1,12 +1,26 @@
 # Deploy
 
-The pilot runs as **one container on Fly.io** serving one origin: the portal,
-the REST API, and the Africa's Talking USSD/Voice webhooks. One HTTPS URL for
-everything — AT callbacks, QR trace links, and IVR audio all resolve against it.
+Two ways to run this, and the difference is entirely about where the
+**backend** lives — the frontend is a static Vite build either way.
 
-## Why not serverless
+- **Option A — Fly.io, one container, one origin.** The portal, the REST
+  API, and the USSD/Voice webhooks all served from one HTTPS URL. Simplest
+  to reason about: no CORS, no proxy config, one bill.
+- **Option B — Vercel (web) + Render (server).** The frontend deploys to
+  Vercel on its own, independent of the backend. Two providers, two bills,
+  and a small rewrite-proxy config to stitch them into what still looks
+  like one origin to the browser — worth it if you specifically want the
+  frontend on Vercel's edge network, or want the two halves to scale and
+  deploy independently.
 
-Vercel and friends were ruled out on three specific grounds, all structural:
+Both share everything below **except** the actual hosting steps, which
+diverge at "First deploy."
+
+## Why not serverless for the backend
+
+This is the one thing that doesn't change between options: the API server —
+wherever it runs — cannot be a serverless function. Ruled out on three
+specific grounds, all structural:
 
 1. **USSD sessions are rows in SQLite on disk.** Africa's Talking posts every
    keypress as a separate HTTP request. On serverless, consecutive keypresses
@@ -24,8 +38,13 @@ The same three reasons are why `fly.toml` sets `auto_stop_machines = false`
 and `min_machines_running = 1`. A machine that sleeps when idle silently stops
 being a working product.
 
-**One machine only.** SQLite lives on a single attached volume; scaling to two
-machines would give each its own volume and silently fork the pilot's data.
+**One machine only, whichever option.** SQLite lives on a single attached
+volume/disk; scaling to two instances would give each its own copy and
+silently fork the pilot's data.
+
+---
+
+# Option A — Fly.io
 
 ## Prerequisites
 
@@ -83,6 +102,98 @@ fly logs                                        # sweep lines confirm the timers
 
 Then open the portal at the same URL, and the simulators at `/ussd-tester.html`
 and `/ivr-tester.html` — they ship in the image alongside the built portal.
+
+---
+
+# Option B — Vercel (web) + Render (server)
+
+Two providers, one Vercel rewrite config stitching them together so the
+browser only ever sees one origin — the frontend never makes a
+cross-origin request, so there is no CORS configuration to get wrong. The
+actual Fastify code, routes, and provider seams are identical to Option A;
+only where the process runs changes.
+
+**Order matters — the frontend's config needs the backend's URL, which
+doesn't exist until the backend is deployed once.** Backend first.
+
+## Prerequisites
+
+- **Node 24+** locally (`.nvmrc` pins 24).
+- A Render account and a Vercel account — both deploy straight from the
+  GitHub repo, no local CLI strictly required, though `npx vercel` is handy
+  for checking a build locally before pushing.
+
+## 1. Deploy the backend to Render
+
+Render reads [`render.yaml`](../render.yaml) directly as a Blueprint:
+Dashboard → New → Blueprint → point at this repo → Render finds the file
+and proposes the service. Before applying, note what it already sets:
+
+- **`plan: starter`, not free.** Render's free tier has no persistent disk
+  and sleeps after 15 minutes idle — both fatal here, same reasoning as
+  "Why not serverless" above: USSD sessions and the sweep loops need a disk
+  that survives redeploys and a process that never sleeps.
+- A **1GB persistent disk** mounted at `/data`, holding the database and
+  photo/TTS storage — the equivalent of Fly's volume in Option A.
+- `dockerfilePath: ./Dockerfile.server` — a **backend-only** image, deliberately
+  not the plain `Dockerfile` at the repo root (that one also builds the
+  portal, which Vercel is about to do instead — building it twice would be
+  redundant and easy to let drift out of sync).
+
+Apply the blueprint, let it deploy once, then fill in the secrets `render.yaml`
+left as `sync: false` (Render dashboard → your service → Environment):
+`JWT_SECRET` is auto-generated; everything else — `HF_TOKEN`, `AT_API_KEY`,
+etc. — stays empty until you flip that provider on (see "Flipping providers
+on" below). Copy the service's URL, something like
+`https://farm-to-market-server.onrender.com` — the next step needs it.
+
+Seed the registries the same way as Option A, via Render's shell tab or
+`render exec` if you have the CLI: `npm run db:seed -w @ftm/core`. Nothing to
+list or grade without it.
+
+## 2. Point the frontend at it
+
+Open [`apps/web/vercel.json`](../apps/web/vercel.json) and replace every
+`REPLACE-WITH-YOUR-RENDER-URL.onrender.com` with the real Render URL from
+step 1. This is the one manual edit the split-hosting path needs that
+Option A doesn't — Fly's single origin never has this problem because
+there's only ever one URL.
+
+## 3. Deploy the frontend to Vercel
+
+Dashboard → New Project → import the repo → **set Root Directory to
+`apps/web`**. Vercel's npm-workspaces support and Vite framework preset
+handle the install/build/output detection from there with no further
+config — `apps/web/vercel.json` supplies only the rewrites (the API/USSD/
+voice/photos proxy to Render, plus the SPA fallback so a hard refresh on
+`/market` or a QR landing on `/t/:lotId` doesn't 404, the same problem
+Option A's `app.ts` SPA fallback solves for its own origin).
+
+**Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel's own
+Project Settings → Environment Variables — this is easy to miss.** Vite
+bakes `VITE_*` vars into the JS bundle at *build* time, not read at runtime,
+so they have to live in Vercel's build environment specifically; nothing
+in your local `.env` reaches Vercel's build automatically. Skip this and
+`/auth` deploys fine but throws the "missing Supabase keys" error the
+moment anyone tries to sign up — see `apps/web/src/lib/supabase.ts` and
+`supabase/README.md` for where these two values come from.
+
+Once deployed, set `PUBLIC_BASE_URL` in the Render dashboard to the
+**Vercel** URL, not Render's own — it's what the browser and Africa's
+Talking actually resolve, and it's what QR codes, IVR `<Play>` audio, and
+voice callbacks get built from. Redeploy Render after setting it.
+
+## Verify
+
+```bash
+curl https://<your-app>.vercel.app/api/registries   # proxies to Render; commodities present = it's wired correctly
+curl https://<render-service>.onrender.com/health    # {"ok":true} — confirms Render directly, bypassing the proxy
+```
+
+Open the Vercel URL — the whole portal, USSD/IVR testers included, should
+behave exactly as Option A's single origin does. If `/api/*` calls fail but
+the portal itself loads, the `vercel.json` rewrite still has the placeholder
+domain in it — that's the most common thing to forget in this path.
 
 ---
 
@@ -151,6 +262,10 @@ SLA, so **apply early**; it gates every SMS receipt in the product.
 
 ## Flipping providers on
 
+Written for Option A's commands; **Option B does the same thing through
+Render's dashboard Environment tab** instead of `fly secrets set` — set the
+var, redeploy the Render service, same effect.
+
 One at a time, verifying between each. Edit `fly.toml`, then `fly deploy`.
 `config.ts` fails fast at boot with the exact missing key, so a wrong order is
 loud rather than silent.
@@ -175,19 +290,22 @@ ledger balances identically either way; only the rail behind it changes.
 
 ## Wire the callbacks
 
-Point AT at the deployed hostname. Routes come from the code:
+Point AT at the deployed hostname — **Option A: the Fly URL. Option B: the
+Vercel URL** (not Render's — the browser and AT both resolve the Vercel
+origin, which proxies through to Render). Routes come from the code:
 
 | AT setting | Where in the dashboard | URL |
 |---|---|---|
-| USSD callback | USSD → Service Codes → ⋮ → Callback | `https://<app>.fly.dev/ussd` |
-| USSD events | same dialog, Events URL | `https://<app>.fly.dev/ussd` |
-| Voice callback | Voice → Phone Numbers → Actions → Callback | `https://<app>.fly.dev/voice/answer` |
-| Voice events | same | `https://<app>.fly.dev/voice/events` |
+| USSD callback | USSD → Service Codes → ⋮ → Callback | `https://<app>/ussd` |
+| USSD events | same dialog, Events URL | `https://<app>/ussd` |
+| Voice callback | Voice → Phone Numbers → Actions → Callback | `https://<app>/voice/answer` |
+| Voice events | same | `https://<app>/voice/events` |
 
 Note the asymmetry: USSD callbacks hang off the **service code**, voice
 callbacks off the **phone number**.
 
-HTTPS is not required by AT (plain HTTP works) but Fly gives it by default.
+HTTPS is not required by AT (plain HTTP works) but both Fly and Vercel give
+it by default.
 
 ### Two constraints worth designing around
 

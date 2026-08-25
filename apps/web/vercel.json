@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/api/:path*" },
+    { "source": "/ussd", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/ussd" },
+    { "source": "/voice/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/voice/:path*" },
+    { "source": "/photos/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/photos/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
