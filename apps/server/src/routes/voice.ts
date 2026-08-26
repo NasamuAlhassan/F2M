@@ -1,5 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   config,
+  DomainError,
   finishVoiceCall,
   getFarmerByPhone,
   getLot,
@@ -25,6 +28,22 @@ const answerSchema = z.object({
 });
 
 export async function voiceRoutes(app: FastifyInstance): Promise<void> {
+  // The web handset simulator's stand-in for a carrier's recorded-call upload
+  // (D-038 real audio path): the browser records the farmer's mic with
+  // MediaRecorder, POSTs the blob here, and gets back a URL it hands to
+  // /voice/answer as recordingUrl — the same field a real Africa's Talking
+  // callback would carry. No DB row: unlike lot photos, a recording is
+  // input to the ASR step, not a marketplace asset worth keeping after.
+  app.post('/voice/upload-recording', async (req, reply) => {
+    const file = await req.file();
+    if (!file) throw new DomainError('Attach an audio file', 'NO_FILE', 400);
+    const dir = path.join(config.storageDir, 'recordings');
+    fs.mkdirSync(dir, { recursive: true });
+    const fileName = `${crypto.randomUUID()}.webm`;
+    fs.writeFileSync(path.join(dir, fileName), await file.toBuffer());
+    return reply.code(201).send({ recordingUrl: `${config.PUBLIC_BASE_URL}/recordings/${fileName}` });
+  });
+
   app.post('/voice/answer', async (req, reply) => {
     const body = answerSchema.parse(req.body ?? {});
     const { callId } = req.query as { callId?: string };

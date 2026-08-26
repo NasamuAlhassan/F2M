@@ -7,7 +7,7 @@ import { khayaLang } from '../khaya';
  * Khaya AI (GhanaNLP) provider transcribes the recorded audio when keys land.
  */
 export interface AsrProvider {
-  readonly name: 'mock' | 'khaya' | 'hf';
+  readonly name: 'mock' | 'khaya' | 'hf' | 'local';
   transcribe(opts: { audioRef?: string | null; hint?: string | null; locale: string }): Promise<string>;
 }
 
@@ -70,12 +70,52 @@ export class HfAsrProvider implements AsrProvider {
   }
 }
 
+/**
+ * Open-weight models run in-process by local-models/server.py (D-044) —
+ * dedicated Wav2Vec2-BERT checkpoints (KhayaAI/w2v-bert-*, Apache-2.0), the
+ * only ASR path that covers Kusaal at all. No API key: the "provider" is a
+ * second local process, so failure means the service isn't running rather
+ * than a missing credential.
+ */
+export class LocalAsrProvider implements AsrProvider {
+  readonly name = 'local' as const;
+  constructor(private readonly baseUrl: string = config.LOCAL_MODELS_URL) {}
+
+  async transcribe(opts: { audioRef?: string | null; hint?: string | null; locale: string }): Promise<string> {
+    if (!opts.audioRef) throw new Error('No recording to transcribe');
+    const audio = await fetch(opts.audioRef);
+    if (!audio.ok) throw new Error(`Recording fetch failed: ${audio.status}`);
+    const form = new FormData();
+    form.append('locale', opts.locale);
+    form.append(
+      'audio',
+      new Blob([await audio.arrayBuffer()], { type: audio.headers.get('content-type') ?? 'audio/mpeg' }),
+      'recording',
+    );
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/asr`, { method: 'POST', body: form });
+    } catch {
+      throw new Error(`Local model service unreachable at ${this.baseUrl} — is 'npm run local-models' running?`);
+    }
+    if (!res.ok) throw new Error(`Local ASR failed: ${res.status} ${await res.text()}`);
+    const data = (await res.json()) as { text?: string };
+    return (data.text ?? '').trim();
+  }
+}
+
 let provider: AsrProvider | null = null;
 
 export function getAsrProvider(): AsrProvider {
   if (!provider) {
     provider =
-      config.ASR_PROVIDER === 'khaya' ? new KhayaAsrProvider() : config.ASR_PROVIDER === 'hf' ? new HfAsrProvider() : new MockAsrProvider();
+      config.ASR_PROVIDER === 'khaya'
+        ? new KhayaAsrProvider()
+        : config.ASR_PROVIDER === 'hf'
+          ? new HfAsrProvider()
+          : config.ASR_PROVIDER === 'local'
+            ? new LocalAsrProvider()
+            : new MockAsrProvider();
   }
   return provider;
 }

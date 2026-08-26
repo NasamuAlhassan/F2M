@@ -1,7 +1,12 @@
-import { getCommodityByCode, listCommodities, listUnits, registerLot, t, type GradeBand } from '@ftm/core';
+import { config, getCommodityByCode, listCommodities, listUnits, registerLot, t, type GradeBand } from '@ftm/core';
 import type { UssdCtx, UssdScreen } from '../machine';
 import { DAY_MS, invalid, listLines, paginate, parseSelection } from './common';
 
+// '8' calls out to the open voice line (D-038) instead of the step-by-step
+// menu below — only offered on page 0, since a farmer who has already paged
+// through commodities is mid-flow, not looking for the shortcut. Kept clear
+// of '9' (this screen's own Next-page key) and '0' (Back), the two digits
+// every paginated screen already reserves.
 export const sellCommodity: UssdScreen = {
   key: 'sell_commodity',
   render: (ctx) => {
@@ -9,10 +14,10 @@ export const sellCommodity: UssdScreen = {
     const { pageItems, hasMore } = paginate(listCommodities(), page);
     return [
       { key: 'ussd.sell.commodity' },
-      ...listLines(
-        pageItems.map((c) => t(ctx.locale, c.nameKey)),
-        { hasMore },
-      ),
+      ...pageItems.map((c, i) => ({ key: 'ussd.listItem', params: { n: i + 1, label: t(ctx.locale, c.nameKey) } })),
+      ...(page === 0 ? [{ key: 'ussd.sell.callInstead' }] : []),
+      ...(hasMore ? [{ key: 'ussd.common.more' }] : []),
+      { key: 'ussd.common.back' },
     ];
   },
   handleInput: (input, ctx) => {
@@ -23,6 +28,9 @@ export const sellCommodity: UssdScreen = {
     if (input === '9' && hasMore) {
       ctx.data.sellPage = page + 1;
       return { next: 'sell_commodity' };
+    }
+    if (input === '8' && page === 0) {
+      return { end: [{ key: 'ussd.sell.callNumber', params: { number: config.AT_VOICE_NUMBER || t(ctx.locale, 'ussd.sell.callNumberDemo') } }] };
     }
     const idx = parseSelection(input, pageItems.length, start);
     if (idx === null) return invalid();

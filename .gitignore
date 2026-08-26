@@ -8,6 +8,12 @@ apps/server/storage/
 coverage/
 .vite/
 
+# local-models/ (D-044) — a separate Python service, not part of the npm
+# workspace; its venv and any downloaded model weights stay local-only.
+local-models/.venv/
+local-models/__pycache__/
+*.pyc
+
 # impeccable-ignore-start
 # Ephemeral output, runtime state, and per-dev overrides.
 # Unanchored: .impeccable may sit at the repo root or under a nested

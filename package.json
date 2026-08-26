@@ -16,6 +16,7 @@
     "db:inspect": "npm run db:inspect -w @ftm/core",
     "momo:provision": "npm run momo:provision -w @ftm/server",
     "demo": "npm run demo -w @ftm/server",
+    "local-models": "local-models/.venv/bin/python local-models/server.py",
     "test": "vitest run",
     "check": "tsc --noEmit -p packages/core && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web",
     "i18n:draft": "npm run i18n:draft -w @ftm/core"

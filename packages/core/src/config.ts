@@ -52,13 +52,17 @@ const envSchema = z
     // Voice listing pipeline (D-038): speech → text → English → parsed lot.
     // 'khaya' = GhanaNLP's hosted API (quota-metered); 'hf' = open models via
     // the Hugging Face token (D-041) — LLM translation on the router, Whisper
-    // ASR on hf-inference. TTS has no HF path yet (MMS not deployed there).
-    ASR_PROVIDER: z.enum(['mock', 'khaya', 'hf']).default('mock'),
-    MT_PROVIDER: z.enum(['mock', 'khaya', 'hf']).default('mock'),
+    // ASR on hf-inference. 'local' = open-weight models run in-process by
+    // local-models/server.py (D-044) — the only path that covers Kusaal,
+    // which neither Khaya nor a generic LLM handles well. TTS has no HF or
+    // local path yet (MMS not deployed on either).
+    ASR_PROVIDER: z.enum(['mock', 'khaya', 'hf', 'local']).default('mock'),
+    MT_PROVIDER: z.enum(['mock', 'khaya', 'hf', 'local']).default('mock'),
     TTS_PROVIDER: z.enum(['mock', 'khaya']).default('mock'),
     KHAYA_API_KEY: z.string().optional(),
     MT_MODEL: z.string().default('google/gemma-3-27b-it'),
     ASR_MODEL: z.string().default('openai/whisper-large-v3'),
+    LOCAL_MODELS_URL: z.string().default('http://localhost:8008'),
 
     // Review gate escape hatch (D-040): 'true' lets machine-drafted catalogs
     // reach farmer-facing surfaces — the owner's own live testing ONLY.

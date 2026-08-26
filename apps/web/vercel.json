@@ -4,6 +4,8 @@
     { "source": "/ussd", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/ussd" },
     { "source": "/voice/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/voice/:path*" },
     { "source": "/photos/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/photos/:path*" },
+    { "source": "/tts/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/tts/:path*" },
+    { "source": "/recordings/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/recordings/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

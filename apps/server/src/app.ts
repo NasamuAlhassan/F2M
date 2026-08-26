@@ -47,6 +47,14 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     prefix: '/tts/',
     decorateReply: false,
   });
+  // Handset simulator mic recordings (D-038) — the browser's real-audio path
+  // into the ASR provider, served back out so it can fetch() the blob.
+  fs.mkdirSync(path.join(config.storageDir, 'recordings'), { recursive: true });
+  await app.register(fastifyStatic, {
+    root: path.join(config.storageDir, 'recordings'),
+    prefix: '/recordings/',
+    decorateReply: false,
+  });
 
   // Role-checked guards — a valid JWT of the WRONG kind must not pass (D-021).
   app.decorate('authBuyer', async (req, reply) => {

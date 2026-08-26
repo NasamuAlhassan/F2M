@@ -7,7 +7,7 @@ import { khayaLang, LOCALE_ENGLISH_NAME } from '../khaya';
  * Khaya AI (GhanaNLP) translates tw/ee/dag/… when keys land.
  */
 export interface MtProvider {
-  readonly name: 'mock' | 'khaya' | 'hf';
+  readonly name: 'mock' | 'khaya' | 'hf' | 'local';
   translate(opts: { text: string; from: string; to: string }): Promise<string>;
 }
 
@@ -81,12 +81,48 @@ export class HfMtProvider implements MtProvider {
   }
 }
 
+/**
+ * Open-weight translation run in-process by local-models/server.py (D-044) —
+ * a fine-tuned NLLB-600M covering all five locales (Twi/Ewe/Dagbani/Hausa/
+ * Kusaal) in one checkpoint, including Kusaal, which Khaya has no code for
+ * (see LOCALE_TO_KHAYA) and a generic LLM translates poorly at best.
+ */
+export class LocalMtProvider implements MtProvider {
+  readonly name = 'local' as const;
+  constructor(private readonly baseUrl: string = config.LOCAL_MODELS_URL) {}
+
+  async translate(opts: { text: string; from: string; to: string }): Promise<string> {
+    if (opts.from === opts.to) return opts.text;
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/mt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: opts.text, from: opts.from, to: opts.to }),
+      });
+    } catch {
+      throw new Error(`Local model service unreachable at ${this.baseUrl} — is 'npm run local-models' running?`);
+    }
+    if (!res.ok) throw new Error(`Local MT failed: ${res.status} ${await res.text()}`);
+    const data = (await res.json()) as { text?: string };
+    const out = (data.text ?? '').trim();
+    if (!out) throw new Error('Local MT returned an empty translation');
+    return out;
+  }
+}
+
 let provider: MtProvider | null = null;
 
 export function getMtProvider(): MtProvider {
   if (!provider) {
     provider =
-      config.MT_PROVIDER === 'khaya' ? new KhayaMtProvider() : config.MT_PROVIDER === 'hf' ? new HfMtProvider() : new MockMtProvider();
+      config.MT_PROVIDER === 'khaya'
+        ? new KhayaMtProvider()
+        : config.MT_PROVIDER === 'hf'
+          ? new HfMtProvider()
+          : config.MT_PROVIDER === 'local'
+            ? new LocalMtProvider()
+            : new MockMtProvider();
   }
   return provider;
 }

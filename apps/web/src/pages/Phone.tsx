@@ -137,6 +137,10 @@ export function PhonePage() {
   const [speaking, setSpeaking] = useState(false);
   const [awaitingDigits, setAwaitingDigits] = useState(false);
   const [transcript, setTranscript] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   // Composed reply — the line being typed for the current USSD prompt or DTMF
   // gather, built up over one or more keypad taps and sent as a whole on OK
@@ -386,7 +390,8 @@ export function PhonePage() {
   }, []);
 
   /** The open listing line: speak a lot into existence (D-038). The typed text
-   *  stands in for the recording that ASR would otherwise transcribe. */
+   *  stands in for the recording that ASR would otherwise transcribe — kept as
+   *  a fallback for when the mic isn't available. */
   const speakListing = useCallback(async () => {
     if (!transcript.trim()) return;
     setMode('incall');
@@ -403,6 +408,63 @@ export function PhonePage() {
       setBusy(false);
     }
   }, [msisdn, transcript]);
+
+  /** Real audio path: record the mic, upload the clip, and let the ASR model
+   *  actually transcribe it — the same /voice/answer call speakListing makes,
+   *  just with recordingUrl instead of a typed transcript. */
+  const startRecording = useCallback(async () => {
+    setMicError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordedChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+    } catch (err) {
+      setMicError(err instanceof Error ? err.message : 'Could not reach the microphone.');
+    }
+  }, []);
+
+  const stopRecordingAndSpeak = useCallback(async () => {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    setRecording(false);
+
+    const blob = await new Promise<Blob>((resolve) => {
+      recorder.addEventListener(
+        'stop',
+        () => resolve(new Blob(recordedChunksRef.current, { type: recorder.mimeType })),
+        { once: true },
+      );
+      recorder.stop();
+    });
+    recorderRef.current = null;
+
+    setMode('incall');
+    setBusy(true);
+    setWireError(null);
+    setScreen('… calling the listing line');
+    try {
+      const form = new FormData();
+      form.append('audio', blob, 'recording');
+      const uploadRes = await fetch('/voice/upload-recording', { method: 'POST', body: form });
+      if (!uploadRes.ok) throw new Error(`Upload failed (${uploadRes.status}).`);
+      const { recordingUrl } = (await uploadRes.json()) as { recordingUrl: string };
+      const xml = await postForm('/voice/answer', { callerNumber: msisdn, recordingUrl });
+      speakXml(xml);
+    } catch (err) {
+      failWire(err);
+    } finally {
+      setBusy(false);
+    }
+  }, [msisdn]);
 
   /* ── Key routing: one keypad, three jobs ──
      Every tap composes onto the current line rather than sending straight
@@ -629,28 +691,53 @@ export function PhonePage() {
               Speak a listing
             </h2>
             <p className="mb-3 text-xs leading-relaxed text-[var(--ink-6)]">
-              The open voice line (D-038): say what you have and the parser turns it into a lot. Typed here in place of
-              the recording that speech-to-text would transcribe.
+              The open voice line (D-038): say what you have — the crop, how many bags or baskets, and the quality —
+              and the real speech-to-text model transcribes it into a lot.
             </p>
-            <textarea
-              id="transcript"
-              name="transcript"
-              aria-labelledby="transcript-label"
-              className="w-full rounded-[2px] border border-[var(--ink-7)] bg-[var(--paper-lift)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
-              rows={3}
-              placeholder="I have ten bags of maize, grade B, ready now"
-              value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              disabled={mode !== 'idle'}
-            />
             <button
               type="button"
-              onClick={() => void speakListing()}
-              disabled={mode !== 'idle' || !transcript.trim()}
-              className="smallcaps mt-3 rounded-[2px] border border-[var(--ink)] bg-[var(--ink)] px-4 py-2 text-[var(--paper)] transition-opacity disabled:opacity-40"
+              onClick={() => void (recording ? stopRecordingAndSpeak() : startRecording())}
+              disabled={mode !== 'idle' || busy}
+              aria-pressed={recording}
+              className={`smallcaps w-full rounded-[2px] border px-4 py-3 transition-colors disabled:opacity-40 ${
+                recording
+                  ? 'animate-pulse border-[var(--stamp)] bg-[var(--stamp)] text-[var(--paper)]'
+                  : 'border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]'
+              }`}
             >
-              Call &amp; speak
+              {recording ? '● Recording — tap to stop and send' : '🎙 Record a listing'}
             </button>
+            {micError && <p className="stamp mt-2 px-3 py-2 text-[11px] text-[var(--stamp)]">{micError}</p>}
+
+            <details className="mt-4">
+              <summary className="smallcaps cursor-pointer text-[11px] text-[var(--ink-5)]">
+                No microphone? Type it instead
+              </summary>
+              <div className="mt-3">
+                <textarea
+                  id="transcript"
+                  name="transcript"
+                  aria-labelledby="transcript-label"
+                  className="w-full rounded-[2px] border border-[var(--ink-7)] bg-[var(--paper-lift)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
+                  rows={3}
+                  placeholder="I have ten bags of maize, grade B, ready now"
+                  value={transcript}
+                  onChange={(e) => setTranscript(e.target.value)}
+                  disabled={mode !== 'idle'}
+                />
+                <p className="mt-2 text-xs leading-relaxed text-[var(--ink-6)]">
+                  Typed text skips ASR and is used as the transcript directly — useful for testing without a mic.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void speakListing()}
+                  disabled={mode !== 'idle' || !transcript.trim()}
+                  className="smallcaps mt-3 rounded-[2px] border border-[var(--ink)] bg-[var(--ink)] px-4 py-2 text-[var(--paper)] transition-opacity disabled:opacity-40"
+                >
+                  Call &amp; speak (typed)
+                </button>
+              </div>
+            </details>
           </section>
 
           <section className="certificate p-5">
