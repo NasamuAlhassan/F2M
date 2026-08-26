@@ -64,6 +64,13 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     root: path.join(config.storageDir, 'recordings'),
     prefix: '/recordings/',
     decorateReply: false,
+    // A .webm extension is guessed as video/webm, and an ASR provider that
+    // forwards the content-type verbatim gets refused for sending video to a
+    // speech endpoint. These files are MediaRecorder audio with no video
+    // track, so say so — otherwise every real recording 400s.
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.webm')) res.header('content-type', 'audio/webm');
+    },
   });
 
   // Role-checked guards — a valid JWT of the WRONG kind must not pass (D-021).

@@ -15,7 +15,15 @@ export class MockAsrProvider implements AsrProvider {
   readonly name = 'mock' as const;
   async transcribe(opts: { audioRef?: string | null; hint?: string | null; locale: string }): Promise<string> {
     // Offline stand-in: the typed transcript IS the "speech".
-    return (opts.hint ?? '').trim();
+    const hint = (opts.hint ?? '').trim();
+    // A real recording with nothing typed alongside it means someone pressed
+    // Record while ASR is mocked. Returning '' let that surface as the farmer-
+    // facing "we could not understand your listing", blaming the speaker for a
+    // provider that was never going to listen. Say what actually happened.
+    if (!hint && opts.audioRef) {
+      throw new Error('ASR_PROVIDER=mock cannot transcribe audio — set ASR_PROVIDER to hf or local to record');
+    }
+    return hint;
   }
 }
 
@@ -42,6 +50,17 @@ export class KhayaAsrProvider implements AsrProvider {
 }
 
 /**
+ * A .webm recording is routinely labelled video/webm by whatever serves it —
+ * the extension carries no track information. Speech endpoints refuse video
+ * outright, so state what these actually are: MediaRecorder output with no
+ * video track. Anything already audio/* is passed through untouched.
+ */
+function audioContentType(raw: string | null): string {
+  if (!raw) return 'audio/mpeg';
+  return raw.startsWith('video/webm') ? raw.replace('video/webm', 'audio/webm') : raw;
+}
+
+/**
  * Whisper on hf-inference (D-041): the transcription path the HF token
  * verifiably reaches. Strong for English calls; Ghanaian-language speech is
  * beyond stock Whisper — the pipeline's honest-failure SMS covers the gap
@@ -61,7 +80,7 @@ export class HfAsrProvider implements AsrProvider {
     if (!audio.ok) throw new Error(`Recording fetch failed: ${audio.status}`);
     const res = await fetch(`https://router.huggingface.co/hf-inference/models/${this.model}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': audio.headers.get('content-type') ?? 'audio/mpeg' },
+      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': audioContentType(audio.headers.get('content-type')) },
       body: Buffer.from(await audio.arrayBuffer()),
     });
     if (!res.ok) throw new Error(`HF ASR failed: ${res.status} ${await res.text()}`);
@@ -89,7 +108,7 @@ export class LocalAsrProvider implements AsrProvider {
     form.append('locale', opts.locale);
     form.append(
       'audio',
-      new Blob([await audio.arrayBuffer()], { type: audio.headers.get('content-type') ?? 'audio/mpeg' }),
+      new Blob([await audio.arrayBuffer()], { type: audioContentType(audio.headers.get('content-type')) }),
       'recording',
     );
     let res: Response;
