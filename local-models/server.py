@@ -98,6 +98,13 @@ def _add_language_prefix(features: torch.Tensor, lang_id: int) -> torch.Tensor:
 def health():
     return {
         "status": "ok",
+        # Which locales this service can actually serve, not just which models
+        # happen to be warm. English has no entry by design (these are Ghanaian
+        # -language checkpoints), and a caller sending locale=en gets a 400 —
+        # so listing the supported set here is the difference between a quick
+        # answer and puzzling over an "unparseable" listing.
+        "asr_locales": sorted(ASR_CONFIG.keys()),
+        "mt_locales": sorted(MT_LANGS.keys()),
         "asr_loaded": list(_asr_cache.keys()),
         "mt_loaded": _mt_cache is not None,
         "hf_token_configured": bool(HF_TOKEN),

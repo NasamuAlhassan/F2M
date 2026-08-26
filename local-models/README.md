@@ -20,6 +20,15 @@ Models used (all verified against Hugging Face's own API — see the table):
 The MT model's CC-BY-NC-4.0 license means non-commercial use only — fine for
 this demo/testing phase, worth revisiting before any paid production use.
 
+**English is deliberately absent from the ASR table.** These are Ghanaian-language
+checkpoints; `POST /asr` with `locale=en` answers 400, which the voice pipeline
+turns into the ordinary "we could not understand your listing" SMS. So with
+`ASR_PROVIDER=local`, a farmer whose profile language is English cannot record a
+listing at all — recording has to be demoed from a farmer set to Twi, Ewe,
+Dagbani, Hausa or Kusaal. `GET /health` lists the servable locales (`asr_locales`,
+`mt_locales`) so this is one curl to confirm rather than a puzzling failure. MT is
+unaffected: English short-circuits before the model, since `from === to`.
+
 Twi/Ewe/Dagbani ASR quality depends on the DONDO multilingual checkpoints'
 documented language-prefix trick (see `server.py`'s `ASR_CONFIG`); Hausa uses
 a dedicated checkpoint even though its language ID also exists in the shared

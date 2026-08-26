@@ -27,6 +27,16 @@ import { voiceRoutes } from './routes/voice';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+/** Zod's issue list as one sentence a person can act on, naming the field. */
+function zodMessage(err: ZodError): string {
+  const parts = err.issues.slice(0, 3).map((i) => {
+    const field = i.path.filter((p) => typeof p !== 'number').join('.');
+    return field ? `${field}: ${i.message}` : i.message;
+  });
+  const rest = err.issues.length - parts.length;
+  return parts.join('; ') + (rest > 0 ? ` (+${rest} more)` : '');
+}
+
 export async function buildServer(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? true });
 
@@ -87,7 +97,11 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
       return reply.code(err.status).send({ error: { code: err.code, message: err.message } });
     }
     if (err instanceof ZodError) {
-      return reply.code(400).send({ error: { code: 'VALIDATION', issues: err.issues } });
+      // `issues` alone left every validation failure rendering as the client's
+      // "Request failed (400)" fallback (api.ts reads error.message only), so
+      // the user was told a number was wrong but never which one. Name the
+      // field and say what it wanted; keep `issues` for programmatic callers.
+      return reply.code(400).send({ error: { code: 'VALIDATION', message: zodMessage(err), issues: err.issues } });
     }
     req.log.error(err);
     return reply.code(500).send({ error: { code: 'INTERNAL', message: 'Internal server error' } });

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type ContractListRow, type PriceTerms } from '../api';
 import { POLL } from '../poll';
 import { CropMark, Glyph } from '../components/engrave';
-import { GradeBadge, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { GradeBadge, LoadGate, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 interface Row extends ContractListRow {
   quantityKg: number;
@@ -14,12 +14,12 @@ interface Row extends ContractListRow {
 
 /** Every contract in one ledger — the QR and full instrument live on each detail page. */
 export function ContractsPage() {
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['contracts'],
     queryFn: () => api<{ contracts: Row[] }>('/api/contracts'),
     refetchInterval: POLL.ambient,
   });
-  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
+  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="contracts" />;
 
   return (
     <div>

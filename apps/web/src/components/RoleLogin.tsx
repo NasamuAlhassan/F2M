@@ -78,7 +78,13 @@ function BuyerForm() {
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
       <Field label="Email">
-        <input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+        <input
+          className={inputCls}
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+        />
       </Field>
       <Field label="Password">
         <input
@@ -93,7 +99,13 @@ function BuyerForm() {
       <button className={`${btnCls} w-full py-2.5`} disabled={busy}>
         {busy ? 'Signing in…' : 'Sign In'}
       </button>
-      <p className="text-center text-xs text-[var(--ink-6)]">Demo account: buyer@demo.ftm</p>
+      {/* The seed's demo buyer, already public in docs/DEPLOY.md — which also
+          says to change it before real users. Quoting the password beside the
+          email spares a live demo the one thing nobody remembers on stage. */}
+      <p className="text-center text-xs text-[var(--ink-6)]">
+        Demo account: <span className="serial">buyer@demo.ftm</span> ·{' '}
+        <span className="serial">demo-buyer-2026</span>
+      </p>
     </form>
   );
 }

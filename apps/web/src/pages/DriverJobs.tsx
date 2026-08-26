@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, dateTime, ghs, type JobView, type Registries } from '../api';
 import { POLL } from '../poll';
 import { CropMark, VehicleMark } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
-import { btnCls, btnGhostCls, Card, ErrorStamp, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, ErrorStamp, LoadGate, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 interface OfferView extends JobView {
   jobId: string;
@@ -21,6 +21,23 @@ interface DriverProfile {
   locale: string;
 }
 
+/** The sidebar's own footprint while the profile loads — the board must not jump. */
+function ProfileSkeleton() {
+  return (
+    <aside className="w-full flex-shrink-0 lg:w-72" aria-busy="true" aria-label="Loading driver profile">
+      <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
+        <div className="plate h-[68px]" />
+        <div className="h-[3px] w-full bg-[var(--gold)]" />
+        <div className="animate-pulse space-y-3 p-5">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-9 rounded-lg bg-[var(--paper-deep)]" />
+          ))}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 /** The driver's book: identity, availability lever, vehicle, route checklist. */
 function ProfileSidebar() {
   const queryClient = useQueryClient();
@@ -31,22 +48,42 @@ function ProfileSidebar() {
   });
   const [routes, setRoutes] = useState<string[] | null>(null);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // The checklist ticks optimistically, so it must re-seed on every server
+  // change and not just the first: after a refused write the refetch is the
+  // only thing that walks the phantom tick back off the paper.
+  const serverRoutes = data?.profile.routeRegions;
   useEffect(() => {
-    if (data && routes === null) setRoutes(data.profile.routeRegions);
-  }, [data, routes]);
+    if (serverRoutes) setRoutes(serverRoutes);
+  }, [serverRoutes]);
+
+  // A pending "Saved ✓" must not fire onto an unmounted card, and a second
+  // save must restart the two seconds rather than inherit the first's tail.
+  useEffect(() => () => {
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+  }, []);
 
   const save = useMutation({
     mutationFn: (body: Partial<DriverProfile> & { routeRegions?: string[] }) =>
       api('/api/driver/profile', { method: 'PUT', body: JSON.stringify(body) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['driver-profile'] });
+      setError(null);
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSaved(false), 2000);
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : 'Could not save your profile');
+      // Refetch so the toggle, the vehicle chip and the checklist all fall back
+      // to what the server actually holds.
+      queryClient.invalidateQueries({ queryKey: ['driver-profile'] });
     },
   });
 
-  if (!data || routes === null) return null;
+  if (!data || routes === null) return <ProfileSkeleton />;
   const profile = data.profile;
   const vehicleClasses = registries?.vehicleClasses ?? [];
 
@@ -71,11 +108,14 @@ function ProfileSidebar() {
               </p>
             </div>
             <button
+              role="switch"
+              aria-checked={profile.active}
               aria-label="Toggle availability"
-              className={`relative h-7 rounded-full border transition-colors ${
+              className={`relative h-7 rounded-full border transition-colors disabled:opacity-40 ${
                 profile.active ? 'border-[var(--forest)] bg-[var(--forest)]' : 'border-[var(--ink-4)] bg-[var(--paper)]'
               }`}
               style={{ width: 52 }}
+              disabled={save.isPending}
               onClick={() => save.mutate({ active: !profile.active })}
             >
               <span
@@ -95,9 +135,11 @@ function ProfileSidebar() {
                 return (
                   <button
                     key={v.code}
-                    className={`flex w-full items-center gap-3 border px-3 py-2 text-left transition-colors ${
+                    aria-pressed={on}
+                    className={`flex w-full items-center gap-3 border px-3 py-2 text-left transition-colors disabled:opacity-40 ${
                       on ? 'border-[var(--ink)] bg-[var(--gold-wash)]' : 'border-[var(--ink-2)] hover:border-[var(--ink-5)]'
                     }`}
+                    disabled={save.isPending}
                     onClick={() => save.mutate({ vehicleClassCode: v.code })}
                   >
                     <VehicleMark code={v.code} className="h-8 w-8 flex-shrink-0 text-[var(--ink)]" />
@@ -125,14 +167,15 @@ function ProfileSidebar() {
                 return (
                   <label
                     key={r.code}
-                    className={`flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm transition-colors ${
-                      on ? rowOnCls : rowOffCls
-                    }`}
+                    className={`flex items-center gap-2 px-2 py-1.5 text-sm transition-colors ${
+                      save.isPending ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                    } ${on ? rowOnCls : rowOffCls}`}
                   >
                     <input
                       type="checkbox"
                       className="h-3.5 w-3.5 accent-[var(--ink)]"
                       checked={on}
+                      disabled={save.isPending}
                       onChange={() => {
                         const next = on ? routes.filter((c) => c !== r.code) : [...routes, r.code];
                         setRoutes(next);
@@ -149,6 +192,7 @@ function ProfileSidebar() {
 
           <LanguageSection current={profile.locale} saving={save.isPending} onPick={(locale) => save.mutate({ locale })} />
 
+          {error && <ErrorStamp message={error} onDismiss={() => setError(null)} />}
           {saved && <p className="text-xs font-bold text-[var(--ink)]">Saved ✓</p>}
         </div>
       </div>
@@ -176,7 +220,7 @@ function JobStats({ job }: { job: JobView }) {
 
 export function DriverJobsPage() {
   const queryClient = useQueryClient();
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['driver-jobs'],
     queryFn: () => api<{ offers: OfferView[]; openRequests: JobView[]; jobs: JobView[] }>('/api/driver/jobs'),
     refetchInterval: POLL.active,
@@ -204,7 +248,9 @@ export function DriverJobsPage() {
     onError,
   });
 
-  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
+  // Gated on !data, not isError: once offers are on screen a failed poll must
+  // not blank the board — the next tick retries on its own.
+  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="the dispatch board" />;
   const active = data.jobs.filter((j) => ['ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'DELIVERED'].includes(j.state));
   const history = data.jobs.filter((j) => !active.some((a) => a.id === j.id));
 

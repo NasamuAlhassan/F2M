@@ -173,11 +173,22 @@ const initials = (name: string): string =>
     .slice(0, 2)
     .toUpperCase();
 
+// filter(Boolean) before the map: a doubled or trailing underscore yields an
+// empty segment, and w[0]! on that is a TypeError that takes the whole header
+// down — the one place a malformed registry code could blank the app.
 const prettyRegion = (code: string | null): string =>
-  code ? code.toLowerCase().split('_').map((w) => w[0]!.toUpperCase() + w.slice(1)).join(' ') : '';
+  code
+    ? code
+        .toLowerCase()
+        .split('_')
+        .filter(Boolean)
+        .map((w) => w[0]!.toUpperCase() + w.slice(1))
+        .join(' ')
+    : '';
 
 export function Layout({ role: routeRole }: { role?: Role }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   // The route declares which identity this tab is wearing. Only the shared
   // surfaces (/prices) leave it open, falling back to the token actually held.
@@ -242,12 +253,20 @@ export function Layout({ role: routeRole }: { role?: Role }) {
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ink-4)]"
               />
               <input
+                type="search"
+                aria-label="Search crops and regions"
                 className="w-full rounded-full border border-[var(--ink-7)] bg-[var(--paper-lift)] py-2 pl-9 pr-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
                 placeholder="Search crops, regions…"
                 value={searchParams.get('q') ?? ''}
                 onChange={(e) => {
                   const q = e.target.value;
-                  navigate(q ? `/market?q=${encodeURIComponent(q)}` : '/market', { replace: true });
+                  // Carry the other params through: rebuilding the URL from
+                  // scratch dropped ?mode=pool, so typing one character in
+                  // search threw the buyer out of the Pool Builder.
+                  const next = new URLSearchParams(searchParams);
+                  if (q) next.set('q', q);
+                  else next.delete('q');
+                  navigate({ pathname: '/market', search: next.toString() }, { replace: true });
                 }}
               />
             </div>
@@ -319,6 +338,10 @@ export function Layout({ role: routeRole }: { role?: Role }) {
                 onClick={() => {
                   // Sign out only this tab's identity; the other roles stay live.
                   setToken(null, role);
+                  // navigate() is a client-side transition, so without this the
+                  // signed-out buyer's name, alerts and contracts stay on screen
+                  // for the next person to sign in until each query refetches.
+                  queryClient.clear();
                   navigate(loginPathFor(role));
                 }}
               >

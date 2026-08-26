@@ -49,6 +49,21 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
     const { callId } = req.query as { callId?: string };
     const phone = body.callerNumber ?? body.phoneNumber ?? '';
 
+    // A voice gateway can only parse XML. Without this the global error
+    // handler answers a DomainError with JSON — the caller hears dead air and
+    // the leg hangs. /ussd has had the same guard from the start; this is the
+    // twin surface catching up, degrading to a spoken apology like it does.
+    try {
+      return await answerCall();
+    } catch (err) {
+      req.log.error(err, 'voice answer handler failed');
+      const locale = getFarmerByPhone(phone)?.locale ?? 'en';
+      return reply
+        .type('application/xml')
+        .send(await sayResponse(t(locale, 'voice.list.failed', { code: config.USSD_SHORTCODE }), locale));
+    }
+
+    async function answerCall() {
     // No callId = an INBOUND call to the listing line (D-038): one open-ended
     // recording becomes a marketplace lot. Outbound flows keep their callId.
     if (!callId) {
@@ -96,6 +111,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
       callbackUrl: `${config.PUBLIC_BASE_URL}/voice/answer?callId=${callId}`,
     });
     return reply.type('application/xml').send(xml);
+    }
   });
 
   // Final call status events (hangup, no-answer). Payloads are advisory only —

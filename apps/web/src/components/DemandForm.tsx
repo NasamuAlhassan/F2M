@@ -113,10 +113,22 @@ export function NewDemandForm({
             ))}
           </select>
         </Field>
-        <Field label={`Quantity (${activeUnit?.name ?? 'unit'})`}>
+        <Field label={`Quantity (${activeUnit?.name ?? 'unit'})`} group>
           <div className="flex gap-2">
-            <input className={inputCls} type="number" min="1" value={unitQty} onChange={(e) => setUnitQty(e.target.value)} />
-            <select className={inputCls} value={activeUnit?.code} onChange={(e) => setUnitCode(e.target.value)}>
+            <input
+              className={inputCls}
+              type="number"
+              min="1"
+              aria-label={`Quantity in ${activeUnit?.name ?? 'units'}`}
+              value={unitQty}
+              onChange={(e) => setUnitQty(e.target.value)}
+            />
+            <select
+              className={inputCls}
+              aria-label="Unit of measure"
+              value={activeUnit?.code ?? ''}
+              onChange={(e) => setUnitCode(e.target.value)}
+            >
               {units.map((u) => (
                 <option key={u.code} value={u.code}>
                   {u.name}
@@ -126,7 +138,7 @@ export function NewDemandForm({
           </div>
           <span className="serial mt-1 block text-[11px] text-[var(--ink-6)]">= {kg} kg</span>
         </Field>
-        <Field label="Minimum Grade">
+        <Field label="Minimum Grade" group>
           <div className="flex items-center gap-2 py-1">
             {(['A', 'B', 'C'] as const).map((g) => (
               <button
@@ -146,6 +158,7 @@ export function NewDemandForm({
             className={`${inputCls} serial`}
             type="number"
             step="0.01"
+            min="0"
             value={basePrice}
             onChange={(e) => setBasePrice(e.target.value)}
           />
@@ -182,6 +195,8 @@ export function NewDemandForm({
                 className={`${inputCls} serial w-24`}
                 type="number"
                 step="0.01"
+                min="0"
+                aria-label={`Grade ${band} price per kilogram`}
                 value={terms[band] ?? (derived[band] / 100).toFixed(2)}
                 onChange={(e) => setTerms((t) => ({ ...t, [band]: e.target.value }))}
               />

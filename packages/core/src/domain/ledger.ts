@@ -23,6 +23,12 @@ export const ACCOUNTS = {
 /** Post a balanced journal. Every journal MUST sum to zero (D-010). */
 export function postJournal(tx: DbLike, contractId: string, lines: JournalLine[], jobId?: string): string {
   const journalId = crypto.randomUUID();
+  // A journal where nothing moved has nothing to record — refunding a hold of
+  // zero, say. Throwing on it stranded the contract instead: runGrading commits
+  // the GRADED transition in its own transaction, so a refund blowing up right
+  // after left a REJECT lot no sweep would ever refund OR release. Genuinely
+  // unbalanced journals below still throw.
+  if (lines.every((l) => (l.debit ?? 0) === 0 && (l.credit ?? 0) === 0)) return journalId;
   let debits = 0;
   let credits = 0;
   for (const line of lines) {

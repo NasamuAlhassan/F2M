@@ -6,7 +6,7 @@ import { POLL } from '../poll';
 import { NewDemandForm } from '../components/DemandForm';
 import { CropMark, cropAccent, cropPhoto, Glyph } from '../components/engrave';
 import { Modal } from '../components/Modal';
-import { btnCls, GradeBadge, inputCls, rowOffCls, rowOnCls } from '../components/ui';
+import { btnCls, btnGhostCls, GradeBadge, inputCls, rowOffCls, rowOnCls } from '../components/ui';
 import { PoolBuilder } from './Consolidate';
 
 type SortKey = 'newest' | 'nearest' | 'largest' | 'cheapest';
@@ -17,8 +17,17 @@ export function MarketplacePage() {
   const q = (searchParams.get('q') ?? '').trim().toLowerCase();
   const mode = searchParams.get('mode') === 'pool' ? 'pool' : 'browse';
 
-  const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
-  const { data, dataUpdatedAt } = useQuery({
+  // The registry never polls, so one failed fetch used to strand every bid
+  // button forever: the modal was gated on `registries` and simply rendered
+  // nothing. Now the trigger waits out the first load and the modal owns the
+  // failure, with the retry the user needs.
+  const {
+    data: registries,
+    isPending: registriesPending,
+    isFetching: registriesFetching,
+    refetch: refetchRegistries,
+  } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
+  const { data, dataUpdatedAt, isPending: lotsPending } = useQuery({
     queryKey: ['market-lots'],
     queryFn: () => api<{ lots: MarketLot[] }>('/api/market/lots'),
     refetchInterval: POLL.ambient,
@@ -65,6 +74,15 @@ export function MarketplacePage() {
     apply(next);
   };
 
+  // Mode rides in the URL beside the masthead's ?q — mutate a copy of the live
+  // params so switching Browse↔Pool never silently drops an active search term.
+  const switchMode = (m: 'browse' | 'pool') => {
+    const next = new URLSearchParams(searchParams);
+    if (m === 'pool') next.set('mode', 'pool');
+    else next.delete('mode');
+    setSearchParams(next, { replace: true });
+  };
+
   const modeSwitch = (
     <div className="mb-4 inline-flex overflow-hidden rounded-full border border-[var(--ink-2)] bg-[var(--paper-lift)] shadow-sm">
       {(
@@ -75,7 +93,7 @@ export function MarketplacePage() {
       ).map(([m, label]) => (
         <button
           key={m}
-          onClick={() => setSearchParams(m === 'pool' ? { mode: 'pool' } : {}, { replace: true })}
+          onClick={() => switchMode(m)}
           className={`smallcaps min-h-11 px-4 py-2 transition-colors lg:min-h-0 ${
             mode === m ? 'bg-[var(--forest)] text-[var(--paper)]' : 'text-[var(--ink-6)] hover:text-[var(--ink)]'
           }`}
@@ -228,7 +246,7 @@ export function MarketplacePage() {
             <div>
               <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">Active Commodity Lots</h1>
               <p className="mt-1 text-sm text-[var(--ink-6)]">
-                Showing {lots.length} of {all.length} lots
+                {lotsPending ? 'Fetching lots…' : `Showing ${lots.length} of ${all.length} lots`}
                 {updatedMin !== null && <> · updated {updatedMin === 0 ? 'just now' : `${updatedMin} min ago`}</>}
                 {q && (
                   <>
@@ -248,11 +266,40 @@ export function MarketplacePage() {
             </div>
           </div>
 
-          {lots.length === 0 ? (
+          {/* An unfetched market and an empty one look identical once the grid is
+              gone, and a market emptied by filters looks like both — so pending
+              is answered first, and the empty copy names which of the two it is
+              rather than blaming filters the buyer may not even have set. */}
+          {lotsPending ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="certificate animate-pulse overflow-hidden">
+                  <div className="h-44 bg-[var(--paper-deep)]" />
+                  <div className="space-y-2 p-3">
+                    <div className="h-4 w-2/3 rounded bg-[var(--paper-deep)]" />
+                    <div className="h-3 w-1/2 rounded bg-[var(--paper-deep)]" />
+                    <div className="mt-3 h-9 rounded-full bg-[var(--paper-deep)]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : lots.length === 0 ? (
             <div className="certificate flex flex-col items-center justify-center bg-[var(--paper-lift)] py-20 text-center">
               <CropMark code="MAIZE" className="mb-3 h-12 w-12 text-[var(--ink-4)]" />
-              <p className="font-semibold text-[var(--ink-6)]">No lots match these filters</p>
-              <p className="mt-1 text-sm text-[var(--ink-6)]">Lots appear the moment a farmer registers one — by web, USSD, or voice</p>
+              {all.length === 0 ? (
+                <>
+                  <p className="font-semibold text-[var(--ink-6)]">No lots listed yet</p>
+                  <p className="mt-1 text-sm text-[var(--ink-6)]">Lots appear the moment a farmer registers one — by web, USSD, or voice</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold text-[var(--ink-6)]">No lots match these filters</p>
+                  <p className="mt-1 text-sm text-[var(--ink-6)]">
+                    {all.length} listed {all.length === 1 ? 'lot is' : 'lots are'} hidden — widen the distance, grade, or crop
+                    filters{q ? ', or clear the search' : ''}
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -372,7 +419,12 @@ export function MarketplacePage() {
                       >
                         View Trace
                       </Link>
-                      <button className={btnCls} onClick={() => setBidLot(l)}>
+                      <button
+                        className={btnCls}
+                        onClick={() => setBidLot(l)}
+                        disabled={registriesPending}
+                        title={registriesPending ? 'Loading the crop registry…' : undefined}
+                      >
                         Place Bid
                       </button>
                     </div>
@@ -384,7 +436,7 @@ export function MarketplacePage() {
         </div>
 
         {/* ── Place Bid = a demand pre-filled for this lot ──────── */}
-        {bidLot && registries && (
+        {bidLot && (
           <Modal
             label={`Place bid on ${bidLot.remainingKg} kilograms of ${bidLot.commodityName}`}
             onClose={() => setBidLot(null)}
@@ -408,21 +460,37 @@ export function MarketplacePage() {
                   </button>
                 </div>
                 <div className="p-4">
-                  <NewDemandForm
-                    registries={registries}
-                    initial={{
-                      commodityCode: bidLot.commodityCode,
-                      unitCode: bidLot.unitCode ?? undefined,
-                      unitQty: bidLot.unitsRemaining ?? undefined,
-                      minBand: (['A', 'B', 'C'].includes(bidLot.declaredBand) ? bidLot.declaredBand : 'B') as 'A' | 'B' | 'C',
-                      basePriceGhs: bidLot.pricePerKg !== null ? (bidLot.pricePerKg / 100).toFixed(2) : undefined,
-                    }}
-                    onDone={() => {
-                      setBidLot(null);
-                      navigate('/orders');
-                    }}
-                    onCancel={() => setBidLot(null)}
-                  />
+                  {registries ? (
+                    <NewDemandForm
+                      registries={registries}
+                      initial={{
+                        commodityCode: bidLot.commodityCode,
+                        unitCode: bidLot.unitCode ?? undefined,
+                        unitQty: bidLot.unitsRemaining ?? undefined,
+                        minBand: (['A', 'B', 'C'].includes(bidLot.declaredBand) ? bidLot.declaredBand : 'B') as 'A' | 'B' | 'C',
+                        basePriceGhs: bidLot.pricePerKg !== null ? (bidLot.pricePerKg / 100).toFixed(2) : undefined,
+                      }}
+                      onDone={() => {
+                        setBidLot(null);
+                        navigate('/orders');
+                      }}
+                      onCancel={() => setBidLot(null)}
+                    />
+                  ) : (
+                    /* The trigger already waits out the first load, so an absent
+                       registry here means the fetch failed — say so and hand over
+                       the one control that fixes it, never an empty dialog. */
+                    <div className="py-8 text-center">
+                      <p className="text-sm text-[var(--ink-6)]">Couldn't load the crop registry — the bid form needs it.</p>
+                      <button
+                        className={`${btnGhostCls} mt-3`}
+                        onClick={() => refetchRegistries()}
+                        disabled={registriesFetching}
+                      >
+                        {registriesFetching ? 'Retrying…' : 'Try again'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
           </Modal>

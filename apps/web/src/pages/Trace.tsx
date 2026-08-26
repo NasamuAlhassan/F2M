@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api, dateTime, type TraceEvent } from '../api';
 import { POLL } from '../poll';
 import { RouteSpine } from '../components/engrave';
-import { Card } from '../components/ui';
+import { Card, LoadGate } from '../components/ui';
 
 // Tones: ink = money/completion truth, gold = movement and matches,
 // red = refusals and failures, faded = the quiet clerical entries.
@@ -80,12 +80,12 @@ export function TraceEventLog({ events }: { events: TraceEvent[] }) {
 
 export function TracePage() {
   const { id } = useParams<{ id: string }>();
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['trace', id],
     queryFn: () => api<{ events: TraceEvent[] }>(`/api/lots/${id}/trace`),
     refetchInterval: POLL.active,
   });
-  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
+  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="the trace" />;
 
   return (
     <div>

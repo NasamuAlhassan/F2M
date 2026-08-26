@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, dateTime, ghs, type AvailableDriver, type ContractDetail, type JobView, type TransportQuoteView } from '../api';
 import { POLL } from '../poll';
 import { Glyph, VehicleMark } from '../components/engrave';
 import { QrImage } from '../components/QrImage';
-import { btnCls, btnGhostCls, Card, ErrorStamp, GradeBadge, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, ErrorStamp, GradeBadge, LoadGate, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 /** The escrow lifecycle as numbered engraved stations + the payout advice. */
 function TransactionFlow({ data }: { data: ContractDetail }) {
@@ -19,8 +19,11 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
     { label: 'Payout', sublabel: 'escrow released', at: payout ? payout.createdAt : null },
     { label: 'Settled', sublabel: 'books balanced', at: contract.settledAt },
   ];
-  const doneCount = steps.filter((s) => s.at !== null).length;
   const activeIdx = steps.findIndex((s) => s.at === null);
+  // The rail stops at the first unfinished station, not at the tally of
+  // finished ones: those timestamps need not arrive in order, and a payout
+  // landing before gradedAt drew the bar straight past a pip still pending.
+  const filledCount = activeIdx === -1 ? steps.length : activeIdx;
   const refund = contract.finalAmount !== null ? contract.holdAmount - contract.finalAmount : null;
 
   return (
@@ -32,7 +35,7 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
         <div className="absolute left-0 right-0 top-4 h-px bg-[var(--ink-2)]">
           <div
             className="h-full bg-[var(--forest)] transition-[width] duration-500"
-            style={{ width: `${steps.length > 1 ? (Math.max(0, doneCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
+            style={{ width: `${steps.length > 1 ? (Math.max(0, filledCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
           />
         </div>
         {steps.map((step, i) => {
@@ -128,14 +131,23 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
 export function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['contract', id],
     queryFn: () => api<ContractDetail>(`/api/contracts/${id}`),
     refetchInterval: POLL.live, // payments + grading move live during a demo
   });
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // One timer, replaced not stacked: two copies inside 2s used to let the
+  // first timer wipe the second's "Copied", and it fired after unmount too.
+  const copiedTimer = useRef<number | null>(null);
+  const flashCopied = () => {
+    if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => setCopied(false), 2000);
+  };
+  useEffect(() => () => void (copiedTimer.current && window.clearTimeout(copiedTimer.current)), []);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['contract', id] });
   const onError = (err: unknown) => setError(err instanceof Error ? err.message : 'Action failed');
@@ -164,7 +176,7 @@ export function ContractDetailPage() {
     onError,
   });
 
-  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
+  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="this contract" />;
   const { contract, lot, farmer, commodity, payments, ledger, photos, gradings, match } = data;
   const canPhoto = ['FUNDS_HELD', 'PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state);
   const canGrade = ['PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state) && photos.length > 0;
@@ -396,14 +408,29 @@ export function ContractDetailPage() {
                     <button
                       className="rounded-lg border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
                       onClick={() => {
-                        navigator.clipboard.writeText(publicUrl).then(() => {
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
-                        });
+                        // navigator.clipboard is undefined on any non-secure
+                        // origin — which is exactly how this gets demoed, off a
+                        // laptop at http://192.168.x.x. Unguarded, that throws
+                        // synchronously and the button silently does nothing.
+                        void (async () => {
+                          try {
+                            if (!navigator.clipboard) throw new Error('clipboard unavailable');
+                            await navigator.clipboard.writeText(publicUrl);
+                            setCopied(true);
+                            flashCopied();
+                          } catch {
+                            setCopyFailed(true);
+                          }
+                        })();
                       }}
                     >
                       {copied ? 'Copied' : 'Copy link'}
                     </button>
+                    {copyFailed && (
+                      <p className="text-[10px] leading-snug text-[var(--stamp)]">
+                        Copying needs a secure page — select the link below instead.
+                      </p>
+                    )}
                     <div className="flex gap-1">
                       <Link
                         to={`/t/${lot.id}`}
@@ -498,7 +525,15 @@ function TransportSection({
   });
   const job = jobData?.job ?? null;
   const canRequest = contractState === 'FUNDS_HELD' && (!job || ['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state));
-  const { data: quoteData } = useQuery({
+  // isLoading/isError are read below: this query always starts cold when the
+  // card mounts, and rendering the "no transport requested" copy in that gap
+  // told the buyer the opposite of the truth on a contract ready to quote.
+  const {
+    data: quoteData,
+    isLoading: quoteLoading,
+    isError: quoteError,
+    refetch: refetchQuote,
+  } = useQuery({
     queryKey: ['transport-quote', contractId],
     queryFn: () => api<{ quotes: TransportQuoteView[] }>(`/api/contracts/${contractId}/transport-quote`),
     enabled: canRequest,
@@ -671,6 +706,15 @@ function TransportSection({
             </tbody>
           </table>
           </TableScroll>
+        </div>
+      ) : canRequest && quoteLoading ? (
+        <p className="text-sm text-[var(--ink-6)]">Fetching transport quotes…</p>
+      ) : canRequest && quoteError ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-[var(--ink-6)]">Could not load transport quotes.</p>
+          <button type="button" className={btnGhostCls} onClick={() => void refetchQuote()}>
+            Retry
+          </button>
         </div>
       ) : (
         <p className="text-sm text-[var(--ink-6)]">

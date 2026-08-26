@@ -7,7 +7,7 @@ import { NewDemandForm } from '../components/DemandForm';
 import { MatchBanner, MatchRow, SimulationDrawer, type Feed } from '../components/engine';
 import { CropMark } from '../components/engrave';
 import { Modal } from '../components/Modal';
-import { btnCls, Card, ErrorStamp, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, Card, ErrorStamp, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 /**
  * Orders = the buyer's order book and the engine working it, on one page:
@@ -16,13 +16,22 @@ import { btnCls, Card, ErrorStamp, numCls, StateBadge, tableCls, TableScroll, td
  */
 export function OrdersPage() {
   const queryClient = useQueryClient();
-  const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
-  const { data: demandData } = useQuery({
+  // The registry never polls, so one failed fetch used to leave "+ New Demand"
+  // permanently inert — it set state and the modal, gated on `registries`,
+  // rendered nothing. The trigger now waits out the first load and the modal
+  // owns the failure.
+  const {
+    data: registries,
+    isPending: registriesPending,
+    isFetching: registriesFetching,
+    refetch: refetchRegistries,
+  } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
+  const { data: demandData, isPending: demandsPending, isError: demandsFailed } = useQuery({
     queryKey: ['demands'],
     queryFn: () => api<{ demands: Demand[] }>('/api/demands'),
     refetchInterval: POLL.active,
   });
-  const { data: feed } = useQuery({
+  const { data: feed, isPending: feedPending, isError: feedFailed } = useQuery({
     queryKey: ['engine-feed'],
     queryFn: () => api<Feed>('/api/engine/feed'),
     refetchInterval: POLL.active,
@@ -43,8 +52,12 @@ export function OrdersPage() {
     onError: (err) => setError(err instanceof Error ? err.message : 'Failed'),
   });
 
-  const newestOffered = feed?.matches.find((m) => m.state === 'OFFERED') ?? null;
-  const restMatches = (feed?.matches ?? []).filter((m) => m !== newestOffered).slice(0, 5);
+  const matches = feed?.matches ?? [];
+  const newestOffered = matches.find((m) => m.state === 'OFFERED') ?? null;
+  // The banner above carries the live offer, so this list is everything else,
+  // capped for the card. The card's title counts `matches`, not the cap — the
+  // capped array under-reported the moment a buyer had more than five.
+  const restMatches = matches.filter((m) => m !== newestOffered).slice(0, 5);
 
   return (
     <div>
@@ -60,7 +73,12 @@ export function OrdersPage() {
             <span className="ember inline-block h-1.5 w-1.5 rounded-full bg-[var(--gold)]" />
             Engine live
           </span>
-          <button className={btnCls} onClick={() => setShowForm(true)}>
+          <button
+            className={btnCls}
+            onClick={() => setShowForm(true)}
+            disabled={registriesPending}
+            title={registriesPending ? 'Loading the crop registry…' : undefined}
+          >
             + New Demand
           </button>
         </div>
@@ -80,7 +98,17 @@ export function OrdersPage() {
       )}
 
       <div className="certificate mb-4 overflow-hidden bg-[var(--paper-lift)] p-3">
-        {!demandData?.demands.length ? (
+        {/* A cold load, a dead wire and a genuinely empty order book all collapse
+            to the same missing table — so each states which one it is. Telling a
+            buyer with live orders that they have none is the worst of the three. */}
+        {demandsPending ? (
+          <p className="py-14 text-center text-sm text-[var(--ink-6)]">Loading…</p>
+        ) : demandsFailed ? (
+          <div className="flex flex-col items-center justify-center py-14 text-center">
+            <div className="font-semibold text-[var(--stamp)]">Couldn't load your demands</div>
+            <div className="mt-1 text-sm text-[var(--ink-6)]">The page keeps retrying — nothing you posted is lost</div>
+          </div>
+        ) : !demandData?.demands.length ? (
           <div className="flex flex-col items-center justify-center py-14">
             <CropMark code="MAIZE" className="mb-3 h-11 w-11 text-[var(--ink-4)]" />
             <div className="font-semibold text-[var(--ink-6)]">No demands yet</div>
@@ -145,9 +173,20 @@ export function OrdersPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title={`Recent Engine Matches (${restMatches.length})`}>
-          {restMatches.length === 0 && !newestOffered ? (
-            <p className="text-sm text-[var(--ink-6)]">No matches yet. Post a demand — the engine takes it from there.</p>
+        <Card title={`Recent Engine Matches (${matches.length})`}>
+          {feedPending ? (
+            <p className="text-sm text-[var(--ink-6)]">Loading…</p>
+          ) : feedFailed ? (
+            <p className="text-sm text-[var(--stamp)]">Couldn't reach the engine — retrying.</p>
+          ) : restMatches.length === 0 ? (
+            /* Keyed on this list alone: a single OFFERED match lives in the banner
+               above and leaves this one empty — the first-run state for every new
+               buyer — and the old `&& !newestOffered` mapped it to a blank card. */
+            <p className="text-sm text-[var(--ink-6)]">
+              {newestOffered
+                ? 'The live offer above is the only match so far — the rest land here as the engine works.'
+                : 'No matches yet. Post a demand — the engine takes it from there.'}
+            </p>
           ) : (
             restMatches.map((m) => (
               <MatchRow
@@ -163,7 +202,11 @@ export function OrdersPage() {
         </Card>
 
         <Card title={`Intent Feed — open produce listings (${feed?.lots.length ?? 0})`}>
-          {!feed?.lots.length ? (
+          {feedPending ? (
+            <p className="text-sm text-[var(--ink-6)]">Loading…</p>
+          ) : feedFailed ? (
+            <p className="text-sm text-[var(--stamp)]">Couldn't reach the engine — retrying.</p>
+          ) : !feed?.lots.length ? (
             <p className="text-sm text-[var(--ink-6)]">No open produce listings right now.</p>
           ) : (
             <div>
@@ -183,7 +226,7 @@ export function OrdersPage() {
         </Card>
       </div>
 
-      {showForm && registries && (
+      {showForm && (
         <Modal label="Post a new demand" onClose={() => setShowForm(false)}>
             <div className="certificate overflow-hidden bg-[var(--paper)]">
               <div className="plate flex items-center justify-between px-6 py-4">
@@ -199,11 +242,27 @@ export function OrdersPage() {
                 </button>
               </div>
               <div className="p-4">
-                <NewDemandForm
-                  registries={registries}
-                  onDone={() => setShowForm(false)}
-                  onCancel={() => setShowForm(false)}
-                />
+                {registries ? (
+                  <NewDemandForm
+                    registries={registries}
+                    onDone={() => setShowForm(false)}
+                    onCancel={() => setShowForm(false)}
+                  />
+                ) : (
+                  /* The trigger already waits out the first load, so an absent
+                     registry here means the fetch failed — say so and hand over
+                     the one control that fixes it, never an empty dialog. */
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-[var(--ink-6)]">Couldn't load the crop registry — the demand form needs it.</p>
+                    <button
+                      className={`${btnGhostCls} mt-3`}
+                      onClick={() => refetchRegistries()}
+                      disabled={registriesFetching}
+                    >
+                      {registriesFetching ? 'Retrying…' : 'Try again'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
         </Modal>

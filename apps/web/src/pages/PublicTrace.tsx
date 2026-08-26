@@ -95,7 +95,7 @@ export function PublicTracePage() {
               <SpineStepper events={data.events} />
             </Card>
 
-            <Card title={`Chain of Custody (${data.events.length} entries)`}>
+            <Card title={`Chain of Custody (${data.events.length} ${data.events.length === 1 ? 'entry' : 'entries'})`}>
               <TraceEventLog events={data.events} />
               <p className="mt-3 border-t border-[var(--ink-2)] pt-3 text-[11px] leading-relaxed text-[var(--ink-6)]">
                 This record is append-only: every entry was written by the platform at the moment it happened and cannot

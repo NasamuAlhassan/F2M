@@ -57,8 +57,21 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(
 /** The centered certificate modal shell — overlay, ink veil, dialog semantics. */
 export function Modal({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   const { panelRef, trapTab } = useDialog(onClose);
+  // Close only when the press STARTED on the backdrop. Selecting text inside a
+  // field and releasing past the panel edge still dispatches click on this
+  // container — which silently threw away a fully filled demand form.
+  const pressedBackdrop = useRef(false);
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-40 overflow-y-auto"
+      onMouseDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && pressedBackdrop.current) onClose();
+        pressedBackdrop.current = false;
+      }}
+    >
       <div className="absolute inset-0 bg-[var(--ink)]/70" />
       <div
         ref={panelRef}

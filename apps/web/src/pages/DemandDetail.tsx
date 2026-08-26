@@ -3,16 +3,16 @@ import { Link, useParams } from 'react-router-dom';
 import { api, ghs, shortDate, type Demand, type MatchRow } from '../api';
 import { POLL } from '../poll';
 import { Glyph } from '../components/engrave';
-import { Bar, Card, GradeBadge, Stat, StateBadge } from '../components/ui';
+import { Bar, Card, GradeBadge, LoadGate, Stat, StateBadge } from '../components/ui';
 
 export function DemandDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['demand', id],
     queryFn: () => api<{ demand: Demand; matches: MatchRow[] }>(`/api/demands/${id}`),
     refetchInterval: POLL.active,
   });
-  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
+  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="this order" />;
   const { demand, matches } = data;
 
   return (

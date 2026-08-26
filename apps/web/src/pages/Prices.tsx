@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, ghs, shortDate } from '../api';
 import { CropMark } from '../components/engrave';
-import { Card, tableCls, tdCls, thCls } from '../components/ui';
+import { Card, LoadGate, tableCls, tdCls, thCls } from '../components/ui';
 
 interface PriceRow {
   commodityCode: string;
@@ -13,11 +13,11 @@ interface PriceRow {
 }
 
 export function PricesPage() {
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['market-prices'],
     queryFn: () => api<{ prices: PriceRow[] }>('/api/market-prices'),
   });
-  if (!data) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
+  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="market prices" />;
 
   const markets = [...new Set(data.prices.map((p) => p.market))];
   const commodities = [...new Map(data.prices.map((p) => [p.commodityCode, p.commodityName]))];

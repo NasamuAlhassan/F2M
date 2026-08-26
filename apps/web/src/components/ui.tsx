@@ -130,13 +130,27 @@ export function Bar({ value, label }: { value: number; label: string }) {
   );
 }
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block text-sm">
+/**
+ * A labelled control. Pass `group` when the label covers more than one control
+ * — an implicit <label> only ever binds its FIRST labelable descendant, so a
+ * quantity input beside its unit select left the select anonymous, and a label
+ * wrapping only <button>s (not labelable at all) named nothing whatsoever.
+ */
+export function Field({ label, children, group = false }: { label: string; children: ReactNode; group?: boolean }) {
+  const inner = (
+    <>
       <span className="smallcaps mb-1.5 block text-[var(--ink-6)]">{label}</span>
       {children}
-    </label>
+    </>
   );
+  if (group) {
+    return (
+      <div role="group" aria-label={label} className="block text-sm">
+        {inner}
+      </div>
+    );
+  }
+  return <label className="block text-sm">{inner}</label>;
 }
 
 // text-base below sm: a 16px input is the line iOS Safari respects — smaller
@@ -152,27 +166,52 @@ export const btnGhostCls =
 
 /**
  * A dismissible error, stamped in oxide. role="alert" announces it to screen
- * readers the moment it appears; the whole stamp stays clickable for mouse
- * users while the cross is the real, focusable dismiss control.
+ * readers the moment it appears; the cross is the dismiss control, so the
+ * message itself stays selectable and copyable.
  */
 export function ErrorStamp({ message, onDismiss, className = '' }: { message: string; onDismiss: () => void; className?: string }) {
   return (
+    // Dismissal lives on the cross alone. Click-anywhere-to-dismiss meant that
+    // selecting the error text to copy it made the message vanish mid-drag —
+    // exactly when someone is trying to report what went wrong.
     <div
       role="alert"
-      className={`stamp flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-[11px] text-[var(--stamp)] ${className}`}
-      onClick={onDismiss}
+      className={`stamp flex items-center justify-between gap-3 px-3 py-2 text-[11px] text-[var(--stamp)] ${className}`}
     >
       <span>{message}</span>
       <button
         type="button"
         aria-label="Dismiss error"
-        className="-m-2 flex-shrink-0 p-2 transition-colors hover:text-[var(--stamp-deep)]"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDismiss();
-        }}
+        className="-m-2 flex-shrink-0 cursor-pointer p-2 transition-colors hover:text-[var(--stamp-deep)]"
+        onClick={onDismiss}
       >
         <Glyph name="cross" className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The gap between "still loading" and "gave up". `if (!data) return 'Loading…'`
+ * cannot tell them apart, so a 404 from a stale link — or any exhausted retry —
+ * used to spin forever with no way back. Pages hand this their query's flags and
+ * get an honest dead end with a retry instead.
+ */
+export function LoadGate({
+  isError,
+  onRetry,
+  label = 'this page',
+}: {
+  isError: boolean;
+  onRetry: () => void;
+  label?: string;
+}) {
+  if (!isError) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <p className="text-sm text-[var(--ink-6)]">Could not load {label}.</p>
+      <button type="button" className={btnGhostCls} onClick={onRetry}>
+        Retry
       </button>
     </div>
   );

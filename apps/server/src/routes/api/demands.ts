@@ -1,6 +1,7 @@
 import {
   createDemand,
   demandPriceTerms,
+  DomainError,
   getContractByMatchId,
   getDemand,
   getFarmerById,
@@ -43,6 +44,12 @@ export async function demandRoutes(app: FastifyInstance): Promise<void> {
   app.get('/demands/:id', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
     const demand = getDemand(id);
+    // A demand carries this buyer's price schedule and the full match list —
+    // farmer names, regions, lot codes, scores. Being a logged-in buyer is not
+    // enough; it has to be YOUR demand (same rule as ownedContract()).
+    if (demand.buyerId !== req.user.sub) {
+      throw new DomainError('Not your demand', 'FORBIDDEN', 403);
+    }
     const matches = listMatchesForDemand(id).map((m) => {
       const contract = getContractByMatchId(m.id);
       const lot = getLot(m.lotId);

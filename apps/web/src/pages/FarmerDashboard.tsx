@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type FarmerDashboard, type Registries } from '../api';
 import { POLL } from '../poll';
 import { CropMark, cropAccent, cropPhoto, Glyph } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
-import { btnCls, btnGhostCls, ErrorStamp, Field, GradeBadge, inputCls, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, ErrorStamp, Field, GradeBadge, inputCls, LoadGate, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
 
 interface PriceRow {
   commodityCode: string;
@@ -36,6 +36,13 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // The "Lot listed ✓" tick must not fire onto an unmounted form, and a second
+  // listing restarts the two seconds instead of inheriting the first's tail.
+  useEffect(() => () => {
+    if (doneTimer.current) clearTimeout(doneTimer.current);
+  }, []);
 
   // Fair-price pip: the ask vs the cross-market reference for this crop.
   const refRows = (priceData?.prices ?? []).filter((p) => p.commodityCode === commodityCode);
@@ -55,25 +62,45 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
           askingPricePerKg: askPerKg ?? undefined,
         }),
       });
-      // Card art: upload the chosen produce photos onto the fresh listing.
+      // Card art: upload the chosen produce photos onto the fresh listing. The
+      // lot is already committed by this point, so a refused photo must never
+      // reject the whole mutation — a farmer who reads that as failure lists
+      // the same produce twice. Photos are the cosmetic half; name the ones
+      // that fell off and let the lot stand.
+      const failedPhotos: string[] = [];
       for (const file of files.slice(0, 3)) {
         const form = new FormData();
         form.append('photo', file);
-        await api(`/api/farmer/lots/${res.lot.id}/photos`, { method: 'POST', body: form });
+        try {
+          await api(`/api/farmer/lots/${res.lot.id}/photos`, { method: 'POST', body: form });
+        } catch {
+          failedPhotos.push(file.name);
+        }
       }
-      return res;
+      return { ...res, failedPhotos };
     },
-    onSuccess: () => {
+    onSuccess: ({ failedPhotos }) => {
       queryClient.invalidateQueries({ queryKey: ['farmer-dashboard'] });
       setAskPerUnit('');
       setFiles([]);
+      setError(
+        failedPhotos.length
+          ? `Lot listed — ${failedPhotos.length} photo${failedPhotos.length > 1 ? 's' : ''} failed to upload: ${failedPhotos.join(', ')}`
+          : null,
+      );
       setDone(true);
-      setTimeout(() => setDone(false), 2000);
+      if (doneTimer.current) clearTimeout(doneTimer.current);
+      doneTimer.current = setTimeout(() => setDone(false), 2000);
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Failed'),
   });
 
   const kg = activeUnit ? Math.round(activeUnit.kgPerUnit * Number(unitQty) * 10) / 10 : 0;
+  // Number('') is 0, so an emptied quantity box would otherwise post a
+  // zero-unit lot; a typed minus sign would post a negative ask. Neither
+  // belongs on the ledger, and both are cheaper to stop at the button.
+  const askValid = askPerUnit === '' || Number(askPerUnit) >= 0;
+  const canList = Number(unitQty) > 0 && !!activeUnit && askValid;
 
   return (
     <aside>
@@ -100,7 +127,7 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
               ))}
             </select>
           </Field>
-          <Field label="Declared Grade">
+          <Field label="Declared Grade" group>
             <div className="flex items-center gap-2 py-1">
               {(['A', 'B', 'C'] as const).map((g) => (
                 <button
@@ -118,10 +145,22 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
             </div>
             <span className="block text-[11px] text-[var(--ink-6)]">Soft signal — the AI grade at pickup decides the payout</span>
           </Field>
-          <Field label="Quantity">
+          <Field label="Quantity" group>
             <div className="flex gap-2">
-              <input className={inputCls} type="number" min="1" value={unitQty} onChange={(e) => setUnitQty(e.target.value)} />
-              <select className={inputCls} value={activeUnit?.code} onChange={(e) => setUnitCode(e.target.value)}>
+              <input
+                className={inputCls}
+                type="number"
+                min="1"
+                aria-label={`Quantity in ${activeUnit?.name ?? 'units'}`}
+                value={unitQty}
+                onChange={(e) => setUnitQty(e.target.value)}
+              />
+              <select
+                className={inputCls}
+                aria-label="Unit of measure"
+                value={activeUnit?.code ?? ''}
+                onChange={(e) => setUnitCode(e.target.value)}
+              >
                 {units.map((u) => (
                   <option key={u.code} value={u.code}>
                     {u.name}
@@ -172,7 +211,7 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
           {error && (
             <ErrorStamp message={error} onDismiss={() => setError(null)} />
           )}
-          <button className={`${btnCls} w-full py-2.5`} onClick={() => list.mutate()} disabled={list.isPending}>
+          <button className={`${btnCls} w-full py-2.5`} onClick={() => list.mutate()} disabled={list.isPending || !canList}>
             {done ? 'Lot listed ✓' : list.isPending ? 'Listing…' : 'List Lot'}
           </button>
         </div>
@@ -183,8 +222,12 @@ function ListLotForm({ registries, momoMsisdn }: { registries: Registries; momoM
 
 export function FarmerDashboardPage() {
   const queryClient = useQueryClient();
-  const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
-  const { data } = useQuery({
+  const {
+    data: registries,
+    isError: registriesFailed,
+    refetch: refetchRegistries,
+  } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
+  const { data, isError, refetch } = useQuery({
     queryKey: ['farmer-dashboard'],
     queryFn: () => api<FarmerDashboard>('/api/farmer/dashboard'),
     refetchInterval: POLL.active,
@@ -203,6 +246,14 @@ export function FarmerDashboardPage() {
     onSuccess: invalidate,
     onError,
   });
+  // Accept and Decline answer the same bid, so either one in flight locks both
+  // on every row — a double-tap must not send one contract two ways.
+  const deciding = accept.isPending || decline.isPending;
+
+  // TRANSPORT_SUGGESTED lands on the lot's trace, not in the dashboard payload,
+  // so "already asked" is only remembered for this session — a refresh re-offers
+  // the button. Server state would settle it; until then the scoped guard at
+  // least keeps a double-tap from calling the same buyer twice.
   const [suggested, setSuggested] = useState<Set<string>>(new Set());
   const suggest = useMutation({
     mutationFn: (id: string) => api(`/api/farmer/contracts/${id}/suggest-transport`, { method: 'POST' }),
@@ -215,7 +266,20 @@ export function FarmerDashboardPage() {
     onError,
   });
 
-  if (!data || !registries) return <p className="text-sm text-[var(--ink-6)]">Loading…</p>;
+  // Either query can be the one that did not arrive, so the gate watches both —
+  // and gating on !data keeps a failed poll from blanking a dashboard that
+  // already has figures on it.
+  if (!data || !registries)
+    return (
+      <LoadGate
+        isError={isError || registriesFailed}
+        onRetry={() => {
+          void refetch();
+          void refetchRegistries();
+        }}
+        label="your dashboard"
+      />
+    );
   const { stats, offers, contracts, lots, payouts, profile } = data;
 
   return (
@@ -275,11 +339,11 @@ export function FarmerDashboardPage() {
                   <div className="smallcaps text-[var(--ink-6)]">held in escrow on accept</div>
                 </div>
                 <div className="flex flex-shrink-0 gap-2">
-                  <button className={btnGhostCls} onClick={() => decline.mutate(o.id)} disabled={decline.isPending}>
-                    Decline
+                  <button className={btnGhostCls} onClick={() => decline.mutate(o.id)} disabled={deciding}>
+                    {decline.isPending && decline.variables === o.id ? 'Declining…' : 'Decline'}
                   </button>
-                  <button className={btnCls} onClick={() => accept.mutate(o.id)} disabled={accept.isPending}>
-                    {accept.isPending ? 'Accepting…' : 'Accept'}
+                  <button className={btnCls} onClick={() => accept.mutate(o.id)} disabled={deciding}>
+                    {accept.isPending && accept.variables === o.id ? 'Accepting…' : 'Accept'}
                   </button>
                 </div>
               </div>
@@ -318,7 +382,7 @@ export function FarmerDashboardPage() {
                           ? 'bg-[var(--gold-wash)] text-[var(--ink)]'
                           : 'border border-[var(--ink-5)] text-[var(--ink)] hover:bg-[var(--paper-deep)]'
                       }`}
-                      disabled={suggested.has(c.id) || suggest.isPending}
+                      disabled={suggested.has(c.id) || (suggest.isPending && suggest.variables === c.id)}
                       onClick={() => suggest.mutate(c.id)}
                       title="Ask the buyer to send a driver — they approve and the fee escrows from their account"
                     >
