@@ -12,7 +12,7 @@ import {
   setPaymentProvider,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
-import { testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
+import { acceptFor, openOfferFor, testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from './app';
@@ -59,7 +59,7 @@ function farmerToken(phone: string): string {
 }
 
 describe('farmer web portal (M22)', () => {
-  it('logs in with an OTP from the SMS outbox and accepts an offer — full parity with USSD', async () => {
+  it('logs in and accepts a bid from the web — full parity with USSD', async () => {
     yamJanitor();
     const phone = '+233207460101';
     const buyer = testBuyer();
@@ -75,20 +75,26 @@ describe('farmer web portal (M22)', () => {
       windowEnd: Date.now() + 7 * DAY,
       regionCode: 'GREATER_ACCRA',
     });
-    const offered = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
+    // Phase 1: the engine's match is an offer thread waiting on her, shown in offerThreads.
+    const waiting = openOfferFor(farmer.id)!;
 
     const token = farmerToken(phone);
     const dash = await app.inject({ method: 'GET', url: '/api/farmer/dashboard', headers: { authorization: `Bearer ${token}` } });
     expect(dash.statusCode).toBe(200);
     const body = dash.json();
     expect(body.profile.name).toBe('Portal Farmer');
-    const offer = body.offers.find((o: { id: string }) => o.id === offered.id);
+    const offer = body.offerThreads.find((o: { id: string }) => o.id === waiting.id);
     expect(offer).toBeDefined();
-    expect(offer.holdAmount).toBeGreaterThan(0);
+    expect(offer.turn).toBe('farmer');
+    expect(offer.current).toMatchObject({ units: 2, pricePerUnit: 100000, total: 200000 }); // 2 Hundred at GHS 4.00/kg × 250kg
 
-    const accept = await post(`/api/farmer/contracts/${offered.id}/accept`, {}, token);
+    // The same acceptOfferThread USSD "1. Accept" calls.
+    const accept = await post(`/api/farmer/offers/${waiting.id}/accept`, {}, token);
     expect(accept.statusCode).toBe(200);
-    expect(getContract(offered.id).state).toBe('ACCEPTED');
+    const contractId = accept.json().contract.id;
+    expect(getContract(contractId).state).toBe('ACCEPTED');
+    expect(getContract(contractId).holdAmount).toBe(200000);
+    expect(listContractsForFarmer(farmer.id).map((c) => c.id)).toEqual([contractId]);
   });
 
   it('lists a lot from the web with an ask price the marketplace then shows', async () => {
@@ -191,6 +197,7 @@ describe('public trace (M24, D-033)', () => {
       windowEnd: Date.now() + 7 * DAY,
       regionCode: 'GREATER_ACCRA',
     });
+    await acceptFor(farmer.id); // the deal is struck, so the trace carries the order too
 
     const res = await app.inject({ method: 'GET', url: `/api/public/trace/${lot.id}` }); // no token
     expect(res.statusCode).toBe(200);
@@ -198,14 +205,19 @@ describe('public trace (M24, D-033)', () => {
     expect(body.lot.lotCode).toBe(lot.lotCode);
     expect(body.farmer.name).toBe('Trace Farmer');
     expect(body.farmer.phone).toBeUndefined();
-    expect(body.events.length).toBeGreaterThanOrEqual(3); // registered, matched, offered
+    const types = body.events.map((e: { type: string }) => e.type);
+    expect(types).toEqual(expect.arrayContaining(['LOT_REGISTERED', 'MATCHED', 'CONTRACT_ACCEPTED'])); // registered, bid on, agreed
 
     const raw = JSON.stringify(body);
     expect(raw).not.toContain('233207460303'); // no phone anywhere
     expect(raw).not.toContain('amount'); // no money fields
+    expect(raw).not.toContain('pricePerUnit'); // nor the negotiated price
     expect(raw).not.toContain('expiresAt'); // offer internals stay private
-    const offeredEvent = body.events.find((e: { type: string }) => e.type === 'CONTRACT_OFFERED');
-    expect(offeredEvent.payload).toEqual({ allocatedKg: 500 });
+    expect(raw).not.toContain('offerId');
+    // Phase 1: the engine's bid is the MATCHED event; only the kilograms are public.
+    const matchedEvent = body.events.find((e: { type: string }) => e.type === 'MATCHED');
+    expect(matchedEvent.payload).toEqual({ allocatedKg: 500 });
+    expect(body.events.find((e: { type: string }) => e.type === 'CONTRACT_ACCEPTED').payload).toBeNull();
 
     const missing = await app.inject({ method: 'GET', url: '/api/public/trace/00000000-0000-0000-0000-000000000000' });
     expect(missing.statusCode).toBe(404);

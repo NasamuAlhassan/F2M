@@ -34,6 +34,11 @@ describe('API spine (M1)', () => {
       'PEPPER',
       'ONION',
       'PLANTAIN',
+      'CASSAVA',
+      'MILLET',
+      'SORGHUM',
+      'SOYBEAN',
+      'COWPEA',
     ]);
     expect(body.regions).toHaveLength(16);
   });
@@ -42,7 +47,7 @@ describe('API spine (M1)', () => {
     const res = await app.inject({ method: 'GET', url: '/api/market-prices' });
     expect(res.statusCode).toBe(200);
     const { prices } = res.json();
-    expect(prices.length).toBe(8 * 4); // 8 commodities × 4 markets
+    expect(prices.length).toBe(13 * 4); // 13 commodities × 4 markets
     const maizeTechiman = prices.find(
       (p: { commodityCode: string; market: string }) => p.commodityCode === 'MAIZE' && p.market === 'Techiman',
     );
@@ -175,19 +180,34 @@ describe('API spine (M1)', () => {
     const demand = res.json().demand;
     expect(demand.priceTerms.B).toBe(400);
     expect(demand.priceTerms.REJECT).toBe(0);
-    // Matching ran on creation: the 500kg lot registered above covers all 400kg.
+    // Matching ran on creation: the 500kg lot registered above covers all 400kg,
+    // held by the engine's bid while the farmer answers.
     expect(demand.remainingKg).toBe(0);
     expect(demand.status).toBe('fulfilled');
 
+    // Phase 1: the match is a bid waiting on the farmer — 160 olonka (400kg) at
+    // the grade-B price, GHS 4.00/kg × 2.5kg = GHS 10.00 each — and no contract yet.
     const detail = await app.inject({ method: 'GET', url: `/api/demands/${demand.id}`, headers: bearer(token) });
-    const { matches } = detail.json();
-    expect(matches).toHaveLength(1);
-    expect(matches[0].allocatedKg).toBe(400);
-    expect(matches[0].contractState).toBe('OFFERED');
-    expect(matches[0].breakdown.weights.farmerHistory).toBe(0.3); // storable weights
+    const { matches, offers } = detail.json();
+    expect(matches).toHaveLength(0);
+    expect(offers).toHaveLength(1);
+    expect(offers[0]).toMatchObject({ status: 'open', turn: 'farmer', requestId: demand.id, lot: { id: lotId } });
+    expect(offers[0].current).toMatchObject({ units: 160, pricePerUnit: 1000, total: 160000, by: 'buyer' });
+
+    // The farmer accepts from her own login; only now does the order (and its scored match) exist.
+    const accept = await app.inject({ method: 'POST', url: `/api/farmer/offers/${offers[0].id}/accept`, headers: bearer(farmerToken) });
+    expect(accept.statusCode).toBe(200);
+    expect(accept.json().contract.state).toBe('ACCEPTED');
+
+    const after = (await app.inject({ method: 'GET', url: `/api/demands/${demand.id}`, headers: bearer(token) })).json();
+    expect(after.matches).toHaveLength(1);
+    expect(after.matches[0].allocatedKg).toBe(400);
+    expect(after.matches[0].contractState).toBe('ACCEPTED');
+    expect(after.matches[0].breakdown.weights.farmerHistory).toBe(0.3); // storable weights
   });
 
   it('the full trace (with amounts) is only for a buyer trading on the lot', async () => {
+    // "Trading" = holding a contract on it: the deal accepted in the test above.
     expect((await app.inject({ method: 'GET', url: `/api/lots/${lotId}/trace` })).statusCode).toBe(401);
     const mine = await app.inject({ method: 'GET', url: `/api/lots/${lotId}/trace`, headers: bearer(token) });
     expect(mine.statusCode).toBe(200);

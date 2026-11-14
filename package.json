@@ -17,7 +17,8 @@
     "demo": "npm run demo -w @ftm/server",
     "test": "vitest run",
     "check": "tsc --noEmit -p packages/core && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web",
-    "i18n:draft": "npm run i18n:draft -w @ftm/core"
+    "i18n:draft": "npm run i18n:draft -w @ftm/core",
+    "i18n:extract": "npm run i18n:extract -w @ftm/core"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

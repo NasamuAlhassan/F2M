@@ -1,6 +1,7 @@
-import { config, getCommodityByCode, listCommodities, listUnits, registerLot, t, type GradeBand } from '@ftm/core';
+import { config, formatGhs, getCommodityByCode, listCommodities, listUnits, registerLot, t, type GradeBand } from '@ftm/core';
 import type { UssdCtx, UssdScreen } from '../machine';
 import { DAY_MS, invalid, listLines, paginate, parseSelection } from './common';
+import { parseGhs } from './offers';
 
 // '8' calls out to the open voice line (D-038) instead of the step-by-step
 // menu below — only offered on page 0, since a farmer who has already paged
@@ -128,6 +129,22 @@ export const sellReady: UssdScreen = {
     const idx = parseSelection(input, choices.length, 0);
     if (idx === null) return invalid();
     ctx.data.sellReadyDays = choices[idx]!.days;
+    return { next: 'sell_price' };
+  },
+};
+
+/** The farmer's own asking price per unit (Phase 1) — or 0 to let buyers make offers. */
+export const sellPrice: UssdScreen = {
+  key: 'sell_price',
+  render: (ctx) => [{ key: 'ussd.sell.price', params: { unit: t(ctx.locale, `unit.${String(ctx.data.sellUnit)}`) } }],
+  handleInput: (input, ctx) => {
+    if (input.trim() === '0') {
+      ctx.data.sellPrice = null;
+      return { next: 'sell_confirm' };
+    }
+    const pesewas = parseGhs(input);
+    if (pesewas === null) return { error: { key: 'ussd.offer.priceInvalid' } };
+    ctx.data.sellPrice = pesewas;
     return { next: 'sell_confirm' };
   },
 };
@@ -136,12 +153,13 @@ export const sellConfirm: UssdScreen = {
   key: 'sell_confirm',
   render: (ctx) => [
     {
-      key: 'ussd.sell.confirm',
+      key: ctx.data.sellPrice ? 'ussd.sell.confirmPrice' : 'ussd.sell.confirm',
       params: {
         qty: Number(ctx.data.sellQty),
         unit: t(ctx.locale, `unit.${String(ctx.data.sellUnit)}`),
         commodity: t(ctx.locale, `commodity.${String(ctx.data.sellCommodity)}`),
         band: t(ctx.locale, `band.${String(ctx.data.sellBand)}`),
+        price: ctx.data.sellPrice ? formatGhs(Number(ctx.data.sellPrice)) : '',
       },
     },
     { key: 'ussd.common.confirm' },
@@ -158,6 +176,7 @@ export const sellConfirm: UssdScreen = {
       unitQty: Number(ctx.data.sellQty),
       declaredBand: ctx.data.sellBand as GradeBand,
       readyDate: Date.now() + Number(ctx.data.sellReadyDays) * DAY_MS,
+      askingPricePerUnit: ctx.data.sellPrice ? Number(ctx.data.sellPrice) : undefined,
       channel: 'ussd', // basic-phone listing — buyers see the phone, not photos (D-036)
     });
     return {

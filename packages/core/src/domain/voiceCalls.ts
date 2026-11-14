@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { config } from '../config';
 import { db } from '../db/client';
-import { contracts, voiceCalls, type VoiceCall } from '../db/schema';
+import { contracts, offers, voiceCalls, type VoiceCall } from '../db/schema';
 import { getVoiceProvider } from '../providers/voice/index';
 import { carrierCallbackUrl } from './carrier';
 import { appendLotEvent } from './trace';
@@ -12,11 +12,13 @@ const ACTIVE_STATUSES = ['pending', 'placing', 'in_progress'] as const;
 export interface QueueVoiceCallInput {
   phone: string;
   locale: string;
-  flow: 'offer' | 'grade' | 'bridge';
+  flow: 'offer' | 'grade' | 'bridge' | 'bid';
   contractId?: string;
+  /** The 'bid' flow (Phase 1): the offer thread whose proposal the call reads out. */
+  offerId?: string;
 }
 
-/** Queue an outbound IVR call. Deduped: one active call per (phone, flow, contract). */
+/** Queue an outbound IVR call. Deduped: one active call per (phone, flow, contract or offer). */
 export function queueVoiceCall(input: QueueVoiceCallInput): VoiceCall {
   const existing = db
     .select()
@@ -29,7 +31,7 @@ export function queueVoiceCall(input: QueueVoiceCallInput): VoiceCall {
       ),
     )
     .all()
-    .find((c) => c.contractId === (input.contractId ?? null));
+    .find((c) => c.contractId === (input.contractId ?? null) && c.offerId === (input.offerId ?? null));
   if (existing) return existing;
 
   return db
@@ -39,6 +41,7 @@ export function queueVoiceCall(input: QueueVoiceCallInput): VoiceCall {
       locale: input.locale,
       flow: input.flow,
       contractId: input.contractId ?? null,
+      offerId: input.offerId ?? null,
     })
     .returning()
     .get();
@@ -128,7 +131,7 @@ export function setCallNode(callId: string, node: string): void {
   db.update(voiceCalls).set({ currentNode: node, updatedAt: Date.now() }).where(eq(voiceCalls.id, callId)).run();
 }
 
-/** Terminal call outcome + a VOICE_CALL trace event on the contract's lot. */
+/** Terminal call outcome + a VOICE_CALL trace event on the lot it was about. */
 export function finishVoiceCall(callId: string, status: 'completed' | 'no_answer' | 'failed', outcome?: Record<string, unknown>): void {
   const call = getVoiceCall(callId);
   if (!call) return;
@@ -136,16 +139,20 @@ export function finishVoiceCall(callId: string, status: 'completed' | 'no_answer
     .set({ status, outcome: outcome ? JSON.stringify(outcome) : call.outcome, updatedAt: Date.now() })
     .where(eq(voiceCalls.id, callId))
     .run();
-  if (call.contractId) {
-    const contract = db.select().from(contracts).where(eq(contracts.id, call.contractId)).get();
-    if (contract) {
-      appendLotEvent(db, {
-        lotId: contract.lotId,
-        type: 'VOICE_CALL',
-        actorType: 'system',
-        payload: { flow: call.flow, status, ...(outcome ?? {}) },
-      });
-    }
+  // The call belongs to a contract's lot, or (Phase 1 bid calls, which ring
+  // before any contract exists) to the lot the offer is about.
+  const lotId = call.contractId
+    ? db.select().from(contracts).where(eq(contracts.id, call.contractId)).get()?.lotId
+    : call.offerId
+      ? db.select().from(offers).where(eq(offers.id, call.offerId)).get()?.lotId
+      : undefined;
+  if (lotId) {
+    appendLotEvent(db, {
+      lotId,
+      type: 'VOICE_CALL',
+      actorType: 'system',
+      payload: { flow: call.flow, status, ...(outcome ?? {}) },
+    });
   }
 }
 

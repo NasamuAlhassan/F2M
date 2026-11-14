@@ -1,9 +1,9 @@
 import {
-  acceptOfferAndHold,
   createDemand,
   db,
   expireStaleVoiceCalls,
   getContract,
+  getOffer,
   getTrace,
   listContractsForFarmer,
   listNotificationsForPhone,
@@ -17,7 +17,7 @@ import {
   setTtsProvider,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
-import { testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
+import { acceptFor, openOfferFor, testBuyer } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../app';
@@ -46,7 +46,12 @@ function isolateYamLane(): void {
     .run();
 }
 
-async function offeredContract(phone: string) {
+/**
+ * A fresh farmer's 2 hundreds of yam (500kg) and a buyer request that fits:
+ * the engine turns it into a bid waiting on her (Phase 1) — 2 Hundred at the
+ * request's grade-B price, GHS 4.00/kg × 250kg = GHS 1000.00 each.
+ */
+async function openBid(phone: string) {
   isolateYamLane();
   const buyer = testBuyer();
   const farmer = registerFarmer({ phone, name: `Voice ${phone.slice(-4)}`, regionCode: 'NORTHERN' });
@@ -61,8 +66,8 @@ async function offeredContract(phone: string) {
     windowEnd: Date.now() + 7 * DAY,
     regionCode: 'GREATER_ACCRA',
   });
-  const contract = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
-  return { farmer, contract };
+  const offer = openOfferFor(farmer.id)!;
+  return { farmer, offer };
 }
 
 /** Speak the AT Voice callback format at /voice/answer for one call leg. */
@@ -80,16 +85,17 @@ async function voiceLeg(callId: string, phone: string, sessionId: string, dtmfDi
 }
 
 describe('voice/IVR (M16)', () => {
-  it('queues a call beside the SMS on every new offer, and the sweep places it', async () => {
+  it('queues a call beside the SMS on every new bid, and the sweep places it', async () => {
     const phone = '+233207770301';
-    const { farmer } = await offeredContract(phone);
+    const { farmer, offer } = await openBid(phone);
 
-    // SMS fallback is unconditional…
-    expect(listNotificationsForPhone(farmer.phone).some((n) => n.templateKey === 'sms.newOffer')).toBe(true);
-    // …and the voice call is queued.
+    // SMS fallback is unconditional (Phase 1: the bid SMS, not the old sms.newOffer)…
+    expect(listNotificationsForPhone(farmer.phone).some((n) => n.templateKey === 'sms.bidReceived')).toBe(true);
+    // …and the voice call is queued, tied to the offer thread rather than a contract.
     let calls = listVoiceCallsForPhone(farmer.phone);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.flow).toBe('offer');
+    expect(calls[0]!.flow).toBe('bid');
+    expect(calls[0]!.offerId).toBe(offer.id);
     expect(calls[0]!.status).toBe('pending');
 
     await placePendingVoiceCalls();
@@ -97,16 +103,16 @@ describe('voice/IVR (M16)', () => {
     expect(calls[0]!.status).toBe('placing');
   });
 
-  it('lets the farmer HEAR the offer and press 1 to accept', async () => {
+  it('lets the farmer HEAR the bid and press 1 to accept', async () => {
     const phone = '+233207770302';
-    const { farmer, contract } = await offeredContract(phone);
+    const { farmer, offer } = await openBid(phone);
     await placePendingVoiceCalls();
     const call = listVoiceCallsForPhone(farmer.phone)[0]!;
 
-    // Answered: the prompt speaks the terms and gathers one digit.
+    // Answered: the prompt speaks the proposal in the listing's unit and gathers one digit.
     const prompt = await voiceLeg(call.id, phone, 's1');
     expect(prompt).toContain('<GetDigits');
-    expect(prompt).toContain('500 kilos of your Yam');
+    expect(prompt).toContain('offers 2 Hundred (100 tubers) of your Yam at GHS 1000.00 each, GHS 2000.00 in all');
     expect(prompt).toContain('Press 1 to accept');
 
     // Invalid digit repeats the menu.
@@ -114,34 +120,49 @@ describe('voice/IVR (M16)', () => {
     expect(repeat).toContain('<GetDigits');
     expect(repeat).toContain('Press 1 to accept');
 
-    // 1 = accept — same domain call as USSD and web.
+    // 1 = accept — same domain call as USSD and web: the order exists only now.
     const accepted = await voiceLeg(call.id, phone, 's1', '1');
     expect(accepted).not.toContain('<GetDigits');
-    expect(accepted).toContain('You accepted');
+    expect(accepted).toContain('The deal is agreed for GHS 2000.00');
 
-    expect(getContract(contract.id).state).toBe('ACCEPTED');
+    const closed = getOffer(offer.id);
+    expect(closed.status).toBe('accepted');
+    const contract = getContract(closed.contractId!);
+    expect(contract.state).toBe('ACCEPTED');
+    expect(contract.agreedTotal).toBe(200000);
     const done = listVoiceCallsForPhone(farmer.phone)[0]!;
     expect(done.status).toBe('completed');
-    expect(getTrace(contract.lotId).map((e) => e.type)).toContain('VOICE_CALL');
   });
 
-  it('lets the farmer press 2 to decline', async () => {
+  it('records the answered bid call in the lot trace', async () => {
+    const phone = '+233207770307';
+    const { farmer, offer } = await openBid(phone);
+    await placePendingVoiceCalls();
+    const call = listVoiceCallsForPhone(farmer.phone)[0]!;
+    await voiceLeg(call.id, phone, 's7');
+    await voiceLeg(call.id, phone, 's7', '1');
+    // The call that agreed the deal belongs in the chain of custody, as it did for 'offer' calls.
+    expect(getTrace(offer.lotId).map((e) => e.type)).toContain('VOICE_CALL');
+  });
+
+  it('lets the farmer press 2 to reject', async () => {
     const phone = '+233207770303';
-    const { farmer, contract } = await offeredContract(phone);
+    const { farmer, offer } = await openBid(phone);
     await placePendingVoiceCalls();
     const call = listVoiceCallsForPhone(farmer.phone)[0]!;
     await voiceLeg(call.id, phone, 's2');
-    const declined = await voiceLeg(call.id, phone, 's2', '2');
-    expect(declined).toContain('You declined');
-    expect(getContract(contract.id).state).toBe('DECLINED');
+    const rejected = await voiceLeg(call.id, phone, 's2', '2');
+    expect(rejected).toContain('You turned down the offer');
+    expect(getOffer(offer.id).status).toBe('rejected');
+    expect(listContractsForFarmer(farmer.id)).toHaveLength(0); // no order was ever made
   });
 
-  it('says goodbye gracefully when the offer is already gone', async () => {
+  it('says goodbye gracefully when the bid is already answered', async () => {
     const phone = '+233207770304';
-    const { farmer, contract } = await offeredContract(phone);
-    await acceptOfferAndHold(contract.id, farmer.id); // accepted via USSD before the call landed
+    const { farmer } = await openBid(phone);
+    await acceptFor(farmer.id); // accepted via USSD before the call landed
     await placePendingVoiceCalls();
-    const call = listVoiceCallsForPhone(farmer.phone).find((c) => c.flow === 'offer')!;
+    const call = listVoiceCallsForPhone(farmer.phone).find((c) => c.flow === 'bid')!;
     const gone = await voiceLeg(call.id, phone, 's3');
     expect(gone).not.toContain('<GetDigits');
     expect(gone).toContain('no longer available');
@@ -149,7 +170,7 @@ describe('voice/IVR (M16)', () => {
 
   it('speaks via <Play> when the TTS provider yields audio, on prompt and hangup legs alike (M30)', async () => {
     const phone = '+233207770306';
-    const { farmer } = await offeredContract(phone);
+    const { farmer } = await openBid(phone);
     await placePendingVoiceCalls();
     const call = listVoiceCallsForPhone(farmer.phone)[0]!;
     setTtsProvider({ name: 'mock', synthesize: async () => ({ url: 'http://localhost:3000/tts/en/abc.mp3' }) });
@@ -167,7 +188,7 @@ describe('voice/IVR (M16)', () => {
 
   it('retries an unanswered call once, then records no_answer with SMS already out', async () => {
     const phone = '+233207770305';
-    const { farmer } = await offeredContract(phone);
+    const { farmer } = await openBid(phone);
     await placePendingVoiceCalls(); // attempt 1 → placing
     expireStaleVoiceCalls(Date.now() + 3 * 60 * 1000); // → back to pending (earlier tests' strays may expire too)
     expect(listVoiceCallsForPhone(farmer.phone)[0]!.status).toBe('pending');
@@ -177,6 +198,6 @@ describe('voice/IVR (M16)', () => {
     const call = listVoiceCallsForPhone(farmer.phone)[0]!;
     expect(call.status).toBe('no_answer');
     expect(call.attempts).toBe(2);
-    expect(listNotificationsForPhone(farmer.phone).some((n) => n.templateKey === 'sms.newOffer')).toBe(true);
+    expect(listNotificationsForPhone(farmer.phone).some((n) => n.templateKey === 'sms.bidReceived')).toBe(true);
   });
 });

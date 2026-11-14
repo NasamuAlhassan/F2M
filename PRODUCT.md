@@ -44,7 +44,7 @@ The claim a neighboring marketplace cannot truthfully copy: **a farmer with a ba
 - Logistics: rate-card quotes, sequential nearest-first dispatch, buyer direct-hire of a chosen driver, farmer-suggested delivery that the buyer approves and funds.
 - Voice listing pipeline: open IVR call → ASR → MT → registry-driven parser → live lot. The owner's Tɛkyerɛma language Space hears, translates and speaks it (`*_PROVIDER=space`, D-045).
 - **Terminology:** lot, demand, match, offer, contract, band/grade (A/B/C/REJECT), hold, payout, spine, channel, pool bid.
-- **i18n rule:** every farmer-facing string lives behind catalog keys; Twi/Ewe/Dagbani exist only as machine-drafted, review-flagged subsets and must never be farmer-facing until native-speaker review. English is the working language until "language day."
+- **i18n rule:** every farmer-facing string lives behind catalog keys. Twi, Ewe, Dagbani, Hausa and Kusaal are machine-translated by the owner's language Space and switched live on SMS, USSD and voice by the owner's choice (D-049) — not yet native-reviewed, and never described as reviewed.
 - Undecided (do not invent): real-provider go-live timing; final language rollout scope; pricing/fees for the platform itself (no platform fee exists today — never render one as if it did).
 
 ## Brand Commitments
@@ -55,9 +55,9 @@ The claim a neighboring marketplace cannot truthfully copy: **a farmer with a ba
 
 ## Evidence on Hand
 
-- A fully working offline demo: `npm run demo` drives register→…→trace across USSD, IVR, and REST wires and exits 0 on balanced books; 127 automated tests.
+- A fully working offline demo: `npm run demo` drives register→…→trace across USSD, IVR, and REST wires and exits 0 on balanced books; 247 automated tests.
 - Seeded demo data only. **There are no real customers, transactions, testimonials, or press yet — never fabricate any.** The first real settled transaction is the milestone being pursued.
-- The living docs trail (`docs/PROJECT.md`, `docs/DECISIONS.md` D-001…D-038, `docs/BUILDLOG.md`) is the authoritative record of what exists and why.
+- The living docs trail (`docs/PROJECT.md`, `docs/DECISIONS.md` D-001…D-051, `docs/BUILDLOG.md`) is the authoritative record of what exists and why.
 
 ## Product Principles
 

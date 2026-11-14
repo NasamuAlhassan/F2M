@@ -12,7 +12,8 @@
     "db:reset": "tsx src/db/reset.ts",
     "db:seed": "tsx src/db/run-seed.ts",
     "db:inspect": "tsx src/db/inspect.ts",
-    "i18n:draft": "tsx src/i18n/draft.ts"
+    "i18n:draft": "tsx src/i18n/draft.ts",
+    "i18n:extract": "tsx src/i18n/extract.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -3,8 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '../db/client';
 import { buyerNotifications, deliveryJobOffers, demands, drivers as driversTable, lots } from '../db/schema';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
-import { testBuyer } from '../testing/fixtures';
-import { getContract, listContractsForFarmer } from './contracts';
+import { acceptFor, testBuyer } from '../testing/fixtures';
+import { getContract } from './contracts';
 import { createDemand } from './demands';
 import { driverRouteRegions, getDriverById, getDriverByPhone, registerDriver, updateDriverProfile } from './drivers';
 import { registerFarmer } from './farmers';
@@ -28,7 +28,7 @@ import {
   suggestTransport,
 } from './logistics';
 import { registerLot } from './lots';
-import { acceptOfferAndHold, pollPaymentsOnce, refundHold, refundMissedPickups } from './paymentFlow';
+import { pollPaymentsOnce, refundHold, refundMissedPickups } from './paymentFlow';
 import { getCommodityByCode } from './registries';
 import { getTrace } from './trace';
 
@@ -77,11 +77,12 @@ async function fundedContract(regionCode = 'GREATER_ACCRA') {
     windowEnd: Date.now() + 7 * DAY,
     regionCode: 'GREATER_ACCRA',
   });
-  const offer = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
-  await acceptOfferAndHold(offer.id, farmer.id);
+  // The farmer accepts the engine's bid: the 500kg order is created and the hold starts (Phase 1).
+  const order = await acceptFor(farmer.id, lot.id);
+  expect(order.quantityKg).toBe(500);
   await pollPaymentsOnce();
-  expect(getContract(offer.id).state).toBe('FUNDS_HELD');
-  return { buyer, farmer, lot, contractId: offer.id };
+  expect(getContract(order.id).state).toBe('FUNDS_HELD');
+  return { buyer, farmer, lot, contractId: order.id };
 }
 
 function vanDriver(regionCode: string, name = 'Test Driver') {

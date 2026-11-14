@@ -1,13 +1,15 @@
 /**
- * The one-lot demo: drives the ENTIRE spine — now including the voice-call
- * accept and the middle-mile transport leg — through the real HTTP surfaces
- * (USSD webhook, IVR voice wire, REST API) via fastify.inject. Zero network.
+ * The one-lot demo: drives the ENTIRE spine — the listing with her own price,
+ * the engine's bid, the voice-call accept that makes the deal (Phase 1), and
+ * the middle-mile transport leg — through the real HTTP surfaces (USSD
+ * webhook, IVR voice wire, REST API) via fastify.inject. Zero network.
  *
  *   npm run demo                  # offline: mock grading/payments/voice
  *   GRADING_PROVIDER=hf ...       # same script against real providers
  *
  * Exits 0 only if the contract reaches SETTLED **and** the delivery job
- * reaches PAID with balanced books and both escrows at zero.
+ * reaches PAID with balanced books, both escrows at zero, and the farmer paid
+ * exactly the agreed total.
  */
 import crypto from 'node:crypto';
 import { inArray, and, eq } from 'drizzle-orm';
@@ -28,6 +30,7 @@ import {
   getDriverByPhone,
   getFarmerByPhone,
   getJob,
+  getLotByCode,
   getTrace,
   jobEscrowBalance,
   listContractsForFarmer,
@@ -242,7 +245,7 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   db.update(schema.drivers).set({ active: true }).where(eq(schema.drivers.id, driver.id)).run();
 
   // ---- 3. LIST A LOT (USSD) ----
-  step('List — 10 bags of maize, sold in the unit she actually uses');
+  step('List — 10 bags of maize, in the unit she actually uses, at her own price');
   const sell = ussdSession(phone);
   await sell();
   await sell('1'); // Sell produce
@@ -251,12 +254,15 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   await sell('10'); // 10 bags = 500kg canonical
   await sell('2'); // Grade B self-assessment
   await sell('1'); // ready now
+  const confirm = await sell('210'); // her asking price: GHS 210 a bag (Phase 1 price step)
+  detail(confirm.replace('CON ', '').split('\n')[0]!);
   const listed = await sell('1');
   if (!listed.startsWith('END Lot FTM-')) fail(`lot listing failed: ${listed}`);
   detail(listed.replace('END ', ''));
+  const lotCode = /Lot (FTM-\S+) listed/.exec(listed)?.[1] ?? fail('no lot code in the listing receipt');
 
   // ---- 4. DEMAND + AUTO-MATCH (web API) ----
-  step('Match — buyer posts demand; the autonomous engine matches and reserves the lot');
+  step('Match — buyer posts a request; the engine turns it into a bid on her listing');
   const token = DEMO_TOKEN;
   const now = Date.now();
   const { demand } = await apiJson<{ demand: { id: string; status: string; remainingKg: number } }>(
@@ -274,22 +280,43 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
     token,
   );
   detail(`demand ${demand.id.slice(0, 8)} status=${demand.status} remaining=${demand.remainingKg}kg`);
-  const offered = listContractsForFarmer(farmer.id, ['OFFERED'])[0] ?? fail('matching produced no offer');
+  // Phase 1: a match is an offer thread waiting on the farmer — no contract until she accepts.
+  interface OfferView {
+    id: string;
+    turn: string | null;
+    lot: { lotCode: string };
+    current: { units: number; pricePerUnit: number; total: number };
+    contractId: string | null;
+  }
+  const { offers } = await apiJson<{ offers: OfferView[] }>('GET', '/api/offers?status=open', undefined, token);
+  const bid = offers.find((o) => o.lot.lotCode === lotCode && o.turn === 'farmer') ?? fail('matching produced no bid on her listing');
+  const lotId = getLotByCode(lotCode)?.id ?? fail(`lot ${lotCode} not found`);
+  if (listContractsForFarmer(farmer.id).some((c) => c.lotId === lotId)) fail('a contract exists before the farmer accepted');
+  detail(
+    `bid: ${bid.current.units} bags at ${formatGhs(bid.current.pricePerUnit)} each (${formatGhs(bid.current.total)}) — ` +
+      `the request's grade-B price, under her GHS 210.00 ask; she can accept, counter or reject`,
+  );
 
-  // ---- 5. CONTRACT — ACCEPTED BY VOICE CALL ----
-  step('Contract — her phone RINGS; she hears the terms and presses 1');
+  // ---- 5. DEAL — ACCEPTED BY VOICE CALL ----
+  step('Deal — her phone RINGS; she hears the bid and presses 1');
   await placePendingVoiceCalls();
-  const call = listVoiceCallsForPhone(farmer.phone).find((c) => c.flow === 'offer' && c.status === 'placing');
-  if (!call) fail('no voice call was placed for the offer');
+  const call = listVoiceCallsForPhone(farmer.phone).find((c) => c.flow === 'bid' && c.offerId === bid.id && c.status === 'placing');
+  if (!call) fail('no voice call was placed for the bid');
   const callSession = `demo-call-${attempt}`;
   const prompt = await voiceLeg(call.id, farmer.phone, callSession);
   detail(`🔊 "${spoken(prompt)}"`);
   const acceptedXml = await voiceLeg(call.id, farmer.phone, callSession, '1');
   detail(`🔊 "${spoken(acceptedXml)}"`);
-  const contract = listContractsForFarmer(farmer.id, ['ACCEPTED'])[0] ?? fail('voice accept did not land');
+  const { offer: agreedOffer } = await apiJson<{ offer: OfferView }>('GET', `/api/offers/${bid.id}`, undefined, token);
+  if (!agreedOffer.contractId) fail('voice accept did not land');
+  const contract = getContract(agreedOffer.contractId);
+  if (contract.state !== 'ACCEPTED' || contract.agreedTotal !== bid.current.total || contract.holdAmount !== bid.current.total) {
+    fail(`the order does not carry the agreed total: ${contract.state} hold=${contract.holdAmount} agreed=${contract.agreedTotal}`);
+  }
+  detail(`contract ${contract.id.slice(0, 8)} ACCEPTED — agreed total ${formatGhs(contract.agreedTotal!)}`);
 
   // ---- 6. PAY: hold ----
-  step('Pay (hold) — buyer funds held in escrow before pickup');
+  step('Pay (hold) — the agreed total is held in escrow before pickup');
   await waitFor('FUNDS_HELD', () => getContract(contract.id).state === 'FUNDS_HELD');
   detail(`escrow: ${formatGhs(contractEscrowBalance(contract.id))} (hold ${formatGhs(contract.holdAmount)})`);
 
@@ -355,7 +382,9 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
 
   // ---- 10. TRACE + SMS + LEDGER ----
   const final = getContract(contract.id);
-  step('Trace — one append-only record: produce, voice call, transport, money');
+  // No "voice call" here: finishVoiceCall only traces calls tied to a contract,
+  // and a Phase 1 bid call is tied to the offer thread — so it is not on the trace (yet).
+  step('Trace — one append-only record: produce, deal, transport, money');
   for (const e of getTrace(final.lotId)) {
     console.log(`  #${String(e.seq).padStart(2)} ${e.type.padEnd(20)} ${e.actorType}`);
   }
@@ -374,19 +403,26 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   const escrow = contractEscrowBalance(final.id);
   const jobEscrow = jobEscrowBalance(job.id);
   const driverPayable = accountBalance(ACCOUNTS.driverPayable(driver.id));
+  // Phase 1: an agreed deal pays its agreed total whatever the grade, so the whole
+  // hold goes to the farmer and no grade-difference refund line is posted.
+  const remainderRefunded = contractLedger(final.id).some((l) => l.memoKey === 'ledger.refundRemainder');
   detail(
-    `journals balanced: ${balanced} · contract escrow: ${formatGhs(escrow)} · job escrow: ${formatGhs(jobEscrow)} · driver payable: ${formatGhs(driverPayable)}`,
+    `journals balanced: ${balanced} · contract escrow: ${formatGhs(escrow)} · job escrow: ${formatGhs(jobEscrow)} · ` +
+      `driver payable: ${formatGhs(driverPayable)} · grade-difference refund: ${remainderRefunded ? 'yes' : 'none'}`,
   );
   if (!balanced || escrow !== 0 || jobEscrow !== 0 || driverPayable !== job.quoteAmount) {
     fail('ledger invariant violated');
   }
+  if (final.finalAmount !== final.agreedTotal || final.finalAmount !== final.holdAmount || remainderRefunded) {
+    fail(`the farmer was not paid the agreed total: paid ${final.finalAmount}, agreed ${final.agreedTotal}, held ${final.holdAmount}`);
+  }
 
   console.log(
     `\n\x1b[1m\x1b[32m✔ SETTLED + DELIVERED\x1b[0m — ${final.quantityKg}kg maize graded ${final.finalGrade}: ` +
-      `farmer paid ${formatGhs(final.finalAmount ?? 0)}, driver paid ${formatGhs(job.quoteAmount)}, ` +
-      `buyer refunded ${formatGhs(final.holdAmount - (final.finalAmount ?? 0))} of the produce hold.`,
+      `farmer paid the agreed ${formatGhs(final.finalAmount ?? 0)}, driver paid ${formatGhs(job.quoteAmount)}, ` +
+      `both escrows empty.`,
   );
-  console.log('Register → match → contract (by VOICE) → transport → grade → pay → trace. One basic phone each.\n');
+  console.log('Register → list at her price → bid → deal (by VOICE) → transport → grade → pay → trace. One basic phone each.\n');
   await app.close();
   process.exit(0);
 }

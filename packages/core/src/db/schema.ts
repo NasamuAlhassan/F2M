@@ -143,14 +143,21 @@ export const lots = sqliteTable(
     // sellers may not read SMS, so buyers see their phone and call instead.
     channel: text('channel', { enum: ['web', 'ussd', 'ivr'] }).notNull().default('ussd'),
     readyDate: integer('ready_date').notNull(), // ms; future date on a storable = forward listing
-    askingPricePerKg: integer('asking_price_per_kg'), // pesewas, optional
+    askingPricePerKg: integer('asking_price_per_kg'), // pesewas, optional — derived from the per-unit price when one is set
+    // The farmer's own asking price per unit of the listing (per bag, crate…), pesewas (Phase 1).
+    askingPricePerUnit: integer('asking_price_per_unit'),
+    harvestedAt: integer('harvested_at'), // ms, optional
+    community: text('community'), // town/village — finer than the region (vision §5.2)
+    landmark: text('landmark'), // "behind the Methodist school" — for the driver
+    expiresAt: integer('expires_at'), // ms; the listing lapses then unless renewed (Phase 1)
+    expiryWarnedAt: integer('expiry_warned_at'), // ms; the warning SMS went out
     regionCode: text('region_code')
       .notNull()
       .references(() => regions.code),
     gpsLat: real('gps_lat'),
     gpsLng: real('gps_lng'),
     status: text('status', {
-      enum: ['registered', 'matched', 'contracted', 'graded', 'settled', 'expired', 'withdrawn'],
+      enum: ['registered', 'matched', 'contracted', 'graded', 'settled', 'expired', 'withdrawn', 'sold'],
     })
       .notNull()
       .default('registered'),
@@ -189,6 +196,9 @@ export const demands = sqliteTable(
     })
       .notNull()
       .default('open'),
+    // 'request' = a buyer's public request; 'deal' = the record behind a negotiated
+    // order (Phase 1) — never shown as a request, never re-opened for matching.
+    origin: text('origin', { enum: ['request', 'deal'] }).notNull().default('request'),
     createdAt: createdAt(),
   },
   (t) => [index('demands_buyer_idx').on(t.buyerId), index('demands_commodity_status_idx').on(t.commodityId, t.status)],
@@ -265,6 +275,9 @@ export const contracts = sqliteTable(
     state: text('state', { enum: CONTRACT_STATES }).notNull().default('OFFERED'),
     finalGrade: text('final_grade'),
     finalAmount: integer('final_amount'), // pesewas = qty × price_terms[final_grade]
+    // A negotiated deal's exact total (units × price per unit), pesewas. Set → the farmer is
+    // paid this whatever the grade (REJECT still refunds) until Phase 3 reworks quality.
+    agreedTotal: integer('agreed_total'),
     declineReasonKey: text('decline_reason_key'),
     disputeNote: text('dispute_note'),
     fundingAttempts: integer('funding_attempts').notNull().default(0),
@@ -371,6 +384,10 @@ export const ledgerEntries = sqliteTable(
 
 export const LOT_EVENT_TYPES = [
   'LOT_REGISTERED',
+  'LOT_WITHDRAWN',
+  'LOT_UPDATED',
+  'LOT_SOLD',
+  'LOT_EXPIRED',
   'MATCHED',
   'CONTRACT_OFFERED',
   'CONTRACT_ACCEPTED',
@@ -580,8 +597,9 @@ export const voiceCalls = sqliteTable(
     id: id(),
     phone: text('phone').notNull(),
     locale: text('locale').notNull().default('en'),
-    flow: text('flow', { enum: ['offer', 'grade', 'bridge'] }).notNull(),
+    flow: text('flow', { enum: ['offer', 'grade', 'bridge', 'bid'] }).notNull(),
     contractId: text('contract_id').references(() => contracts.id),
+    offerId: text('offer_id').references(() => offers.id), // the 'bid' flow: hear an offer thread's proposal (Phase 1)
     currentNode: text('current_node'),
     status: text('status', { enum: VOICE_CALL_STATUSES }).notNull().default('pending'),
     attempts: integer('attempts').notNull().default(0),
@@ -643,6 +661,68 @@ export const voiceListings = sqliteTable(
   (t) => [index('voice_listings_phone_idx').on(t.phone)],
 );
 
+/**
+ * Offer threads (Phase 1): one negotiation between one buyer and one farmer
+ * about one listing, whoever started it — a buyer bid, a farmer answering a
+ * buyer request, or the matching engine. The current proposal lives on the
+ * row; every move is an offer_events row.
+ */
+export const OFFER_STATUSES = ['open', 'accepted', 'rejected', 'withdrawn', 'expired'] as const;
+export const offers = sqliteTable(
+  'offers',
+  {
+    id: id(),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => lots.id),
+    buyerId: text('buyer_id')
+      .notNull()
+      .references(() => buyers.id),
+    farmerId: text('farmer_id')
+      .notNull()
+      .references(() => farmers.id),
+    demandId: text('demand_id').references(() => demands.id), // set when it started from a buyer request
+    status: text('status', { enum: OFFER_STATUSES }).notNull().default('open'),
+    turn: text('turn', { enum: ['buyer', 'farmer'] }), // who must act; null once closed
+    units: real('units').notNull(), // in the listing's unit
+    pricePerUnit: integer('price_per_unit').notNull(), // pesewas
+    proposedBy: text('proposed_by', { enum: ['buyer', 'farmer'] }).notNull(),
+    proposedAt: integer('proposed_at').notNull(),
+    expiresAt: integer('expires_at'), // the current proposal lapses then
+    // Request-started threads hold this many kg of the request so the engine never over-buys.
+    heldDemandKg: real('held_demand_kg').notNull().default(0),
+    contractId: text('contract_id').references(() => contracts.id),
+    reminderSentAt: integer('reminder_sent_at'), // the "someone is waiting for your answer" SMS for this proposal
+    createdAt: createdAt(),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .$defaultFn(() => Date.now()),
+  },
+  (t) => [
+    index('offers_lot_idx').on(t.lotId),
+    index('offers_buyer_idx').on(t.buyerId),
+    index('offers_farmer_idx').on(t.farmerId),
+    index('offers_status_idx').on(t.status),
+  ],
+);
+
+export const offerEvents = sqliteTable(
+  'offer_events',
+  {
+    id: id(),
+    offerId: text('offer_id')
+      .notNull()
+      .references(() => offers.id),
+    by: text('by', { enum: ['buyer', 'farmer', 'system'] }).notNull(),
+    action: text('action', { enum: ['bid', 'counter', 'accept', 'reject', 'withdraw', 'expire'] }).notNull(),
+    units: real('units'),
+    pricePerUnit: integer('price_per_unit'),
+    channel: text('channel', { enum: ['web', 'ussd', 'ivr', 'system'] }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('offer_events_offer_idx').on(t.offerId)],
+);
+
 export const ussdSessions = sqliteTable('ussd_sessions', {
   sessionId: text('session_id').primaryKey(), // the gateway's sessionId
   phone: text('phone').notNull(),
@@ -679,3 +759,5 @@ export type VoiceListing = typeof voiceListings.$inferSelect;
 export type Driver = typeof drivers.$inferSelect;
 export type DeliveryJob = typeof deliveryJobs.$inferSelect;
 export type DeliveryJobOffer = typeof deliveryJobOffers.$inferSelect;
+export type Offer = typeof offers.$inferSelect;
+export type OfferEvent = typeof offerEvents.$inferSelect;

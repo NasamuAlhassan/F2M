@@ -80,8 +80,12 @@ export async function runGrading(contractId: string): Promise<Grading> {
   }
 
   const terms = contractPriceTerms(contract);
+  // A negotiated deal pays the exact agreed total whatever the grade until Phase 3
+  // reworks quality (docs/PHASE1.md); REJECT still refunds the buyer in full.
   const finalAmount =
-    result.gradeBand === 'REJECT' ? 0 : Math.round(contract.quantityKg * (terms[result.gradeBand as GradeBand] ?? 0));
+    result.gradeBand === 'REJECT'
+      ? 0
+      : (contract.agreedTotal ?? Math.round(contract.quantityKg * (terms[result.gradeBand as GradeBand] ?? 0)));
 
   const completed = db
     .update(gradings)

@@ -1,11 +1,12 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/client';
-import { buyers, contracts, demands, farmers, payments, type Contract, type Payment } from '../db/schema';
+import { buyers, contracts, demands, farmers, payments, type Contract, type Offer, type Payment } from '../db/schema';
 import { getPaymentProvider } from '../providers/payment/index';
 import { transitionContract } from '../state/contractMachine';
 import { DomainError, notFound } from './errors';
 import { ACCOUNTS, postJournal } from './ledger';
 import { acceptOffer } from './matching';
+import { acceptProposal, type Channel, type Party } from './offers';
 import { queueBuyerNotification } from './buyerNotifications';
 import { contractsWithGoodsInTransit, resolveJobPayment } from './logistics';
 import { queueSms } from './notifications';
@@ -322,6 +323,22 @@ export async function pollPaymentByReference(referenceId: string): Promise<void>
   const payment = db.select().from(payments).where(eq(payments.providerRef, referenceId)).get();
   if (!payment || payment.status !== 'pending') return;
   await pollPaymentsOnce();
+}
+
+/**
+ * Either side accepts the other's proposal in an offer thread (Phase 1): the
+ * order is created and the buyer's payment hold starts, exactly as accepting
+ * a system offer always has.
+ */
+export async function acceptOfferThread(
+  offerId: string,
+  party: Party,
+  actorId: string,
+  channel: Channel = 'web',
+): Promise<{ offer: Offer; contract: Contract }> {
+  const { offer, contractId } = acceptProposal(offerId, party, actorId, channel);
+  await initiateHold(contractId);
+  return { offer, contract: getContractRow(contractId) };
 }
 
 /** Farmer accepts on USSD → the state transition and the funding hold, together. */

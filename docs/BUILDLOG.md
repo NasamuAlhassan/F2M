@@ -336,3 +336,19 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **Open doors closed:** anonymous farmer/lot creation and phone lookups removed; owner-only full trace; `SIMULATOR_ENABLED` and `CARRIER_WEBHOOK_TOKEN`; demo acceptance locked to simulator + simulated payments.
 - **Project health:** `better-sqlite3`'s compile step denied — a clean `npm ci` now works with no compiler (it ships prebuilt binaries); test databases cleaned up after every run; the portal image takes the Supabase settings as build args.
 - Verified: typecheck clean, 185 tests green (new: account flow, USSD-farmer linking, role clashes, wrong-role tokens, removed routes, owner-only trace, carrier token, simulator switch), `npm run demo` exit 0, web build clean, clean `npm ci` exit 0. Not yet verified live: a real signup — phone sign-in is still off in the Supabase project.
+
+## 2026-11-14 · Languages live, web interface included (D-049, D-050)
+
+- `I18N_DRAFT_LOCALES_LIVE=true` in `.env.example`, `fly.toml` and `render.yaml`. The code default stays `false` and the tests pin it.
+- All five catalogs completed by `npm run i18n:draft` with the Space. One hand fix: Dagbani `sms.paid`, where the brand name pulled the Space into Swahili.
+- Web: `useT()` / `t('web.<page>.<name>', 'English')` (`apps/web/src/lib/i18n.tsx`), `GET /api/i18n/web/:locale` (gated like `t()`, English per phrase as fallback), `npm run i18n:extract` collects the phrases into `en.json` and drops translations of changed or removed ones. The dashboard language picker and the header row both switch the screens.
+
+## 2026-11-14 · Phase 1: the two-way marketplace (D-051)
+
+- **Offer threads:** `offers` + `offer_events` (migration 0013) and `packages/core/src/domain/offers.ts`. Covers bids on a listing, a farmer's offer on a buyer request, the engine's bid from a request, counter, accept, reject, withdraw, expiry on the crop's offer clock, and one reminder after 3 h. Accepting creates the contract already ACCEPTED with an exact `agreedTotal`, takes the units off the listing and starts the hold. When a listing sells out, its other bids close at once. A lapse tells both sides, worded by whose turn it was.
+- **Money rule until Phase 3:** grading pays `agreedTotal` whatever the grade; REJECT still refunds in full.
+- **Listings:** asking price per unit, harvest date, community, landmark, `expiresAt` (`LISTING_TTL_DAYS`, 30) with a warning two days before. `updateLot`, `markLotSold`, `withdrawLot` and `sweepListings` run in the sweep job.
+- **Wires:** REST `POST /api/lots/:lotId/bids`, `/api/offers[...]`, `/api/farmer/offers[...]`, `/api/farmer/requests[...]`, `PATCH /api/farmer/lots/:id`, `POST /api/farmer/lots/:id/sold`. The request detail and the engine feed carry offer threads, and the engine preview and simulate endpoints take `offerId`. USSD gets offers with accept, counter and reject, "8. Buyer requests", a price step in the sell flow, and listing management (remove, price, quantity, sold elsewhere). The voice `bid` flow takes 1 to accept and 2 to reject. Bid calls now leave a VOICE_CALL event on the lot's trace.
+- **Crops:** cassava (sack, perishable), millet, sorghum, soya beans and cowpea (100kg and 50kg bags, olonka). Each has its own rubric and reference prices from 2025–26 market reports. The voice parser hears "soya" and "soy".
+- **Catalogs:** about 70 new SMS, alert, USSD and voice keys; five legacy USSD offer keys removed.
+- **Verified:** typecheck clean; 247 tests green (new: 27 domain negotiation tests, 7 wire tests, 4 USSD negotiation walks; about 50 earlier tests moved to offer threads); `npm run demo` exit 0. The farmer lists at her own price, the engine bids, she accepts by voice, it is graded C and paid the agreed GHS 2000.00, both escrows end at 0, and there is no grade-difference refund.

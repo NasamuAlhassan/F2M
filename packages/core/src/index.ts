@@ -8,6 +8,8 @@ export {
   LOT_EVENT_TYPES,
   type DeliveryJob,
   type DeliveryJobOffer,
+  type Offer,
+  type OfferEvent,
   type DeliveryJobState,
   type Driver,
   type VehicleClass,
@@ -58,6 +60,7 @@ export * from './domain/notifications';
 export * from './domain/buyerNotifications';
 export * from './domain/voiceCalls';
 export * from './domain/voiceListings';
+export * from './domain/offers';
 export * from './providers/voice/index';
 export * from './domain/drivers';
 export * from './domain/logistics';
@@ -80,6 +83,7 @@ export {
   isLocaleLive,
   liveLocales,
   speechLocale,
+  webMessages,
   setDraftLocalesLive,
   type I18nText,
 } from './i18n';

@@ -29,9 +29,10 @@ primary_region = "lhr"
   DATABASE_PATH = "/data/ftm.db"
   STORAGE_DIR = "/data/storage"
 
-  # English-only pilot. The D-040 gate already resolves every unreviewed
-  # locale to English on SMS/USSD/IVR; this keeps drafts off farmer surfaces.
-  I18N_DRAFT_LOCALES_LIVE = "false"
+  # The five Ghanaian languages are live (D-049): machine-translated by the
+  # language Space, not yet native-reviewed. "false" puts every farmer surface
+  # back on English until a catalog is reviewed.
+  I18N_DRAFT_LOCALES_LIVE = "true"
 
   # The phone simulator stays on until a live USSD code and voice number exist
   # (D-047). Switch it off with CARRIER_WEBHOOK_TOKEN set as a secret.

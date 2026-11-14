@@ -4,7 +4,6 @@ import {
   getDriverByPhone,
   getJob,
   getJobForContract,
-  listContractsForFarmer,
   MockPaymentProvider,
   pollPaymentsOnce,
   registerFarmer,
@@ -14,10 +13,9 @@ import {
   setDraftLocalesLive,
   setPaymentProvider,
   db,
-  acceptOfferAndHold,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
-import { testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
+import { acceptFor, testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../app';
@@ -75,10 +73,10 @@ async function fundedContract() {
     windowEnd: Date.now() + 7 * DAY,
     regionCode: 'ASHANTI',
   });
-  const offer = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
-  await acceptOfferAndHold(offer.id, farmer.id);
+  // The engine's bid waits on the farmer (Phase 1); accepting it makes the contract and starts the hold.
+  const contract = await acceptFor(farmer.id);
   await pollPaymentsOnce();
-  return { buyer, contractId: offer.id };
+  return { buyer, contractId: contract.id };
 }
 
 describe('driver surfaces (M14)', () => {

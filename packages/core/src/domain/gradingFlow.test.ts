@@ -5,14 +5,14 @@ import { db } from '../db/client';
 import { demands, lots } from '../db/schema';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
 import { setGradingProvider, type GradingResult } from '../providers/grading/index';
-import { testBuyer } from '../testing/fixtures';
-import { getContract, listContractsForFarmer } from './contracts';
+import { acceptFor, testBuyer } from '../testing/fixtures';
+import { getContract } from './contracts';
 import { createDemand } from './demands';
 import { registerFarmer } from './farmers';
 import { agreeGrading, confirmPickup, disputeGrading, listGradingsForContract, runGrading } from './gradingFlow';
 import { allJournalsBalanced, contractEscrowBalance } from './ledger';
 import { getLot, registerLot } from './lots';
-import { acceptOfferAndHold, pollPaymentsOnce } from './paymentFlow';
+import { pollPaymentsOnce } from './paymentFlow';
 import { addPhoto, listPhotosForContract } from './photos';
 import { getCommodityByCode } from './registries';
 import { getTrace } from './trace';
@@ -65,17 +65,20 @@ async function fundedContract(phone: string) {
     commodityCode: 'YAM',
     quantityKg: 500,
     minBand: 'B',
-    basePricePerKg: 400, // A=455, B=400, C=318
+    basePricePerKg: 400, // B=400/kg → the B lot is bid 2 × 250kg at 100,000p: 200,000p agreed
     windowStart: Date.now(),
     windowEnd: Date.now() + 14 * DAY,
     regionCode: 'GREATER_ACCRA',
   });
-  const offer = listContractsForFarmer(farmer.id, ['OFFERED']).find((c) => c.buyerId === buyer.id)!;
-  await acceptOfferAndHold(offer.id, farmer.id);
+  const order = await acceptFor(farmer.id, lot.id);
+  expect(order.buyerId).toBe(buyer.id);
   await pollPaymentsOnce();
-  expect(getContract(offer.id).state).toBe('FUNDS_HELD');
-  return { farmer, lot, buyer, contractId: offer.id };
+  expect(getContract(order.id).state).toBe('FUNDS_HELD');
+  return { farmer, lot, buyer, contractId: order.id };
 }
+
+/** The agreed total of every fixture deal: 2 units × 100,000p. */
+const AGREED_TOTAL = 500 * 400;
 
 async function photoBuffer(color: { r: number; g: number; b: number }): Promise<Buffer> {
   return sharp({ create: { width: 1400, height: 900, channels: 3, background: color } })
@@ -108,7 +111,7 @@ describe('grading flow (M5)', () => {
     const contract = getContract(contractId);
     expect(contract.state).toBe('GRADED');
     expect(contract.finalGrade).toBe('B');
-    expect(contract.finalAmount).toBe(500 * 400);
+    expect(contract.finalAmount).toBe(AGREED_TOTAL);
 
     const types = getTrace(lot.id).map((e) => e.type);
     expect(types).toContain('PHOTO_ADDED');
@@ -130,6 +133,8 @@ describe('grading flow (M5)', () => {
     scriptVerdict('C', 0.55);
     await runGrading(contractId);
     expect(getContract(contractId).finalGrade).toBe('C');
+    // An agreed deal pays its agreed total whatever the grade (Phase 1) — C pays the same as B.
+    expect(getContract(contractId).finalAmount).toBe(AGREED_TOTAL);
 
     disputeGrading(contractId, farmer.id, 'the tubers were fresh this morning');
     expect(getContract(contractId).state).toBe('DISPUTED');
@@ -139,7 +144,7 @@ describe('grading flow (M5)', () => {
     const contract = getContract(contractId);
     expect(contract.state).toBe('GRADED');
     expect(contract.finalGrade).toBe('B');
-    expect(contract.finalAmount).toBe(500 * 400);
+    expect(contract.finalAmount).toBe(AGREED_TOTAL);
 
     const history = listGradingsForContract(contractId);
     expect(history).toHaveLength(2);

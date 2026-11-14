@@ -8,12 +8,17 @@ describe('schema + seed', () => {
   it('seeds the three registries', () => {
     const all = db.select().from(commodities).all();
     expect(all.map((c) => c.code).sort()).toEqual([
+      'CASSAVA',
+      'COWPEA',
       'GROUNDNUT',
       'MAIZE',
+      'MILLET',
       'ONION',
       'PEPPER',
       'PLANTAIN',
       'RICE',
+      'SORGHUM',
+      'SOYBEAN',
       'TOMATO',
       'YAM',
     ]);

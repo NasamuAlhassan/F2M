@@ -139,9 +139,13 @@ function applySideEffects(tx: DbLike, contract: Contract, to: ContractState): vo
   const setMatch = (status: 'accepted' | 'declined' | 'expired') =>
     tx.update(matches).set({ status }).where(eq(matches.id, contract.matchId)).run();
 
+  // A listing with bags still unsold stays on the market (Phase 1); its status
+  // follows an order only once nothing is left on it.
+  const lotIsEmpty = () => (tx.select().from(lots).where(eq(lots.id, contract.lotId)).get()?.remainingKg ?? 0) <= 1e-9;
+
   if (to === 'ACCEPTED') {
     setMatch('accepted');
-    tx.update(lots).set({ status: 'contracted' }).where(eq(lots.id, contract.lotId)).run();
+    if (lotIsEmpty()) tx.update(lots).set({ status: 'contracted' }).where(eq(lots.id, contract.lotId)).run();
   }
 
   if (to === 'DECLINED' || to === 'EXPIRED' || to === 'CANCELLED' || to === 'CANCELLED_REFUNDED') {
@@ -149,7 +153,8 @@ function applySideEffects(tx: DbLike, contract: Contract, to: ContractState): vo
     // still exists (declined/expired/rejected) and the buyer still needs the kg.
     setMatch(to === 'DECLINED' ? 'declined' : 'expired');
     const lot = tx.select().from(lots).where(eq(lots.id, contract.lotId)).get();
-    if (lot) {
+    // A listing the farmer removed, sold elsewhere or let lapse stays off the market.
+    if (lot && !['withdrawn', 'sold', 'expired'].includes(lot.status)) {
       const remaining = Math.min(lot.quantityKg, lot.remainingKg + contract.quantityKg);
       tx.update(lots)
         .set({ remainingKg: remaining, status: remaining > 0 ? 'registered' : lot.status })
@@ -157,7 +162,10 @@ function applySideEffects(tx: DbLike, contract: Contract, to: ContractState): vo
         .run();
     }
     const demand = tx.select().from(demands).where(eq(demands.id, contract.demandId)).get();
-    if (demand && demand.status !== 'expired' && demand.status !== 'cancelled') {
+    if (demand?.origin === 'deal') {
+      // The record behind a negotiated order is not a request: it never reopens.
+      tx.update(demands).set({ status: 'cancelled' }).where(eq(demands.id, demand.id)).run();
+    } else if (demand && demand.status !== 'expired' && demand.status !== 'cancelled') {
       const remaining = Math.min(demand.quantityKg, demand.remainingKg + contract.quantityKg);
       tx.update(demands)
         .set({ remainingKg: remaining, status: remaining >= demand.quantityKg ? 'open' : 'partially_matched' })
@@ -166,11 +174,11 @@ function applySideEffects(tx: DbLike, contract: Contract, to: ContractState): vo
     }
   }
 
-  if (to === 'GRADED') {
+  if (to === 'GRADED' && lotIsEmpty()) {
     tx.update(lots).set({ status: 'graded' }).where(eq(lots.id, contract.lotId)).run();
   }
   if (to === 'SETTLED') {
-    tx.update(lots).set({ status: 'settled' }).where(eq(lots.id, contract.lotId)).run();
+    if (lotIsEmpty()) tx.update(lots).set({ status: 'settled' }).where(eq(lots.id, contract.lotId)).run();
     const demand = tx.select().from(demands).where(eq(demands.id, contract.demandId)).get();
     if (demand && demand.remainingKg <= 0) {
       tx.update(demands).set({ status: 'fulfilled' }).where(eq(demands.id, demand.id)).run();

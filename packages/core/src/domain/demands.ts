@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray } from 'drizzle-orm';
 import { db } from '../db/client';
 import { buyers, demands, type Demand } from '../db/schema';
 import { DomainError, notFound } from './errors';
@@ -95,6 +95,29 @@ export function createDemand(input: CreateDemandInput): Demand {
   // Matching runs the moment demand lands (and again on lot registration + sweep).
   runMatching({ demandId: demand.id });
   return getDemand(demand.id); // re-read: matching may have moved it to partially_matched/fulfilled
+}
+
+/**
+ * Open buyer requests (Phase 1) — public to every farmer: still wanting
+ * kilograms, window not over, and a real request (never the record behind a
+ * negotiated deal). Optionally one crop only.
+ */
+export function listOpenRequests(opts: { commodityId?: string; now?: number } = {}): Demand[] {
+  const now = opts.now ?? Date.now();
+  return db
+    .select()
+    .from(demands)
+    .where(
+      and(
+        eq(demands.origin, 'request'),
+        inArray(demands.status, ['open', 'partially_matched']),
+        gt(demands.remainingKg, 0),
+        gt(demands.windowEnd, now),
+        ...(opts.commodityId ? [eq(demands.commodityId, opts.commodityId)] : []),
+      ),
+    )
+    .orderBy(desc(demands.createdAt))
+    .all();
 }
 
 export function getDemand(id: string): Demand {

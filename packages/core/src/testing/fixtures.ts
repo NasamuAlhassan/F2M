@@ -6,7 +6,9 @@
 import { eq } from 'drizzle-orm';
 import type { TokenVerifier } from '../auth/tokens';
 import { db } from '../db/client';
-import { accounts, type Account, type Buyer } from '../db/schema';
+import { accounts, type Account, type Buyer, type Contract, type Offer } from '../db/schema';
+import { listOffersForFarmer } from '../domain/offers';
+import { acceptOfferThread } from '../domain/paymentFlow';
 import { getBuyerByPhone, registerBuyer } from '../domain/buyers';
 import { normalizePhone } from '../domain/farmers';
 
@@ -60,4 +62,20 @@ export function testToken(role: Account['role'], roleId: string, phone: string):
 export function testBuyerToken(): string {
   const buyer = testBuyer();
   return testToken('buyer', buyer.id, buyer.phone!);
+}
+
+/** The newest open offer thread waiting on this farmer (Phase 1) — what the engine or a buyer bid made. */
+export function openOfferFor(farmerId: string, lotId?: string): Offer | undefined {
+  return listOffersForFarmer(farmerId, 'open').find((o) => o.turn === 'farmer' && (!lotId || o.lotId === lotId));
+}
+
+/**
+ * Accept the offer waiting on this farmer, as the farmer: the order is created
+ * and the buyer's payment hold starts — what "press 1" did before Phase 1.
+ */
+export async function acceptFor(farmerId: string, lotId?: string): Promise<Contract> {
+  const offer = openOfferFor(farmerId, lotId);
+  if (!offer) throw new Error(`no open offer waiting on farmer ${farmerId}`);
+  const { contract } = await acceptOfferThread(offer.id, 'farmer', farmerId);
+  return contract;
 }

@@ -385,3 +385,43 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Rejected:** Keeping F2M's own auth (password resets, sessions and rate limits rebuilt by hand, and no path to Supabase's SMS hook later); storing profiles in Supabase (two databases describing one person — the old `profiles` design, whose policy also let a driver mark themselves verified); trusting the phone in the signup form (anyone could claim another person's number); an open signup before SMS works (anyone could register a friend's number first).
 
 **Known limits:** One login per browser — use a second browser or a private window to be two roles at once. The Supabase free plan pauses after a week of low activity. With the simulator on, anyone who can reach the server can act as any phone through the simulator, so it is for a closed test group only.
+
+## D-049 · 2026-11-14 · The five Ghanaian languages go live, machine-translated by the owner's Space
+
+**Decision:** At the owner's direct request, Twi, Ewe, Dagbani, Hausa and Kusaal are live on every farmer- and driver-facing surface — SMS, USSD menus and voice prompts — through the existing `I18N_DRAFT_LOCALES_LIVE=true` switch (now the value in `.env.example`, `fly.toml` and `render.yaml`). Every catalog was completed by `npm run i18n:draft` with the owner's Tɛkyerɛma language Space: each phrase a catalog lacked was translated by the Space, and the drafts already there (Twi's 148 from Khaya and Gemma, the earlier Ewe and Dagbani subsets) were kept. `npm run i18n:draft -- --all` redrafts everything with the Space if one engine throughout is preferred. The review gate itself is unchanged: `_reviewed` stays empty, nothing in the product claims a native speaker checked these texts, and setting the switch to `false` puts every farmer surface back on English in one step. The code default stays `false` so a bare checkout is English-only; the test suite pins it.
+
+**Why:** The owner wants farmers to meet F2M in their own language now, while the language models keep improving, rather than wait for native review. The language layer is the owner's own work and the owner's call.
+
+**What keeps it safe:** Numbers never pass through translation. Every `{amount}`, `{kg}`, `{price}` and lot code is masked before translating and restored after, and a translation that loses or duplicates one is dropped — that key falls back to English. So a price or a quantity cannot be mistranslated, only the words around it. With `TTS_PROVIDER=space`, voice prompts are spoken in the farmer's language by the Space. A voice never reads English text in a local voice (`speechLocale`).
+
+**Known risk:** The Space's own round trip of a marketplace sentence came back noticeably wrong for Kusaal and Dagbani (D-045 measurements), so some wording will read oddly to native speakers. That is the reason the gate exists and the reason review is still on the roadmap (Phase 5).
+
+**Rejected:** Marking the catalogs `_reviewed` (a false claim of native review).
+
+## D-050 · 2026-11-14 · The web interface translates too, from the same catalogs
+
+**Decision:** Every phrase a person reads on the web portal is written as `t('web.<page>.<name>', 'English text')` (`apps/web/src/lib/i18n.tsx`). The English in the code is the source of truth and the fallback. `npm run i18n:extract` collects those phrases into `en.json` under `web.*` keys, and `npm run i18n:draft` translates them with the Space, next to the SMS, USSD and voice texts. The server serves one language's phrases at `GET /api/i18n/web/<code>` (public, because the login page needs it), each phrase falling back to English on its own. The choice is made with the language picker on the farmer and driver dashboards (which also sets SMS, USSD and calls) or the language row in the header, and the browser remembers it.
+
+**Why:** The owner switched language on a phone and still saw English: only the phone channels were translated. Farmers and drivers on smartphones should read the same language they hear on a call.
+
+**Gate:** The web is gated exactly like `t()` (D-040, D-049). A locale that is not live is served entirely in English, so `I18N_DRAFT_LOCALES_LIVE=false` turns every surface, web included, back to English in one step.
+
+**Left in English on purpose:** names of people and businesses, lot codes, phone numbers, `GHS` amounts and the brand "Farm to Market". Values go in as `{placeholders}` and are never translated.
+
+**Rejected:** a separate web i18n library and catalog (two places to translate the same words); translating in the browser at runtime (slow on a cheap phone, and it would send farmers' screens to a translation service).
+
+## D-051 · 2026-11-14 · Phase 1: every offer is a negotiation; buyer requests are public
+
+**Decision:** An offer is no longer a contract that the engine creates at the buyer's price, which the farmer can only take or leave. It is an **offer thread** (`offers`, with every move in `offer_events`) between one buyer and one farmer about one listing. It holds the current proposal (whole units and a price per unit) and whose turn it is. Whoever has the turn can accept, counter or reject; the side that is waiting can withdraw. A proposal lapses on the crop's offer clock, which restarts with each counter, and the farmer gets one reminder after three hours. A thread can start in three ways: a buyer bids on a listing; a farmer answers a buyer request, which every farmer can see on the web and under USSD "8. Buyer requests"; or the engine turns a request that fits a listing into a bid at the request's price for the listing's declared grade. The design is in `docs/PHASE1.md`.
+
+**Accepting** is one transaction. It checks the listing still has the units, then creates the order as a contract **already in ACCEPTED**, with `agreedTotal = units × price per unit` (exact pesewas). It links that contract to a demand and a match like every contract before, so payment, pickup, grading, transport, settlement and the trace are unchanged. It also takes the units off the listing, and the payment hold starts as before. A listing with units left stays on the market. An open bid does not reserve a listing: the first acceptance wins, and a later one that no longer fits is refused with "Only N … left". A request's kg are held while a farmer's offer on it is open, so the engine never over-buys.
+
+**Money until Phase 3:** an agreed deal pays its agreed total whatever the grade. REJECT still refunds the buyer in full. The per-grade price schedule now only sets the engine's opening bid.
+
+**Listings** gain an optional asking price per unit ("let buyers bid" if empty), harvest date, community and landmark. A farmer can change price and quantity, mark a listing sold elsewhere, or remove it, on the web and by USSD. Listings lapse after `LISTING_TTL_DAYS` (30), with a warning SMS two days before. Changing a listing renews it. Removing, selling or lapsing ends the open threads, and their buyers are told.
+
+**Phones:** USSD has full parity: offers with accept, counter (price typed on the keypad) and reject, the buyer-request list with "offer my produce", listing management, and a price step in the sell flow. The voice call reads the proposal and takes 1 to accept and 2 to reject. Counter-offers by voice are Phase 2.
+
+**Kept for the web's move:** the older contract routes and `contractId` on the engine's preview and simulate endpoints still work. Contracts in OFFERED created before this change can still be accepted or declined.
+
+**Rejected:** reserving a listing for the first bidder (one slow buyer would block every other); counter-offers in kg (farmers trade in bags, crates and bunches); a separate "order" table beside contracts (everything after acceptance already runs on contracts); keeping per-grade refunds for an agreed price (two prices for one deal).

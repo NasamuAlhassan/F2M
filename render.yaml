@@ -56,8 +56,8 @@ services:
         value: mock
       - key: TTS_PROVIDER
         value: mock
-      - key: I18N_DRAFT_LOCALES_LIVE
-        value: 'false'
+      - key: I18N_DRAFT_LOCALES_LIVE # the five languages are live (D-049)
+        value: 'true'
       # Secrets for the providers you do flip on — set by hand in the
       # Render dashboard (Environment tab), never committed here.
       - key: HF_TOKEN

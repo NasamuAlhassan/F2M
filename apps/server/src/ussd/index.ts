@@ -13,12 +13,13 @@ import {
 } from './screens/driver';
 import { home } from './screens/home';
 import { langSettings, langWelcome } from './screens/language';
-import { lotDetail, lotsList } from './screens/lots';
-import { offerDetail, offersList } from './screens/offers';
+import { lotDetail, lotEditPrice, lotEditQty, lotSoldConfirm, lotsList, lotWithdrawConfirm } from './screens/lots';
+import { offerCounterConfirm, offerCounterPrice, offerCounterUnits, offerDetail, offersList } from './screens/offers';
+import { requestConfirm, requestDetail, requestPickLot, requestPrice, requestsList, requestUnits } from './screens/requests';
 import { paymentsScreen } from './screens/payments';
 import { pricesCommodity, pricesShow } from './screens/prices';
 import { regConfirm, regDistrict, regName, regRegion, welcome } from './screens/register';
-import { sellBand, sellCommodity, sellConfirm, sellQty, sellReady, sellUnit } from './screens/sell';
+import { sellBand, sellCommodity, sellConfirm, sellPrice, sellQty, sellReady, sellUnit } from './screens/sell';
 
 registerScreens(
   langWelcome,
@@ -34,11 +35,25 @@ registerScreens(
   sellQty,
   sellBand,
   sellReady,
+  sellPrice,
   sellConfirm,
   lotsList,
   lotDetail,
+  lotWithdrawConfirm,
+  lotEditPrice,
+  lotEditQty,
+  lotSoldConfirm,
   offersList,
   offerDetail,
+  offerCounterPrice,
+  offerCounterUnits,
+  offerCounterConfirm,
+  requestsList,
+  requestDetail,
+  requestPickLot,
+  requestUnits,
+  requestPrice,
+  requestConfirm,
   paymentsScreen,
   pricesCommodity,
   pricesShow,

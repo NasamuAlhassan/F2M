@@ -43,6 +43,8 @@ const envSchema = z
     NOTIFY_PROVIDER: z.enum(['mock', 'at']).default('mock'),
     USSD_SHORTCODE: z.string().default('*384*7247#'),
     DISPATCH_OFFER_TTL_MINUTES: z.coerce.number().default(10),
+    // A listing lapses this many days after it was listed or last changed (Phase 1).
+    LISTING_TTL_DAYS: z.coerce.number().default(30),
 
     VOICE_PROVIDER: z.enum(['mock', 'at']).default('mock'),
     AT_VOICE_NUMBER: z.string().optional(),

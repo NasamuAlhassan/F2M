@@ -47,7 +47,7 @@ describe('voice listing pipeline (M29, D-038)', () => {
       declaredBand: 'C',
     });
     expect(parseListingText('some corn, three bags')).toMatchObject({ commodityCode: 'MAIZE', unitQty: 3 }); // synonym
-    expect(parseListingText('I have plenty cassava to sell')).toBeNull(); // crop we don't carry
+    expect(parseListingText('I have plenty cocoyam to sell')).toBeNull(); // crop we don't carry
     expect(parseListingText('maize, no amount said')).toBeNull(); // no quantity
   });
 

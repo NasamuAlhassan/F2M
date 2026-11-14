@@ -3,26 +3,25 @@ import { db } from '../db/client';
 import {
   contracts,
   demands,
-  farmers,
   lots,
   matches,
+  offers,
+  units,
   type Contract,
   type Demand,
   type Lot,
   type Match,
+  type Offer,
 } from '../db/schema';
-import { config } from '../config';
 import { t } from '../i18n';
 import { transitionContract } from '../state/contractMachine';
 import { queueBuyerNotification } from './buyerNotifications';
 import { DomainError, notFound } from './errors';
 import { getFarmerById } from './farmers';
 import { haversineKm, resolvePoint } from './geo';
-import { queueSms } from './notifications';
 import { getCommodityById } from './registries';
-import { appendLotEvent } from './trace';
+import { engineBid } from './offers';
 import { bestBand, formatGhs, priceTermsSchema, type ClockConfig, type GradeBand, type ScoreBreakdown } from './types';
-import { queueVoiceCall } from './voiceCalls';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BAND_RANK: Record<string, number> = { A: 3, B: 2, C: 1 };
@@ -83,9 +82,9 @@ export function clockCompatible(lot: Pick<Lot, 'readyDate'>, demand: Pick<Demand
   return lot.readyDate >= demand.windowStart - DAY_MS && lot.readyDate <= demand.windowEnd;
 }
 
+/** What one matching pass produced: offer threads waiting on the farmer (Phase 1). */
 export interface OfferResult {
-  match: Match;
-  contract: Contract;
+  offer: Offer;
 }
 
 /**
@@ -121,22 +120,34 @@ function matchDemand(demand: Demand, onlyLotId?: string): OfferResult[] {
   if (onlyLotId) candidates = candidates.filter((l) => l.id === onlyLotId);
   candidates = candidates.filter((l) => clockCompatible(l, demand, commodity.clock));
 
-  // A lot gets ONE shot per demand: live offers block re-offering the same kg,
-  // and declined/expired offers stay blocked — the farmer said no or went quiet,
-  // so freed quantity flows to other lots instead of looping the same offer.
-  const existing = db
-    .select({ lotId: matches.lotId })
-    .from(matches)
-    .where(eq(matches.demandId, demand.id))
-    .all();
-  const blockedLots = new Set(existing.map((m) => m.lotId));
-  candidates = candidates.filter((l) => !blockedLots.has(l.id));
+  // A lot gets ONE shot per request (D-016): an offer thread that ever existed
+  // for this lot+request — open, refused or lapsed — blocks another, so freed
+  // quantity flows to other lots instead of looping the same offer. A buyer's
+  // own open thread on a lot (a direct bid) also blocks a second one.
+  const tried = new Set(
+    db
+      .select({ lotId: offers.lotId })
+      .from(offers)
+      .where(eq(offers.demandId, demand.id))
+      .all()
+      .map((o) => o.lotId),
+  );
+  for (const m of db.select({ lotId: matches.lotId }).from(matches).where(eq(matches.demandId, demand.id)).all()) tried.add(m.lotId);
+  const buyerOpen = new Set(
+    db
+      .select({ lotId: offers.lotId })
+      .from(offers)
+      .where(and(eq(offers.buyerId, demand.buyerId), eq(offers.status, 'open')))
+      .all()
+      .map((o) => o.lotId),
+  );
+  candidates = candidates.filter((l) => !tried.has(l.id) && !buyerOpen.has(l.id));
 
   const demandPoint = resolvePoint(demand.gpsLat, demand.gpsLng, demand.regionCode);
   const scored = candidates
     .map((lot) => {
       const lotPoint = resolvePoint(lot.gpsLat, lot.gpsLng, lot.regionCode);
-      const { score, breakdown } = scoreLotForDemand({
+      const { score } = scoreLotForDemand({
         lot,
         demand,
         clockType: commodity.clockType,
@@ -144,106 +155,27 @@ function matchDemand(demand: Demand, onlyLotId?: string): OfferResult[] {
         distanceKm: haversineKm(lotPoint, demandPoint),
         stats: farmerStats(lot.farmerId),
       });
-      return { lot, score, breakdown };
+      return { lot, score };
     })
     .sort((a, b) => b.score - a.score);
 
   const priceTerms = priceTermsSchema.parse(JSON.parse(demand.priceTerms));
-  const holdBand = bestBand(priceTerms);
   const results: OfferResult[] = [];
-  let remaining = demand.remainingKg;
+  let remainingKg = demand.remainingKg;
 
-  for (const { lot, score, breakdown } of scored) {
-    if (remaining <= 0) break;
-    const allocatedKg = Math.min(lot.remainingKg, remaining);
-    remaining -= allocatedKg;
-
-    const offer = db.transaction((tx) => {
-      const match = tx
-        .insert(matches)
-        .values({
-          demandId: demand.id,
-          lotId: lot.id,
-          allocatedKg,
-          score,
-          scoreBreakdown: JSON.stringify(breakdown),
-          status: 'offered',
-          offeredAt: now,
-          expiresAt: now + commodity.clock.offerTtlMinutes * 60 * 1000,
-        })
-        .returning()
-        .get();
-
-      const contract = tx
-        .insert(contracts)
-        .values({
-          matchId: match.id,
-          demandId: demand.id,
-          lotId: lot.id,
-          buyerId: demand.buyerId,
-          farmerId: lot.farmerId,
-          commodityId: demand.commodityId,
-          quantityKg: allocatedKg,
-          priceTerms: demand.priceTerms, // frozen at offer time (D-015)
-          holdAmount: Math.round(allocatedKg * (priceTerms[holdBand] ?? 0)),
-          state: 'OFFERED',
-        })
-        .returning()
-        .get();
-
-      // Reserve quantities on both sides so the same kg can't be offered twice.
-      tx.update(lots)
-        .set({ remainingKg: lot.remainingKg - allocatedKg, status: 'matched' })
-        .where(eq(lots.id, lot.id))
-        .run();
-      const demandRemaining = Math.max(0, demand.remainingKg - allocatedKg);
-      tx.update(demands)
-        .set({ remainingKg: demandRemaining, status: demandRemaining <= 0 ? 'fulfilled' : 'partially_matched' })
-        .where(eq(demands.id, demand.id))
-        .run();
-      demand.remainingKg = demandRemaining;
-
-      appendLotEvent(tx, {
-        lotId: lot.id,
-        type: 'MATCHED',
-        actorType: 'system',
-        payload: { demandId: demand.id, score: Math.round(score * 1000) / 1000, allocatedKg },
-      });
-      appendLotEvent(tx, {
-        lotId: lot.id,
-        type: 'CONTRACT_OFFERED',
-        actorType: 'system',
-        payload: {
-          contractId: contract.id,
-          allocatedKg,
-          priceTerms,
-          expiresAt: match.expiresAt,
-        },
-      });
-      return { match, contract };
-    });
-    results.push(offer);
-
-    // "We will text you when a buyer sends an offer" — keep that promise.
-    const farmer = getFarmerById(lot.farmerId);
-    if (farmer) {
-      queueSms({
-        phone: farmer.phone,
-        locale: farmer.locale,
-        templateKey: 'sms.newOffer',
-        params: {
-          kg: allocatedKg,
-          commodity: t(farmer.locale, commodity.nameKey),
-          price: formatGhs(priceTerms[holdBand] ?? 0),
-          code: config.USSD_SHORTCODE,
-        },
-        contractId: offer.contract.id,
-        lotId: lot.id,
-      });
-      // The accessibility layer: she can also HEAR the offer and press 1 —
-      // no literacy required. SMS above is the unconditional fallback.
-      queueVoiceCall({ phone: farmer.phone, locale: farmer.locale, flow: 'offer', contractId: offer.contract.id });
-    }
+  for (const { lot } of scored) {
+    if (remainingKg <= 0) break;
+    const unit = db.select().from(units).where(eq(units.id, lot.unitId)).get();
+    if (!unit || unit.kgPerUnit <= 0) continue;
+    // Whole units only — a farmer is offered bags, not 8.4 bags.
+    const wholeUnits = Math.floor(Math.min(lot.remainingKg, remainingKg) / unit.kgPerUnit + 1e-9);
+    if (wholeUnits < 1) continue;
+    // The request's price for the grade the farmer declared, per unit.
+    const perKg = priceTerms[lot.declaredBand as GradeBand] ?? priceTerms[demand.minBand as GradeBand] ?? 0;
+    if (perKg <= 0) continue;
+    const offer = engineBid({ demandId: demand.id, lot, units: wholeUnits, pricePerUnit: Math.round(perKg * unit.kgPerUnit) });
+    remainingKg -= wholeUnits * unit.kgPerUnit;
+    results.push({ offer });
   }
   return results;
 }

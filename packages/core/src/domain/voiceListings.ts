@@ -30,8 +30,13 @@ const COMMODITY_SYNONYMS: Record<string, string> = {
   peanuts: 'GROUNDNUT',
   chilli: 'PEPPER',
   chili: 'PEPPER',
-  // Never map crops we don't carry (cassava etc.) — a wrong listing is worse
-  // than the "we couldn't understand" SMS.
+  soya: 'SOYBEAN',
+  soy: 'SOYBEAN',
+  soybean: 'SOYBEAN',
+  // Not "beans" for cowpea, though that is what most Ghanaians call it: it is
+  // also in "soya beans", and two crops in one sentence is refused. Never map
+  // crops we don't carry (cocoyam, okra…) — a wrong listing is worse than the
+  // "we couldn't understand" SMS.
 };
 
 const NUMBER_WORDS: Record<string, number> = {

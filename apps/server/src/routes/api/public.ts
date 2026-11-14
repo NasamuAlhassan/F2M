@@ -10,6 +10,7 @@ import {
   isLocaleReviewed,
   schema,
   t,
+  webMessages,
 } from '@ftm/core';
 import { desc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -40,6 +41,16 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
       live: isLocaleLive(l.code),
     })),
   }));
+
+  // The web interface's phrases in one language (D-050), English where a
+  // phrase isn't translated yet. Public: the login page needs it too.
+  app.get('/i18n/web/:locale', async (req, reply) => {
+    const { locale } = req.params as { locale: string };
+    const known = AVAILABLE_LOCALES.some((l) => l.code === locale);
+    const code = known ? locale : 'en';
+    reply.header('Cache-Control', 'public, max-age=300');
+    return { locale: code, live: isLocaleLive(code), messages: webMessages(code) };
+  });
 
   app.get('/public/trace/:lotId', async (req) => {
     const { lotId } = req.params as { lotId: string };

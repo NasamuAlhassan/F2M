@@ -9,6 +9,7 @@ import {
   getFarmerById,
   getLot,
   getMatch,
+  getRegion,
   getTrace,
   listContractsForBuyer,
   listGradingsForContract,
@@ -60,7 +61,14 @@ export async function contractRoutes(app: FastifyInstance): Promise<void> {
       match: { score: match.score, expiresAt: match.expiresAt, breakdown: JSON.parse(match.scoreBreakdown) },
       lot: { id: lot.id, lotCode: lot.lotCode, quantityKg: lot.quantityKg, declaredBand: lot.declaredBand, status: lot.status },
       farmer: farmer
-        ? { id: farmer.id, name: farmer.name, phone: farmer.phone, regionCode: farmer.regionCode, district: farmer.district }
+        ? {
+            id: farmer.id,
+            name: farmer.name,
+            phone: farmer.phone,
+            regionCode: farmer.regionCode,
+            regionName: t('en', getRegion(farmer.regionCode).nameKey),
+            district: farmer.district,
+          }
         : null,
       commodity: { code: commodity.code, name: t('en', commodity.nameKey) },
       payments: listPaymentsForContract(contract.id),
