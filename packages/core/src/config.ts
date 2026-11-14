@@ -12,6 +12,9 @@ try {
   // No .env is fine — mock mode needs zero keys (D-013).
 }
 
+/** A blank line in .env (`NAME=`) means "not set", not "set to nothing". */
+const blankIsUnset = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === '' ? undefined : v), schema);
+
 const envSchema = z
   .object({
     PORT: z.coerce.number().int().default(3000),
@@ -21,6 +24,12 @@ const envSchema = z
     DATABASE_PATH: z.string().default('data/ftm.db'),
     STORAGE_DIR: z.string().default('apps/server/storage'),
     DISPUTE_WINDOW_MINUTES: z.coerce.number().default(10),
+    // Phase 3 settlement (the owner's rules, docs/PHASE3.md): the share of the
+    // agreed total paid to the farmer at pickup, how long a buyer has to confirm
+    // or report a problem, and how long a farmer has to answer a claim.
+    FARMER_ADVANCE_PERCENT: z.coerce.number().min(0).max(100).default(30),
+    RECEIPT_WINDOW_HOURS: z.coerce.number().positive().default(24),
+    CLAIM_ANSWER_HOURS: z.coerce.number().positive().default(24),
     PUBLIC_BASE_URL: z.string().default('http://localhost:3000'),
 
     GRADING_PROVIDER: z.enum(['mock', 'hf']).default('mock'),
@@ -45,6 +54,35 @@ const envSchema = z
     DISPATCH_OFFER_TTL_MINUTES: z.coerce.number().default(10),
     // A listing lapses this many days after it was listed or last changed (Phase 1).
     LISTING_TTL_DAYS: z.coerce.number().default(30),
+
+    // Live prices (D-053). F2M's own deals and asking prices feed the price engine
+    // by themselves; these bring in outside data too. PRICE_FEED_URL is polled for
+    // the JSON shape in docs/PRICES.md; PRICE_INGEST_TOKEN lets a partner POST that
+    // shape to /api/feeds/prices (off until set); PRICE_FEED_HDX loads WFP's
+    // 2006-2023 Ghana history once, for seasonality.
+    PRICE_FEED_URL: blankIsUnset(z.string().url().optional()),
+    PRICE_FEED_TOKEN: blankIsUnset(z.string().optional()),
+    PRICE_FEED_INTERVAL_MINUTES: z.coerce.number().default(360),
+    PRICE_INGEST_TOKEN: blankIsUnset(z.string().min(16).optional()),
+    PRICE_FEED_HDX: z.enum(['true', 'false']).default('false'),
+
+    // Smart alerts (D-055): how many people one new listing or request may reach,
+    // how many alert SMS one farmer may get in a day, and how far a crop's price
+    // must move in two weeks before sellers and buyers are told.
+    ALERT_MAX_RECIPIENTS: z.coerce.number().int().min(0).default(8),
+    ALERT_SMS_PER_FARMER_PER_DAY: z.coerce.number().int().min(0).default(2),
+    ALERT_PRICE_MOVE_PCT: z.coerce.number().min(1).default(10),
+
+    // The language-model assist (D-056). OFF by default: with 'off' every feature runs on
+    // its own rules, exactly as before. 'anthropic' sends short, scrubbed pieces of text
+    // (a farmer's listing sentence, a buyer's typed request) to Anthropic's API, so the
+    // owner must switch it on knowingly (D-047 keeps personal data in-house).
+    LLM_PROVIDER: z.enum(['off', 'anthropic']).default('off'),
+    ANTHROPIC_API_KEY: blankIsUnset(z.string().optional()),
+    LLM_MODEL: z.string().default('claude-opus-5-5'),
+    // Low effort keeps a call quick enough for a live phone call; the answer is only ever a suggestion.
+    LLM_EFFORT: z.enum(['low', 'medium', 'high']).default('low'),
+    LLM_TIMEOUT_MS: z.coerce.number().default(8000),
 
     VOICE_PROVIDER: z.enum(['mock', 'at']).default('mock'),
     AT_VOICE_NUMBER: z.string().optional(),
@@ -82,6 +120,9 @@ const envSchema = z
     // Fail at boot with the exact missing keys for the providers actually selected.
     if (env.GRADING_PROVIDER === 'hf' && !env.HF_TOKEN) {
       ctx.addIssue({ code: 'custom', message: 'GRADING_PROVIDER=hf requires HF_TOKEN' });
+    }
+    if (env.LLM_PROVIDER === 'anthropic' && !env.ANTHROPIC_API_KEY) {
+      ctx.addIssue({ code: 'custom', message: 'LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY' });
     }
     if (env.NOTIFY_PROVIDER === 'at' && !env.AT_API_KEY) {
       ctx.addIssue({ code: 'custom', message: 'NOTIFY_PROVIDER=at requires AT_API_KEY' });

@@ -10,6 +10,7 @@ import { getContract } from './contracts';
 import { createDemand, getDemand } from './demands';
 import { registerFarmer } from './farmers';
 import { agreeGrading, confirmPickup, disputeGrading, runGrading } from './gradingFlow';
+import { confirmReceipt } from './settlement';
 import { allJournalsBalanced, contractEscrowBalance } from './ledger';
 import { getLot, registerLot } from './lots';
 import { expireDemands } from './matching';
@@ -133,6 +134,9 @@ describe('lifecycle sweeps (M8)', () => {
     disputeGrading(order.id, farmer.id, 'fresh this morning');
     await runGrading(order.id); // re-grade → B, final
     await agreeGrading(order.id, farmer.id);
+    await pollPaymentsOnce();
+    // Phase 3: the advance is paid; the buyer's receipt settles the rest.
+    await confirmReceipt(order.id, { type: 'buyer', id: buyer.id });
     await pollPaymentsOnce();
 
     expect(getContract(order.id).state).toBe('SETTLED');

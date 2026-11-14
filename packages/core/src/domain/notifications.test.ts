@@ -10,6 +10,7 @@ import { acceptFor, openOfferFor, testBuyer } from '../testing/fixtures';
 import { createDemand } from './demands';
 import { registerFarmer } from './farmers';
 import { agreeGrading, confirmPickup, runGrading } from './gradingFlow';
+import { confirmReceipt } from './settlement';
 import { getLot, registerLot } from './lots';
 import { listNotificationsForPhone, queueSms, sendPendingNotifications } from './notifications';
 import { pollPaymentsOnce } from './paymentFlow';
@@ -108,14 +109,19 @@ describe('SMS outbox (M11)', () => {
     await runGrading(order.id);
     inbox = listNotificationsForPhone(farmer.phone);
     expect(inbox[0]!.templateKey).toBe('sms.graded');
-    expect(inbox[0]!.message).toContain('graded Grade B, pays GHS 2000.00');
+    // Phase 3: what comes now and what comes on receipt, in one message.
+    expect(inbox[0]!.message).toContain('graded Grade B. GHS 600.00 is on its way to your MoMo now, and GHS 1400.00 when the buyer receives it');
     expect(inbox[0]!.message).toContain('Reason: clean intact tubers');
 
     await agreeGrading(order.id, farmer.id);
     await pollPaymentsOnce();
-    inbox = listNotificationsForPhone(farmer.phone);
-    expect(inbox[0]!.templateKey).toBe('sms.paid');
-    expect(inbox[0]!.message).toContain('GHS 2000.00 has been sent to your MoMo');
+    const paid = () => listNotificationsForPhone(farmer.phone, 50).filter((n) => n.templateKey === 'sms.paid').map((n) => n.message);
+    expect(paid().some((m) => m.includes('GHS 600.00 has been sent to your MoMo'))).toBe(true);
+
+    await confirmReceipt(order.id, { type: 'buyer', id: buyer.id });
+    await pollPaymentsOnce();
+    expect(listNotificationsForPhone(farmer.phone, 50).some((n) => n.templateKey === 'sms.received' && n.message.includes('GHS 1400.00'))).toBe(true);
+    expect(paid().some((m) => m.includes('GHS 1400.00 has been sent to your MoMo'))).toBe(true);
   });
 
   it('texts the rejection honestly', async () => {

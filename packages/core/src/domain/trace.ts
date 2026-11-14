@@ -1,6 +1,7 @@
 import { eq, max } from 'drizzle-orm';
 import { db, type Db } from '../db/client';
 import { lotEvents, type LotEvent, type LotEventType } from '../db/schema';
+import { publishLive } from './events';
 
 // Accept either the root db or a transaction handle — events must append in the
 // SAME transaction as the state change they describe.
@@ -30,6 +31,8 @@ export function appendLotEvent(tx: DbLike, ev: LotEventInput): void {
       payload: ev.payload ? JSON.stringify(ev.payload) : null,
     })
     .run();
+  // Every change to a listing changes what buyers see (D-054). Only the id travels.
+  publishLive({ topic: 'market', audience: ['all'], ref: { lotId: ev.lotId } });
 }
 
 export interface TraceEvent extends Omit<LotEvent, 'payload'> {

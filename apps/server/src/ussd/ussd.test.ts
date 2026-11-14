@@ -1,6 +1,7 @@
 ﻿import {
   addPhoto,
   createDemand,
+  confirmReceipt,
   getContract,
   getDemand,
   getFarmerByPhone,
@@ -200,20 +201,28 @@ describe('USSD flows (M2)', () => {
     });
     await runGrading(contract.id);
 
-    // The farmer sees the grade, the payout, and the reason — and agrees.
+    // The farmer sees the grade, the money in two parts (Phase 3), and the reason — and agrees.
     const [, , gradeScreen] = await dial(PHONE, ['3', '1']);
-    expect(gradeScreen).toContain('Graded Grade C. Pays GHS 2200.00.');
+    expect(gradeScreen).toContain('Graded Grade C. GHS 660.00 paid now, GHS 1540.00 when the buyer receives it.');
     expect(gradeScreen).toContain('Reason: some kernels still damp');
-    expect(gradeScreen).toContain('1. Agree - get paid now');
+    expect(gradeScreen).toContain('1. Agree with the grade');
     const [, , , agreed] = await dial(PHONE, ['3', '1', '1']);
-    expect(agreed).toContain('GHS 2200.00 is on its way to your MoMo');
+    expect(agreed).toContain('Your advance of GHS 660.00 is on its way to your MoMo');
 
+    await pollPaymentsOnce();
+    expect(getContract(contract.id).state).toBe('DELIVERED');
+    const [, , waiting] = await dial(PHONE, ['3', '1']);
+    expect(waiting).toContain('Waiting for the buyer to confirm');
+    // The buyer receives it: the balance goes out and the order settles.
+    await confirmReceipt(contract.id, { type: 'buyer', id: contract.buyerId });
     await pollPaymentsOnce();
     expect(getContract(contract.id).state).toBe('SETTLED');
 
     // And the payments screen now shows it.
     const [, payScreen] = await dial(PHONE, ['4']);
-    expect(payScreen).toContain('GHS 2200.00 - Paid');
+    // Two payouts since Phase 3: the advance at pickup and the balance on receipt.
+    expect(payScreen).toContain('GHS 1540.00 - Paid');
+    expect(payScreen).toContain('GHS 660.00 - Paid');
   });
 });
 

@@ -4,7 +4,7 @@
 
 **A national marketplace connecting Ghanaian farmers to verified buyers —<br/>built so a farmer with a basic phone can use every part of it.**
 
-<img src="https://img.shields.io/badge/tests-270%20passing-14322b?style=flat-square&labelColor=efebdd" alt="270 tests" />
+<img src="https://img.shields.io/badge/tests-402%20passing-14322b?style=flat-square&labelColor=efebdd" alt="402 tests" />
 <img src="https://img.shields.io/badge/demo-offline%2C%20exit%200-a87b23?style=flat-square&labelColor=efebdd" alt="offline demo" />
 <img src="https://img.shields.io/badge/languages-6%20locales-14322b?style=flat-square&labelColor=efebdd" alt="six locales" />
 <img src="https://img.shields.io/badge/design-The%20Trade%20Instrument-9e3b2c?style=flat-square&labelColor=efebdd" alt="The Trade Instrument" />
@@ -78,7 +78,7 @@ npm install
 npm run db:reset        # migrate + seed the reference data (no people — they sign up)
 npm run demo            # one lot end to end, fully offline: voice accept + transport leg, exit 0
 npm run dev             # server :3000 + portal :5173
-npm test                # 270 tests: scorers, state machines, ledger invariants, accounts, negotiation, wire walks
+npm test                # 402 tests: scorers, state machines, ledger invariants, accounts, negotiation, wire walks
 ```
 
 Then follow [`DEMO.md`](DEMO.md) for the three-tab demo: the USSD tester and the ringing IVR tester (`localhost:3000/ussd-tester.html`, `/ivr-tester.html`) as the farmer/driver phones, the portal (`localhost:5173`) as the buyer.
@@ -100,7 +100,7 @@ Catalog drafting: `npm run i18n:draft` drafts every language with the Space (key
 
 ## The record
 
-Every architectural choice, with its reasons and its rejected alternatives: [`docs/DECISIONS.md`](docs/DECISIONS.md) (D-001 → D-052). Everything built, in order, with verified counts: [`docs/BUILDLOG.md`](docs/BUILDLOG.md). Vision, MVP criteria, and live status: [`docs/PROJECT.md`](docs/PROJECT.md).
+Every architectural choice, with its reasons and its rejected alternatives: [`docs/DECISIONS.md`](docs/DECISIONS.md) (D-001 → D-057). Everything built, in order, with verified counts: [`docs/BUILDLOG.md`](docs/BUILDLOG.md). Vision, MVP criteria, and live status: [`docs/PROJECT.md`](docs/PROJECT.md).
 
 <div align="center">
 <sub>Built in Ghana, for the farmer with the smallest phone. 🇬🇭</sub>

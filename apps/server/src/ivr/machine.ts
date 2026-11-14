@@ -1,4 +1,5 @@
 import {
+  assistListingDraft,
   finishVoiceCall,
   getActiveCallForPhone,
   getAsrProvider,
@@ -10,6 +11,7 @@ import {
   setCallNode,
   setCallState,
   type I18nText,
+  type ListingAssist,
   type VoiceCall,
 } from '@ftm/core';
 import { holdResponse, promptResponse, sayResponse, type IvrInput } from './xml';
@@ -35,6 +37,8 @@ export interface Heard {
   transcript: string;
   english: string;
   audioRef: string | null;
+  /** The language-model assist's reading of a listing sentence (D-056): validated gap-fillers only, absent when it is off. */
+  assist?: ListingAssist | null;
 }
 
 export type IvrResult =
@@ -115,7 +119,10 @@ async function within<T>(p: Promise<T>, ms: number): Promise<{ done: true; value
   return result;
 }
 
-async function hear(call: VoiceCall, req: VoiceAnswerRequest): Promise<Heard | null> {
+/** The one step where a farmer says the whole listing in a breath — the only answer the language-model assist reads (D-056). */
+export const LISTING_INTRO_NODE = 'list_intro';
+
+async function hear(call: VoiceCall, req: VoiceAnswerRequest, nodeKey: string): Promise<Heard | null> {
   try {
     const transcript = (
       await getAsrProvider().transcribe({ audioRef: req.recordingUrl ?? null, hint: req.transcript ?? null, locale: call.locale })
@@ -123,7 +130,13 @@ async function hear(call: VoiceCall, req: VoiceAnswerRequest): Promise<Heard | n
     if (!transcript) return null;
     const english =
       call.locale === 'en' ? transcript : (await getMtProvider().translate({ text: transcript, from: call.locale, to: 'en' })).trim();
-    return { transcript, english, audioRef: req.recordingUrl ?? null };
+    // Only the first, whole-listing answer — whether the call is a callback ('listing') or came in
+    // through the line's menu ('line') — and only while nothing has been understood yet. Every later
+    // answer (crop, quantity, price, community) is short and goes to the rules alone. Done here in the
+    // background, where the call is already waiting on the hearing.
+    const assist =
+      nodeKey === LISTING_INTRO_NODE && !getCallState<{ draft?: unknown }>(call).draft ? await assistListingDraft(english).catch(() => null) : null;
+    return { transcript, english, audioRef: req.recordingUrl ?? null, assist };
   } catch {
     return null; // an unheard answer is asked again, never guessed
   }
@@ -214,7 +227,7 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
   if (req.recordingUrl || req.transcript !== undefined) {
     ctx.state._misses = 0;
     if (!node.onSpeech) return prompt(node);
-    hearings.set(call.id, { node: node.key, heard: hear(call, req), holds: 0 });
+    hearings.set(call.id, { node: node.key, heard: hear(call, req, node.key), holds: 0 });
     return awaitHearing();
   }
 

@@ -7,9 +7,13 @@
  *   npm run demo                  # offline: mock grading/payments/voice
  *   GRADING_PROVIDER=hf ...       # same script against real providers
  *
+ * Phase 3: the farmer's advance goes out at grading, the driver reports
+ * "arrived" on USSD, the buyer confirms receipt over REST, and that pays the
+ * driver and the farmer's balance.
+ *
  * Exits 0 only if the contract reaches SETTLED **and** the delivery job
  * reaches PAID with balanced books, both escrows at zero, and the farmer paid
- * exactly the agreed total.
+ * exactly the agreed total: one advance line plus one balance line.
  */
 import crypto from 'node:crypto';
 import { inArray, and, eq } from 'drizzle-orm';
@@ -18,6 +22,7 @@ import {
   accountBalance,
   ACCOUNTS,
   addPhoto,
+  advanceFor,
   allJournalsBalanced,
   config,
   contractEscrowBalance,
@@ -366,8 +371,12 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
     continue;
   }
 
-  // ---- 9. RELEASE — farmer agrees on USSD; buyer confirms delivery ----
-  step('Pay (release) — she sees the grade AND the reason, and agrees; buyer confirms delivery');
+  // ---- 9. ADVANCE — part of her money at pickup (Phase 3) ----
+  const advance = advanceFor(getContract(contract.id));
+  step(`Pay (advance) — ${config.FARMER_ADVANCE_PERCENT}% of the agreed total goes to her MoMo at grading`);
+  await waitFor('the advance landed', () => getContract(contract.id).advanceAmount === advance);
+  detail(`advance ${formatGhs(advance)} landed · still held for receipt: ${formatGhs(contractEscrowBalance(contract.id))}`);
+
   const agree = ussdSession(phone);
   await agree();
   await agree('3');
@@ -375,12 +384,43 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   for (const line of gradeScreen.replace('CON ', '').split('\n').slice(1, 3)) detail(line);
   const agreed = await agree('1');
   if (!agreed.startsWith('END Thank you')) fail(`agree failed: ${agreed}`);
+  detail(agreed.replace('END ', ''));
 
-  await apiJson('POST', `/api/jobs/${job.id}/deliver`, {}, token);
-  await waitFor('contract SETTLED', () => getContract(contract.id).state === 'SETTLED');
+  // ---- 10. DELIVERY — the driver's milestones on USSD ----
+  step('Deliver — the driver reports "set off", then "arrived", from his basic phone');
+  const setOff = ussdSession(driverPhone);
+  await setOff();
+  await setOff('2'); // My job
+  const departed = await setOff('1'); // I have set off
+  if (!departed.startsWith('END Job DLV-')) fail(`driver "set off" failed: ${departed}`);
+  detail(departed.replace('END ', ''));
+  const arrive = ussdSession(driverPhone);
+  await arrive();
+  await arrive('2'); // My job
+  const arrived = await arrive('2'); // I have arrived and handed over
+  if (!arrived.startsWith('END Job DLV-')) fail(`driver "arrived" failed: ${arrived}`);
+  detail(arrived.replace('END ', ''));
+  const delivered = getContract(contract.id);
+  if (delivered.state !== 'DELIVERED' || getJob(job.id).state !== 'ARRIVED') {
+    fail(`"arrived" did not deliver the order: contract ${delivered.state}, job ${getJob(job.id).state}`);
+  }
+  detail(`order DELIVERED — the buyer has ${config.RECEIPT_WINDOW_HOURS} h to confirm or report a problem`);
+
+  // ---- 11. RECEIPT — the buyer confirms; driver and farmer are paid ----
+  step('Receive — the buyer confirms receipt; the driver is paid and the balance goes out');
+  const receipt = await apiJson<{ contract: { state: string }; settlement: { onTheWay: number } }>(
+    'POST',
+    `/api/contracts/${contract.id}/receive`,
+    {},
+    token,
+  );
+  detail(`contract ${receipt.contract.state} · balance on its way: ${formatGhs(receipt.settlement.onTheWay)}`);
   await waitFor('driver PAID', () => getJob(job.id).state === 'PAID');
+  detail(`driver paid ${formatGhs(job.quoteAmount)}`);
+  await waitFor('contract SETTLED', () => getContract(contract.id).state === 'SETTLED');
+  detail('balance landed — contract SETTLED');
 
-  // ---- 10. TRACE + SMS + LEDGER ----
+  // ---- 12. TRACE + SMS + LEDGER ----
   const final = getContract(contract.id);
   // No "voice call" here: finishVoiceCall only traces calls tied to a contract,
   // and a Phase 1 bid call is tied to the offer thread — so it is not on the trace (yet).
@@ -403,26 +443,38 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
   const escrow = contractEscrowBalance(final.id);
   const jobEscrow = jobEscrowBalance(job.id);
   const driverPayable = accountBalance(ACCOUNTS.driverPayable(driver.id));
-  // Phase 1: an agreed deal pays its agreed total whatever the grade, so the whole
-  // hold goes to the farmer and no grade-difference refund line is posted.
-  const remainderRefunded = contractLedger(final.id).some((l) => l.memoKey === 'ledger.refundRemainder');
+  const farmerAccount = ACCOUNTS.farmerPayable(farmer.id);
+  // Phase 3: the farmer is paid in two lines — the advance at grading and the balance on receipt.
+  const farmerLines = contractLedger(final.id).filter((l) => l.account === farmerAccount && l.credit > 0);
+  const advanceLines = farmerLines.filter((l) => l.memoKey === 'ledger.advance');
+  const balanceLines = farmerLines.filter((l) => l.memoKey === 'ledger.payout');
+  const farmerPaid = farmerLines.reduce((sum, l) => sum + l.credit, 0);
+  // No claim, no legacy hold difference: nothing goes back to the buyer.
+  const remainderRefunded = contractLedger(final.id).some((l) => l.memoKey === 'ledger.refundRemainder' && l.credit > 0);
   detail(
     `journals balanced: ${balanced} · contract escrow: ${formatGhs(escrow)} · job escrow: ${formatGhs(jobEscrow)} · ` +
-      `driver payable: ${formatGhs(driverPayable)} · grade-difference refund: ${remainderRefunded ? 'yes' : 'none'}`,
+      `driver payable: ${formatGhs(driverPayable)} · refund to buyer: ${remainderRefunded ? 'yes' : 'none'}`,
+  );
+  detail(
+    `farmer: advance ${advanceLines.map((l) => formatGhs(l.credit)).join(', ') || 'none'} + ` +
+      `balance ${balanceLines.map((l) => formatGhs(l.credit)).join(', ') || 'none'} = ${formatGhs(farmerPaid)}`,
   );
   if (!balanced || escrow !== 0 || jobEscrow !== 0 || driverPayable !== job.quoteAmount) {
     fail('ledger invariant violated');
   }
-  if (final.finalAmount !== final.agreedTotal || final.finalAmount !== final.holdAmount || remainderRefunded) {
-    fail(`the farmer was not paid the agreed total: paid ${final.finalAmount}, agreed ${final.agreedTotal}, held ${final.holdAmount}`);
+  if (advanceLines.length !== 1 || balanceLines.length !== 1 || advanceLines[0]!.credit !== advance) {
+    fail(`expected one advance line of ${formatGhs(advance)} and one balance line for the farmer`);
+  }
+  if (farmerPaid !== final.agreedTotal || final.agreedTotal !== final.holdAmount || remainderRefunded) {
+    fail(`the farmer was not paid the agreed total: paid ${farmerPaid}, agreed ${final.agreedTotal}, held ${final.holdAmount}`);
   }
 
   console.log(
-    `\n\x1b[1m\x1b[32m✔ SETTLED + DELIVERED\x1b[0m — ${final.quantityKg}kg maize graded ${final.finalGrade}: ` +
-      `farmer paid the agreed ${formatGhs(final.finalAmount ?? 0)}, driver paid ${formatGhs(job.quoteAmount)}, ` +
-      `both escrows empty.`,
+    `\n\x1b[1m\x1b[32m✔ SETTLED + PAID\x1b[0m — ${final.quantityKg}kg maize graded ${final.finalGrade}: ` +
+      `farmer paid ${formatGhs(advance)} at pickup + ${formatGhs(farmerPaid - advance)} on receipt = the agreed ${formatGhs(farmerPaid)}, ` +
+      `driver paid ${formatGhs(job.quoteAmount)}, both escrows empty.`,
   );
-  console.log('Register → list at her price → bid → deal (by VOICE) → transport → grade → pay → trace. One basic phone each.\n');
+  console.log('Register → list at her price → bid → deal (by VOICE) → transport → grade → advance → arrived → receipt → paid → trace.\n');
   await app.close();
   process.exit(0);
 }

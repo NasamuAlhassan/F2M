@@ -13,7 +13,9 @@
     "db:seed": "tsx src/db/run-seed.ts",
     "db:inspect": "tsx src/db/inspect.ts",
     "i18n:draft": "tsx src/i18n/draft.ts",
-    "i18n:extract": "tsx src/i18n/extract.ts"
+    "i18n:extract": "tsx src/i18n/extract.ts",
+    "prices:import": "tsx src/db/import-prices.ts",
+    "ai:triage": "tsx src/db/ai-triage.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

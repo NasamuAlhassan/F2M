@@ -10,6 +10,8 @@ import { listContractsForLot } from './contracts';
 import { declineOffer, runMatching } from './matching';
 import { closeOffersForLot } from './offers';
 import { queueSms } from './notifications';
+import { tryAlertOnNewLot } from './alerts';
+import { observePrice } from './priceIntel';
 import { convertToKg, getCommodityByCode, getCommodityById, getUnit } from './registries';
 import { appendLotEvent } from './trace';
 import { gradeBandSchema, type GradeBand } from './types';
@@ -146,8 +148,14 @@ export function registerLot(input: RegisterLotInput): Lot {
     });
   }
 
+  if (lot.askingPricePerKg) {
+    observePrice({ commodityId: lot.commodityId, regionCode: lot.regionCode, pricePerKg: lot.askingPricePerKg, source: 'ask', refId: lot.id });
+  }
+
   // A fresh lot may satisfy demand posted last night — match immediately.
   runMatching({ lotId: lot.id });
+  // Then tell the buyers it matters to — after matching, so those it already bid for are not told twice (D-055).
+  tryAlertOnNewLot(lot.id);
   return getLot(lot.id);
 }
 
@@ -244,7 +252,7 @@ export function updateLot(lotId: string, farmerId: string, input: UpdateLotInput
   }
   if (input.community !== undefined) updates.community = input.community.trim() || null;
   if (input.landmark !== undefined) updates.landmark = input.landmark.trim() || null;
-  return db.transaction((tx) => {
+  const changed = db.transaction((tx) => {
     const updated = tx.update(lots).set(updates).where(eq(lots.id, lotId)).returning().get()!;
     appendLotEvent(tx, {
       lotId,
@@ -255,6 +263,10 @@ export function updateLot(lotId: string, farmerId: string, input: UpdateLotInput
     });
     return updated;
   });
+  if (input.askingPricePerUnit && changed.askingPricePerKg) {
+    observePrice({ commodityId: changed.commodityId, regionCode: changed.regionCode, pricePerKg: changed.askingPricePerKg, source: 'ask', refId: changed.id });
+  }
+  return changed;
 }
 
 /** Sold elsewhere (market day, a neighbour): off the market, open offers closed, buyers told. */

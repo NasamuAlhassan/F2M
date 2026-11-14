@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { RubricDoc, ClockConfig } from '../domain/types';
 import { db } from './client';
-import { commodities, marketPrices, regions, rubrics, units, vehicleClasses } from './schema';
+import { commodities, marketPrices, priceObservations, regions, rubrics, units, vehicleClasses } from './schema';
 
 // Approximate region centroids — distance fallback when a farmer has no GPS fix.
 const REGION_SEED: Array<{ code: string; lat: number; lng: number }> = [
@@ -855,6 +855,23 @@ function seedMarketPrices(refresh: boolean): void {
     const commodity = allCommodities.find((c) => c.code === code);
     if (!commodity) continue;
     MARKETS.forEach(({ market, regionCode }, i) => {
+      // The same placeholder joins the price history as a 'reference' — the lowest-trust
+      // source, used only when nothing real exists, and it ages out like any other (D-053).
+      const ref = db.insert(priceObservations).values({
+        commodityId: commodity.id,
+        regionCode,
+        market,
+        pricePerKg: prices[i]!,
+        source: 'reference',
+        dataset: 'seed',
+        refId: `seed:${code}:${market}`,
+        observedAt: now,
+      });
+      if (refresh) {
+        ref.onConflictDoUpdate({ target: [priceObservations.source, priceObservations.refId], set: { pricePerKg: prices[i]!, observedAt: now } }).run();
+      } else {
+        ref.onConflictDoNothing().run();
+      }
       const row = db.insert(marketPrices).values({ commodityId: commodity.id, market, regionCode, pricePerKg: prices[i]!, recordedAt: now });
       if (refresh) {
         row

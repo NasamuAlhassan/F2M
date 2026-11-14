@@ -386,6 +386,30 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 
 **Known limits:** One login per browser — use a second browser or a private window to be two roles at once. The Supabase free plan pauses after a week of low activity. With the simulator on, anyone who can reach the server can act as any phone through the simulator, so it is for a closed test group only.
 
+## D-048 · 2026-11-14 · The Harvest Journal: an editorial redesign, a public front door, and plain words
+
+**Decision:** The web app's visual world changes a third time, at the owner's request, modelled on the design language of a reference site the owner chose (innofemme.org) while keeping F2M's own identity. The owner chose to keep the F2M green brand over the reference's aubergine and coral. What changed:
+
+- *World:* a warm cream ground (`--paper` #efe9df, cards #fbf8f3) instead of white-on-mint; deep-green feature fields (`--forest-night` #0c3d24) for panel headers, the landing's story sections and the footer; `--forest` stays every primary action. Gold is the italic accent and the money colour.
+- *Type:* Newsreader (self-hosted, variable, latin + latin-ext) for headlines through a new `.headline` class, with one italic word in gold (`<em>`); Hanken Grotesk stays for everything else. A widely tracked `.eyebrow` label sits above headlines. `.display` keeps its old job for small uppercase marks.
+- *Chrome:* the solid green masthead becomes a cream sticky header with a floating pill nav (active tab a filled deep-green pill); the language legend and the "payments are simulated" note move to a slim footer.
+- *Front door:* `/` is a public landing page (hero, why, how it works for farmers, buyers and drivers, languages from the live registry, closing call to action). It was a redirect to `/market`. Login is a split screen with the story on the left; `?mode=signup` opens the create-account tab.
+- *Detail and feel:* every home screen opens with a greeting by time of day and a one-line summary that leads with what is waiting (offers to answer, a job on the road); empty screens get a picture, one sentence and one next step (`EmptyState`); loading shows shimmering placeholders (`Skeleton`); buttons sink slightly when pressed; actions confirm themselves with a toast (`toast()`); every page names itself in the browser tab; unknown links land on a friendly not-found page; checkboxes and sliders take the brand green; headlines balance their line breaks.
+- *Plain words:* farmer- and driver-facing labels drop the trade jargon ("Incoming Bids" → "Offers waiting for you", "escrow hold" → "held for you", "reference priced" → "Market price", "Same-day" → "Ready now", "Dispatch Queue" → "Coming up"), and raw codes such as `UPPER_EAST` no longer reach the screen. New strings go through `t()` (D-050) so they translate.
+- *Simulator:* the handset's standby screen and idle keypad are readable (they were olive on olive at 35% opacity); internal decision numbers no longer appear in its copy.
+
+**Why:** The owner asked for the reference's look, then for a product people want to come back to, with close attention to small details. Research on farmer-facing apps points the same way: plain tested words, short predictable flows, feedback on every tap, and a home screen that leads with the unfinished thing.
+
+**Kept:** the cedi stays written "GHS". The owner's typeface has no ₵ glyph, so "GH₵" would draw the cedi sign in a fallback font, and GHS is what MTN MoMo messages already show farmers.
+
+**Rejected:** the reference's aubergine and coral palette (it would make F2M look like a different organisation); copying the reference's assets (its 3D artwork, wording and logo); a third display face for the giant watermark word (Hanken Grotesk at 800 does the job without another download).
+
+**Addendum (same day): phones first, and one page per sale.**
+
+- *Phones:* 360px is the baseline, checked for every role. Below `lg` a bottom tab bar replaces the pill nav (a sideways-scrolling tab row hid sections), pages lead with the task (the farmer's offers, the driver's jobs) and settings go last, tables become cards, dialogs are bottom sheets, and the sign-in library loads only for someone with a saved login (the main script fell from 153 to 99 KB gzipped). Rules in `apps/web/DESIGN.md`, "Phones first".
+- *The deal page* (`/deals/:id`): one page per sale for the buyer, the farmer and the driver, built on `GET /api/deals/:id`. It leads with whose turn it is ("Your maize has arrived. Confirm, or report a problem", or "Waiting for Ama"), then where the money is, then every step so far with the texts and calls sent to the farmer, then the steps still ahead. Buyers confirm receipt or report a problem there, farmers answer a claim, drivers mark each milestone. Every link to a sale now opens it.
+- *Why:* one sale was spread across six pages, each showing one person's slice. With money held, an advance, a receipt deadline and claims, people need one place that says where their sale stands and what is theirs to do.
+
 ## D-049 · 2026-11-14 · The five Ghanaian languages go live, machine-translated by the owner's Space
 
 **Decision:** At the owner's direct request, Twi, Ewe, Dagbani, Hausa and Kusaal are live on every farmer- and driver-facing surface — SMS, USSD menus and voice prompts — through the existing `I18N_DRAFT_LOCALES_LIVE=true` switch (now the value in `.env.example`, `fly.toml` and `render.yaml`). Every catalog was completed by `npm run i18n:draft` with the owner's Tɛkyerɛma language Space: each phrase a catalog lacked was translated by the Space, and the drafts already there (Twi's 148 from Khaya and Gemma, the earlier Ewe and Dagbani subsets) were kept. `npm run i18n:draft -- --all` redrafts everything with the Space if one engine throughout is preferred. The review gate itself is unchanged: `_reviewed` stays empty, nothing in the product claims a native speaker checked these texts, and setting the switch to `false` puts every farmer surface back on English in one step. The code default stays `false` so a bare checkout is English-only; the test suite pins it.
@@ -447,3 +471,66 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Not verified live:** Africa's Talking's `GetDigits` (`numDigits`, `finishOnKey`, `timeout`) and `Record` (posting `recordingUrl`) are confirmed from its SDKs and documentation pages; its `Redirect` and the exact behaviour of a mid-call `Record` callback, or of a `GetDigits` followed by a `Record`, could not be confirmed from the documentation and need a voice number to test (Phase 6). The SMS receipt and the USSD routes stay as the fallback for every step.
 
 **Rejected:** a one-question-at-a-time form for everyone (slow for farmers who can say it all at once); publishing what the parser understood without a readback (vision §5.3: never publish blindly); typing letters on the keypad; separate voice and USSD rules for listings (both call the same `registerLot` / `updateLot` / `counterOffer`).
+
+## D-053 · 2026-11-14 · Live prices: a history of every price, and a fair-price engine
+
+**Decision:** Every price F2M sees is stored in `price_observations` (migration 0015) with how far to trust it: `deal` (an agreed price), `market` (a survey, feed or hand-entered quote), `ask`, `offer`, `request`, `reference` (the seed's placeholders). Listing, bidding, agreeing and requesting record one automatically, so prices keep arriving without anyone entering them. `priceIntel.ts` turns them into a fair-price range (a weighted median, recent evidence favoured, half-life 21 days, nothing over 180 days, outliers trimmed), a 30-day trend, series for charts, a seasonal outlook, and a verdict on any typed price. `market_prices` stays as the latest quote per market for what already reads it. Design and feed format: `docs/PRICES.md`, `docs/INTELLIGENCE.md`.
+
+**What the research found (2026-11-14):** the one verifiable public source, WFP's Ghana series on HDX (from MoFA via FAO), runs 2006 to **July 2023** and then stops; MoFA's weekly prices and FAO FPMA have no API we could confirm. So the official data feeds trends over years and seasonality (maize peaks in July and bottoms in October on the real file), and "latest" comes from F2M's own activity plus any current source plugged into the feed (`POST /api/feeds/prices` with a token, or a polled `PRICE_FEED_URL`).
+
+**Guidance, not a gate:** a price far off the market is flagged in the web forms and, before the farmer presses 1, in the USSD sell step. It never blocks. With only placeholders the engine says "reference", and with nothing recent it says nothing rather than show an old number as today's.
+
+**Rejected:** treating the 2023 WFP prices as today's (the cedi has moved a lot since); letting a model produce prices (arithmetic over the data is explainable and works offline); colouring "rising" red or green (it is good news to a seller and bad to a buyer, so direction is an arrow and words).
+
+## D-054 · 2026-11-14 · Live screens: a stream that says "something changed"
+
+**Decision:** `GET /api/stream` is a server-sent-events stream, authenticated by the normal bearer token. A message names only the topics that changed (`market`, `prices`, `offers`, `notifications`, `demands`, `alerts`); the web then re-reads through the usual authenticated API, so the stream carries no data and cannot leak any. Bursts within 250 ms are one message; each person may hold four streams; a stream ends after 30 minutes so the client reconnects with a fresh token. Events are published where state already changes (lot events, offers, requests, both notification queues, price records) by `publishLive`, which never throws. The web streams with `fetch` (an `EventSource` cannot send the header) and reconnects with backoff; page polling stays as the safety net.
+
+**In-process on purpose:** F2M is one server on one SQLite file. A second server would swap `domain/events.ts` for a shared bus (Redis, Postgres NOTIFY); nothing else changes.
+
+**Rejected:** WebSockets (the traffic is one-way and SSE passes proxies and reconnects by itself); sending data in events (a leak risk and a second source of truth); token in the URL (it would be logged).
+
+## D-055 · 2026-11-14 · Alerts that reach the right people, once, and "who has what"
+
+**Decision:** When something new appears, the people it matters to are told by rules, each saying why. A new listing reaches buyers who watch that crop, have an open request for it, or bought it before, nearest first (a buyer the engine already bid for is not told twice, and a price well under or over the market is said so). A new request reaches farmers who listed that crop in the last year and have nothing listed now, within the crop's reach, by SMS in their language. A price line a person set (`price_watches`) or a 10% move in two weeks alerts the people it touches. Every alert is logged (`alert_log`, migration 0017) so the same news is never sent twice; one listing or request reaches at most `ALERT_MAX_RECIPIENTS` (8); a farmer gets at most `ALERT_SMS_PER_FARMER_PER_DAY` (2) alert texts; a crossed price line rests a week. An alert failure never undoes the listing or request that caused it. `supplyDemandByRegion` gives kilograms listed and wanted per region with no names.
+
+**Not AI:** matching and alerting stay rules over the data, so each can be explained, tested and capped. A farmer is not a notification feed.
+
+**Rejected:** alerting every watcher of everything (it would train people to ignore us); a model choosing recipients; naming sellers in the supply view (they chose to publish a listing, not their location).
+
+## D-056 · 2026-11-14 · The language-model assist: off by default, a suggestion engine
+
+**Decision:** An optional layer (`providers/llm`, `aiAssist.ts`) calls Anthropic's Messages API with a structured-output schema. **It is off** (`LLM_PROVIDER=off`) until the owner sets `LLM_PROVIDER=anthropic` and a key. Off means nothing leaves the server and every feature behaves as before. When on, only short text being understood goes out, with phone numbers and e-mail addresses removed; names and ids are never sent. It is used to: fill gaps in the one-breath voice listing, read a buyer's plain-words request into the form, check a listing photo shows the crop, and group failed voice listings (`npm run ai:triage`).
+
+**Guards:** the model's answer is checked against the platform's registries and against the person's own words. A number must be one they said (a weight said as "fifty kilos" cannot become a price); a unit must be singled out by their own words, so "bags" of a crop sold in two sizes is still asked (D-052); a crop is never named for a farmer and quality is never taken from it. It fills only fields the rules left empty, everything is read back, and a listing is published only on the farmer's 1. Fields it supplied are saved as `aiFilled`. Any failure returns nothing and the feature carries on.
+
+**Not model-driven:** price guidance, offer advice (`/api/offers/:id/advice`), matching and alerts are arithmetic and work with the assist off.
+
+**Open for the owner:** sending farmers' sentences to a hosted model is a privacy decision against D-047; it needs the owner's explicit yes. The choice of model is theirs too (`claude-haiku-5-5` is the likely fit for live calls). The request has been tested against the documented API shape with a stand-in `fetch`, not the live service (no key was available), and it uses `fetch` rather than the SDK because npm could not resolve the shared workspace tree at the time.
+
+**Rejected:** letting the model name the crop or grade for a farmer (a wrong listing is worse than asking); publishing what it proposed without the readback (D-052); a model deciding prices or recipients.
+
+## D-057 · 2026-11-14 · Phase 3: paid in two parts, received or claimed, every claim reviewed
+
+(D-053 to D-056 are reserved for the price-intelligence work in a parallel session.)
+
+**Decision:** The owner set the settlement rules, and they are now what the code does (design: `docs/PHASE3.md`):
+
+- **The farmer is paid in two parts.** An advance of `FARMER_ADVANCE_PERCENT` (default **30%**; the owner did not fix the share) of the order total goes out when the produce is graded at pickup, for any grade but REJECT. The balance goes out when the buyer confirms receipt.
+- **The driver is paid on delivery.** The fee goes out when the order is received.
+- **A delivery confirms itself after 24 hours** (`RECEIPT_WINDOW_HOURS`), so a silent buyer never leaves a farmer waiting.
+- **Claims: the owner chose both options.** The buyer reports a problem (short weight, quality, damaged, late, not delivered, other) and proposes a deduction. The farmer accepts or refuses by SMS and call, USSD or the web. Accepted, the order settles with the deduction. Refused, or unanswered within `CLAIM_ANSWER_HOURS` (24), the undisputed part is paid at once and F2M decides the rest, from nothing up to the buyer's proposal. **F2M reviews every claim**, accepted ones as an audit.
+
+The order gains three states: `DELIVERED` (the receipt clock runs), `CLAIMED` and `RECEIVED` (the balance is on its way). The delivery job gains `ARRIVED`, and the driver milestones are on USSD and the API: at pickup, loaded, set off, arrived. Payouts carry a `kind` (advance or balance). Claims live in `order_claims` (migration 0016).
+
+**Rules that keep the books true:**
+
+- A deduction can never exceed what is still held. The advance is on the farmer's phone and is never pulled back, so a bigger loss is a review matter, not an automatic clawback.
+- A disputed re-grade that comes back REJECT after the advance went out refunds the buyer only what is still held.
+- Claims about the transport itself (not delivered, damaged) also hold the driver's fee until F2M decides.
+- Each payout is posted to the ledger as it lands, and the refund at `SETTLED`. Every journal balances and the escrow ends at 0.
+- An order with no transport job waits out the farmer's grade-dispute window before its receipt clock starts, so delivering never cuts the dispute short.
+
+**Until Phase 4:** there is no admin role yet, so F2M's decision on a claim is made through a simulator-only route (`POST /api/dev/claims/:id/resolve`), and the review queue is `GET /api/dev/claims`. All money is still simulated until a licensed provider is chosen (Phase 6).
+
+**Rejected:** paying the farmer in full at pickup (the buyer pays before seeing the produce; this was the code until now); holding all the farmer's money until receipt (the owner wanted cash in farmers' hands early); clawing back an advance on a claim (mobile money cannot be pulled back, and it would turn a dispute into a debt); freezing the whole payment on any claim (only the amount in question is held).

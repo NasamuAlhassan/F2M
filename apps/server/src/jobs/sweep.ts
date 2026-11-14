@@ -6,12 +6,15 @@ import {
   expireStaleVoiceCalls,
   placePendingVoiceCalls,
   pollPaymentsOnce,
+  refreshPriceFeeds,
+  sweepAlerts,
   refundMissedPickups,
   releaseDuePayments,
   runMatching,
   sendPendingNotifications,
   sweepListings,
   sweepOffers,
+  sweepSettlement,
 } from '@ftm/core';
 import type { FastifyBaseLogger } from 'fastify';
 
@@ -30,6 +33,13 @@ export interface SweepResult {
   /** Listings warned two days before they lapse, and listings that lapsed. */
   listingsWarned: number;
   listingsExpired: number;
+  /** Phase 3: deliveries received by the 24 h clock, and claims the farmer did not answer in time. */
+  receiptsAutoConfirmed: number;
+  claimsUnanswered: number;
+  /** Outside prices pulled this pass (a configured feed, or WFP's history on first run). */
+  priceRowsPulled: number;
+  /** Price-line and sharp-move alerts sent this pass. */
+  priceAlertsSent: number;
 }
 
 /** One full sweep pass: expiries → missed-pickup refunds → job dispatch upkeep → rematch → releases → payment polling. */
@@ -42,8 +52,11 @@ export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
   const expiredJobOffers = expireJobOffers(now);
   const staleJobsCancelled = cancelStaleJobs(now);
   runMatching(); // catch demand/lot pairs that appeared between event-driven runs
-  const releasesStarted = await releaseDuePayments(now);
+  const settlement = await sweepSettlement(now);
+  const releasesStarted = await releaseDuePayments();
   const { resolved: paymentsResolved } = await pollPaymentsOnce(now);
+  const prices = await refreshPriceFeeds(now);
+  const alerts = sweepAlerts(now);
   const smsDelivered = await sendPendingNotifications();
   await placePendingVoiceCalls();
   expireStaleVoiceCalls(now);
@@ -60,6 +73,10 @@ export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
     offerReminders: threads.reminded,
     listingsWarned: listings.warned,
     listingsExpired: listings.expired,
+    receiptsAutoConfirmed: settlement.autoReceived,
+    claimsUnanswered: settlement.unanswered,
+    priceRowsPulled: prices.feedAccepted + prices.wfpImported,
+    priceAlertsSent: alerts.watches + alerts.moves,
   };
 }
 
@@ -70,7 +87,7 @@ export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
       (r) => {
         const activity =
           r.expiredOffers + r.expiredDemands + r.missedPickupsRefunded + r.expiredJobOffers + r.staleJobsCancelled + r.releasesStarted +
-          r.offerThreadsExpired + r.offerReminders + r.listingsWarned + r.listingsExpired;
+          r.offerThreadsExpired + r.offerReminders + r.listingsWarned + r.listingsExpired + r.receiptsAutoConfirmed + r.claimsUnanswered + r.priceRowsPulled + r.priceAlertsSent;
         if (activity > 0) log.info(r, 'sweep');
       },
       (err) => log.error(err, 'sweep failed'),

@@ -21,6 +21,8 @@ import { DomainError, notFound } from './errors';
 import { haversineKm, resolvePoint } from './geo';
 import { farmerStats, scoreLotForDemand } from './matching';
 import { queueSms } from './notifications';
+import { publishLive } from './events';
+import { observePrice } from './priceIntel';
 import { getCommodityById, getRegion } from './registries';
 import { appendLotEvent } from './trace';
 import { formatGhs } from './types';
@@ -217,6 +219,23 @@ function record(offerId: string, by: OfferEvent['by'], action: OfferEvent['actio
   db.insert(offerEvents)
     .values({ offerId, by, action, channel, units: units ?? null, pricePerUnit: price ?? null })
     .run();
+  const thread = db.select().from(offers).where(eq(offers.id, offerId)).get();
+  if (thread) publishLive({ topic: 'offers', audience: [`farmer:${thread.farmerId}`, `buyer:${thread.buyerId}`], ref: { offerId } });
+  // What people propose and agree is the freshest price signal the platform has (D-053).
+  // The engine's own opening bids are derived from a request, not a person's offer — skip them.
+  if (price !== undefined && channel !== 'system' && (action === 'bid' || action === 'counter' || action === 'accept')) {
+    const offer = db.select().from(offers).where(eq(offers.id, offerId)).get();
+    const lot = offer ? db.select().from(lots).where(eq(lots.id, offer.lotId)).get() : undefined;
+    if (lot) {
+      observePrice({
+        commodityId: lot.commodityId,
+        regionCode: lot.regionCode,
+        pricePerKg: Math.round(price / lotUnit(lot).kgPerUnit),
+        source: action === 'accept' ? 'deal' : 'offer',
+        refId: offerId,
+      });
+    }
+  }
 }
 
 /** Give back request kilograms a thread was holding (reject, withdraw, expire). */

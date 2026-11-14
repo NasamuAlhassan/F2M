@@ -12,7 +12,7 @@ const ACTIVE_STATUSES = ['pending', 'placing', 'in_progress'] as const;
 export interface QueueVoiceCallInput {
   phone: string;
   locale: string;
-  flow: 'offer' | 'grade' | 'bridge' | 'bid' | 'listing';
+  flow: 'offer' | 'grade' | 'bridge' | 'bid' | 'listing' | 'claim';
   contractId?: string;
   /** The 'bid' flow (Phase 1): the offer thread whose proposal the call reads out. */
   offerId?: string;

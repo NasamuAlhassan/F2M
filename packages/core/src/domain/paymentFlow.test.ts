@@ -10,12 +10,8 @@ import { createDemand } from './demands';
 import { registerFarmer } from './farmers';
 import { ACCOUNTS, accountBalance, allJournalsBalanced, contractEscrowBalance } from './ledger';
 import { getLot, registerLot } from './lots';
-import {
-  initiateRelease,
-  pollPaymentsOnce,
-  refundHold,
-  releaseDuePayments,
-} from './paymentFlow';
+import { pollPaymentsOnce, refundHold } from './paymentFlow';
+import { confirmReceipt, markDelivered, payAdvance } from './settlement';
 import { getTrace } from './trace';
 import { acceptFor, testBuyer } from '../testing/fixtures';
 
@@ -120,35 +116,38 @@ describe('payment flow (M4)', () => {
   // the grade delta. Every order is now an agreed deal that pays its agreed
   // total whatever the grade, and no production path creates a per-grade
   // contract any more — so settlement releases the whole hold, refunding nothing.
-  it('settles: releases the agreed total, nothing left to refund', async () => {
+  it('pays the farmer in two parts — an advance at grading, the balance on receipt — then settles', async () => {
+    // Phase 3, the owner's rule (docs/PHASE3.md): 30% at pickup, the rest when the buyer receives it.
     const buyer = testBuyer();
     const { farmer, lot, order } = await acceptedOrder('0271000003', buyer.id);
-
     await pollPaymentsOnce();
     expect(getContract(order.id).state).toBe('FUNDS_HELD');
 
     transitionContract(order.id, 'PICKUP_CONFIRMED', { type: 'farmer', id: farmer.id });
-    // What grading pays for an agreed deal (A/B/C alike): the agreed total, 200,000p.
-    const finalAmount = order.agreedTotal!;
-    expect(finalAmount).toBe(order.holdAmount);
-    transitionContract(order.id, 'GRADED', { type: 'system' }, { finalGrade: 'B', finalAmount });
-
+    const total = order.agreedTotal!;
+    expect(total).toBe(order.holdAmount);
+    transitionContract(order.id, 'GRADED', { type: 'system' }, { finalGrade: 'B', finalAmount: total });
+    const farmerBefore = accountBalance(ACCOUNTS.farmerPayable(farmer.id));
     const buyerRefundsBefore = accountBalance(ACCOUNTS.buyerRefunds(buyer.id));
-    const released = await releaseDuePayments(Date.now() + 11 * 60 * 1000); // past the 10min window
-    expect(released).toBe(1);
+
+    await payAdvance(order.id);
+    await pollPaymentsOnce();
+    expect(accountBalance(ACCOUNTS.farmerPayable(farmer.id)) - farmerBefore).toBe(Math.round(total * 0.3));
+    expect(getContract(order.id).advanceAmount).toBe(Math.round(total * 0.3));
+    expect(await payAdvance(order.id)).toBeNull(); // never twice
+
+    markDelivered(order.id, 'no_transport');
+    expect(getContract(order.id).state).toBe('DELIVERED');
+    await confirmReceipt(order.id, { type: 'buyer', id: buyer.id });
     await pollPaymentsOnce();
 
     const contract = getContract(order.id);
     expect(contract.state).toBe('SETTLED');
     expect(contractEscrowBalance(contract.id)).toBe(0); // escrow zeroes at terminal state
-    expect(accountBalance(ACCOUNTS.farmerPayable(farmer.id))).toBe(finalAmount);
+    expect(accountBalance(ACCOUNTS.farmerPayable(farmer.id)) - farmerBefore).toBe(total);
     expect(accountBalance(ACCOUNTS.buyerRefunds(buyer.id)) - buyerRefundsBefore).toBe(0);
     expect(allJournalsBalanced()).toBe(true);
     expect(getLot(lot.id).status).toBe('settled');
-
-    // Idempotent: a second release attempt returns the existing payment.
-    const again = await initiateRelease(order.id).catch((e) => e);
-    expect(again).toBeInstanceOf(Error); // SETTLED now — no second disbursement possible
   });
 
   it('refunds the full hold when a contract dies after funding', async () => {

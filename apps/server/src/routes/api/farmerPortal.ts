@@ -25,6 +25,9 @@ import {
   withdrawLot,
   listOffersForFarmer,
   listOpenOffersForLot,
+  answerClaim,
+  getClaim,
+  listClaimsForFarmer,
 } from '@ftm/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -198,6 +201,18 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Accept/decline an incoming bid — the exact calls USSD "My offers" makes.
+  // Phase 3: a buyer's claims on this farmer's orders, and the answer (same move as USSD My lots).
+  app.get('/farmer/claims', { preHandler: [app.authFarmer] }, async (req) => ({
+    claims: listClaimsForFarmer(req.user.sub).map(({ contract, ...claim }) => ({ ...claim, lotId: contract.lotId, contractState: contract.state })),
+  }));
+
+  app.post('/farmer/claims/:id/answer', { preHandler: [app.authFarmer] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const { accept } = z.object({ accept: z.boolean() }).parse(req.body ?? {});
+    getClaim(id); // 404 before 403
+    return { claim: await answerClaim(id, req.user.sub, accept) };
+  });
+
   app.post('/farmer/contracts/:id/accept', { preHandler: [app.authFarmer] }, async (req) => {
     const { id } = req.params as { id: string };
     const contract = await acceptOfferAndHold(id, req.user.sub);

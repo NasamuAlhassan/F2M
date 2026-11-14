@@ -10,6 +10,8 @@ declare module 'fastify' {
     authFarmer: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
     /** Buyer or farmer — the two roles that browse and hire drivers. */
     authBuyerOrFarmer: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /** Any signed-in role: farmer, buyer or driver. */
+    authAnyRole: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
     /** A valid web login, with or without an F2M profile yet (signup's second step). */
     authLogin: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }

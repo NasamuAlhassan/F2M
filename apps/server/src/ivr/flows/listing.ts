@@ -7,6 +7,7 @@ import {
   listCommodities,
   listUnits,
   parseCountAnswer,
+  fillGaps,
   parseListingDraft,
   parsePriceAnswer,
   queueSms,
@@ -32,6 +33,8 @@ interface Draft extends ListingDraft {
   harvestedDaysAgo?: number;
   placeOk?: boolean;
   community?: string | null;
+  /** Fields the language-model assist supplied (D-056) — kept with the saved listing, and always read back before publishing. */
+  aiFilled?: string[];
 }
 
 type State = { draft?: Draft; tries?: Record<string, number>; cropPage?: number; qIdx?: number; qYes?: number };
@@ -104,7 +107,14 @@ const intro: IvrNode = {
   guard: notRegistered,
   say: (ctx) => [...takeFlash(ctx), { key: 'voice.listing.intro' }, { key: 'voice.listing.tellUs' }],
   onSpeech: (heard, ctx) => {
-    if (heard) merge(ctx, parseListingDraft(heard.english));
+    if (heard) {
+      const rules = parseListingDraft(heard.english);
+      // The assist may only fill what the rules did not hear. Everything it adds is still
+      // read back in the review step, and published only on the farmer's 1 (D-052, D-056).
+      const { draft, aiFilled } = heard.assist ? fillGaps(rules, heard.assist.draft) : { draft: rules, aiFilled: [] as string[] };
+      merge(ctx, draft);
+      if (aiFilled.length > 0) draftOf(ctx).aiFilled = [...new Set([...(draftOf(ctx).aiFilled ?? []), ...aiFilled])];
+    }
     return nextStep(ctx);
   },
 };

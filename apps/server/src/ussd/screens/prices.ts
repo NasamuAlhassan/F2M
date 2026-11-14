@@ -1,4 +1,4 @@
-import { formatGhs, getCommodityByCode, listCommodities, listMarketPrices, t } from '@ftm/core';
+import { estimatePrice, formatGhs, getCommodityByCode, listCommodities, listMarketPrices, priceTrend, t, trendText } from '@ftm/core';
 import type { UssdScreen } from '../machine';
 import { invalid, listLines, paginate, parseSelection } from './common';
 
@@ -39,7 +39,18 @@ export const pricesShow: UssdScreen = {
   render: (ctx) => {
     const commodity = getCommodityByCode(String(ctx.data.pricesCommodity));
     const prices = listMarketPrices(commodity.id);
-    if (prices.length === 0) {
+    // The live number first — from recent deals and reports, with its direction (D-053).
+    const live = estimatePrice(commodity.id, { regionCode: ctx.farmer?.regionCode });
+    const liveLine =
+      live && live.confidence !== 'reference'
+        ? [
+            {
+              key: 'ussd.prices.market',
+              params: { price: formatGhs(live.pricePerKg), trend: trendText(priceTrend(commodity.id, { regionCode: ctx.farmer?.regionCode }), ctx.locale) },
+            },
+          ]
+        : [];
+    if (prices.length === 0 && liveLine.length === 0) {
       return [
         { key: 'ussd.prices.none', params: { commodity: t(ctx.locale, commodity.nameKey) } },
         { key: 'ussd.common.back' },
@@ -47,6 +58,7 @@ export const pricesShow: UssdScreen = {
     }
     return [
       { key: 'ussd.prices.title', params: { commodity: t(ctx.locale, commodity.nameKey) } },
+      ...liveLine,
       ...prices.map((p) => ({
         key: 'ussd.prices.item',
         params: { market: p.market, price: formatGhs(p.pricePerKg) },

@@ -105,6 +105,7 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M35 — the web interface translates too, from the same catalogs (D-050) | **done** |
 | M36 — Phase 1: offer threads with counter-offers, public buyer requests, listing management, five new crops (D-051) | **done** — server, USSD and voice; web screens in progress |
 | M37 — Phase 2: guided voice listing with readback, voice counter-offers, listings and offers by phone, transport by USSD (D-052) | **done** — live Twi listing verified through the Space; gateway behaviour awaits a voice number |
+| M38 — Phase 3: advance at pickup + balance on receipt, 24 h auto-receipt, buyer claims with farmer answer and F2M review, driver milestones (D-057) | **done** — server, USSD and voice; web screens in progress; reviewer screen is Phase 4 |
 
 **MVP:** criteria 1 and 3 met (offline scripted demo to SETTLED; two-tab manual demo verified live in a browser). Criterion 2 has real HF grading verified (D-041); the payment rail waits on Phase 3's provider choice and the Bank of Ghana questions in `docs/COSTS.md` §6.
 
@@ -119,7 +120,7 @@ Agreed 2026-11-13: each phase is finished completely before the next starts, wit
 | 0 — Foundation | Real accounts (Supabase phone + password, invite-only), open routes closed, simulator switch + carrier token, demo kept out of the real database, sample data on the `demo-data` branch, clean install, dependency updates, docs | done |
 | 1 — Two-way marketplace | Farmer's asking price per bag; buyers bid on the listing; counter-offers back and forth until one side accepts; buyer requests visible to all; listing management (quantity, price, sold, withdraw, expiry); harvest/availability/community fields; cassava, millet, sorghum, soya beans, cowpea | server, USSD and voice done (D-051); web screens in progress |
 | 2 — Farmer on a basic phone | Guided voice listing with replay and confirm-before-publish; voice negotiation; listing management and transport requests by phone; asking again when unsure | done (D-052) |
-| 3 — Order → delivery → payment | Order record and stages; driver stages and USSD parity; payment after delivery (driver paid on delivery, then the exchange settles); quality as declared / AI / inspected / buyer-confirmed; disputes | — |
+| 3 — Order → delivery → payment | Order record and stages; driver stages and USSD parity; payment after delivery (driver paid on delivery, then the exchange settles); quality as declared / AI / inspected / buyer-confirmed; disputes | done (D-057); real money waits for Phase 6 |
 | 4 — Accounts, buyer portal, admin | Verification, smartphone farmer sign-up, buyer search and listing detail, admin dashboard, ratings | — |
 | 5 — Language quality (owner) | Fine-tuning on farm terms, a new English voice, Ga, native review, the licence change | parked |
 | 6 — Toward the field | Live SMS/USSD/voice, real money, cooperatives, QR on bags, return loads, price intelligence | — |

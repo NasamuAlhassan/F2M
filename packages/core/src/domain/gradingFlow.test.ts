@@ -10,6 +10,7 @@ import { getContract } from './contracts';
 import { createDemand } from './demands';
 import { registerFarmer } from './farmers';
 import { agreeGrading, confirmPickup, disputeGrading, listGradingsForContract, runGrading } from './gradingFlow';
+import { confirmReceipt } from './settlement';
 import { allJournalsBalanced, contractEscrowBalance } from './ledger';
 import { getLot, registerLot } from './lots';
 import { pollPaymentsOnce } from './paymentFlow';
@@ -87,7 +88,7 @@ async function photoBuffer(color: { r: number; g: number; b: number }): Promise<
 }
 
 describe('grading flow (M5)', () => {
-  it('grades from pickup photos and settles on agree', async () => {
+  it('grades from pickup photos; agreeing pays the advance and hands the order to the buyer', async () => {
     const { farmer, lot, contractId } = await fundedContract('0281000111');
 
     confirmPickup(contractId, { type: 'farmer', id: farmer.id });
@@ -117,8 +118,13 @@ describe('grading flow (M5)', () => {
     expect(types).toContain('PHOTO_ADDED');
     expect(types).toContain('GRADED');
 
-    // Farmer agrees on USSD -> release now, not after the window.
+    // Phase 3: agreeing pays the advance (30%) and, with no transport job,
+    // starts the buyer's 24 h receipt clock now rather than after the window.
     await agreeGrading(contractId, farmer.id);
+    await pollPaymentsOnce();
+    expect(getContract(contractId)).toMatchObject({ state: 'DELIVERED', advanceAmount: Math.round(AGREED_TOTAL * 0.3) });
+    // The balance follows the buyer's receipt.
+    await confirmReceipt(contractId, { type: 'buyer', id: getContract(contractId).buyerId });
     await pollPaymentsOnce();
     expect(getContract(contractId).state).toBe('SETTLED');
     expect(contractEscrowBalance(contractId)).toBe(0);

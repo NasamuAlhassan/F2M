@@ -9,6 +9,7 @@ import { acceptOffer } from './matching';
 import { acceptProposal, type Channel, type Party } from './offers';
 import { queueBuyerNotification } from './buyerNotifications';
 import { contractsWithGoodsInTransit, resolveJobPayment } from './logistics';
+import { farmerPaid, onFarmerPayout, retryFarmerPayouts } from './settlement';
 import { queueSms } from './notifications';
 import { getCommodityById } from './registries';
 import { appendLotEvent } from './trace';
@@ -84,85 +85,22 @@ export async function initiateHold(contractId: string): Promise<Payment> {
   return payment;
 }
 
-/** Disburse the graded final amount to the farmer (Disbursements transfer). */
-export async function initiateRelease(contractId: string): Promise<Payment> {
-  const contract = getContractRow(contractId);
-  if (contract.state !== 'GRADED') {
-    throw new DomainError(`Cannot release payment for a contract in ${contract.state}`, 'INVALID_STATE', 409);
-  }
-  if (!contract.finalAmount || contract.finalAmount <= 0) {
-    throw new DomainError('Contract has no positive final amount', 'INVALID_STATE', 409);
-  }
-  const existing = db
-    .select()
-    .from(payments)
-    .where(and(eq(payments.contractId, contractId), eq(payments.direction, 'disbursement')))
-    .all()
-    // jobId payments are DRIVER payouts that share the contractId — not this release.
-    .find((p) => p.jobId === null && p.status !== 'failed');
-  if (existing) return existing; // idempotent — a pending/successful release already exists
-
-  const farmer = db.select().from(farmers).where(eq(farmers.id, contract.farmerId)).get();
-  if (!farmer) throw notFound('farmer');
-
-  const provider = getPaymentProvider();
-  const referenceId = crypto.randomUUID();
-  const payment = db
-    .insert(payments)
-    .values({
-      contractId: contract.id,
-      direction: 'disbursement',
-      provider: provider.name,
-      providerRef: referenceId,
-      amount: contract.finalAmount,
-      currency: provider.settlementCurrency,
-      counterpartyMsisdn: farmer.momoMsisdn,
-      status: 'pending',
-    })
-    .returning()
-    .get();
-
-  // Distinct from SETTLED: the payout is on its way the moment it's initiated.
-  appendLotEvent(db, {
-    lotId: contract.lotId,
-    type: 'PAYMENT_RELEASED',
-    actorType: 'system',
-    payload: { paymentId: payment.id, amount: contract.finalAmount },
-  });
-
-  try {
-    const result = await provider.disburse({
-      referenceId,
-      msisdn: farmer.momoMsisdn,
-      amount: contract.finalAmount,
-      currency: provider.settlementCurrency,
-      externalId: contract.id,
-      note: `FTM payout ${contract.id.slice(0, 8)}`,
-    });
-    if (result.status === 'failed') {
-      db.update(payments)
-        .set({ status: 'failed', raw: JSON.stringify(result.raw ?? null), updatedAt: Date.now() })
-        .where(eq(payments.id, payment.id))
-        .run();
-    }
-  } catch (err) {
-    db.update(payments)
-      .set({ raw: JSON.stringify({ initiateError: String(err) }), updatedAt: Date.now() })
-      .where(eq(payments.id, payment.id))
-      .run();
-  }
-  return payment;
-}
-
-/** Full refund of the hold with a balanced journal; ends CANCELLED_REFUNDED. */
+/**
+ * Refund what is still held, with a balanced journal; ends CANCELLED_REFUNDED.
+ * Normally the whole hold. If the farmer's advance already went out (a
+ * disputed re-grade that came back REJECT), it is not pulled back (Phase 3,
+ * the same rule as a claim): the buyer gets the rest.
+ */
 export function refundHold(contractId: string, payload?: Record<string, unknown>): Contract {
   const contract = getContractRow(contractId);
+  const { landed, pending } = farmerPaid(contractId);
+  const refund = contract.holdAmount - landed - pending;
   return transitionContract(contractId, 'CANCELLED_REFUNDED', { type: 'system' }, {
-    payload,
+    payload: { ...payload, ...(landed + pending > 0 ? { advanceKept: landed + pending } : {}) },
     also: (tx) => {
       postJournal(tx, contractId, [
-        { account: ACCOUNTS.escrow(contractId), debit: contract.holdAmount, memoKey: 'ledger.refund' },
-        { account: ACCOUNTS.buyerRefunds(contract.buyerId), credit: contract.holdAmount, memoKey: 'ledger.refund' },
+        { account: ACCOUNTS.escrow(contractId), debit: refund, memoKey: 'ledger.refund' },
+        { account: ACCOUNTS.buyerRefunds(contract.buyerId), credit: refund, memoKey: 'ledger.refund' },
       ]);
     },
   });
@@ -275,44 +213,10 @@ export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: nu
         handleCollectionFailure(contract.id);
       }
     } else {
-      if (status === 'successful' && contract.state === 'GRADED') {
-        const finalAmount = contract.finalAmount ?? 0;
-        const remainder = contract.holdAmount - finalAmount;
-        transitionContract(contract.id, 'SETTLED', { type: 'system' }, {
-          payload: { paymentId: payment.id, finalAmount, refunded: remainder },
-          also: (tx) => {
-            postJournal(tx, contract.id, [
-              { account: ACCOUNTS.escrow(contract.id), debit: finalAmount, memoKey: 'ledger.payout' },
-              { account: ACCOUNTS.farmerPayable(contract.farmerId), credit: finalAmount, memoKey: 'ledger.payout' },
-              ...(remainder > 0
-                ? [
-                    { account: ACCOUNTS.escrow(contract.id), debit: remainder, memoKey: 'ledger.refundRemainder' },
-                    { account: ACCOUNTS.buyerRefunds(contract.buyerId), credit: remainder, memoKey: 'ledger.refundRemainder' },
-                  ]
-                : []),
-            ]);
-          },
-        });
-        const farmer = db.select().from(farmers).where(eq(farmers.id, contract.farmerId)).get();
-        if (farmer) {
-          queueSms({
-            phone: farmer.phone,
-            locale: farmer.locale,
-            templateKey: 'sms.paid',
-            params: { amount: formatGhs(finalAmount) },
-            contractId: contract.id,
-            lotId: contract.lotId,
-          });
-        }
-        queueBuyerNotification({
-          buyerId: contract.buyerId,
-          templateKey: 'notif.settled',
-          params: { amount: formatGhs(finalAmount), refunded: formatGhs(remainder) },
-          contractId: contract.id,
-          lotId: contract.lotId,
-        });
-      }
-      // A failed disbursement stays GRADED; the sweep retries via releaseDuePayments.
+      // A farmer payout (Phase 3: the advance at pickup or the balance on
+      // receipt). Settlement records it in the ledger and settles the order
+      // once the last one lands. A failed one is retried by the sweep.
+      await onFarmerPayout({ ...payment, status }, status);
     }
   }
   return { resolved };
@@ -373,24 +277,9 @@ export function refundMissedPickups(now = Date.now()): number {
 }
 
 /**
- * Release payouts whose dispute window has lapsed (the farmer's USSD "Agree"
- * calls initiateRelease directly instead of waiting). Sweep-driven.
+ * Sweep: farmer payouts that failed are sent again (Phase 3 — advances at
+ * pickup, balances on receipt). Kept under its old name for the sweep job.
  */
-export async function releaseDuePayments(now = Date.now()): Promise<number> {
-  const windowMs = config.DISPUTE_WINDOW_MINUTES * 60 * 1000;
-  const due = db
-    .select()
-    .from(contracts)
-    .where(eq(contracts.state, 'GRADED'))
-    .all()
-    .filter(
-      (c) =>
-        c.finalGrade &&
-        c.finalGrade !== 'REJECT' &&
-        (c.finalAmount ?? 0) > 0 &&
-        c.gradedAt !== null &&
-        now - c.gradedAt >= windowMs,
-    );
-  for (const c of due) await initiateRelease(c.id);
-  return due.length;
+export async function releaseDuePayments(): Promise<number> {
+  return retryFarmerPayouts();
 }

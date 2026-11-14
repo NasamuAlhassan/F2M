@@ -3,6 +3,9 @@ import { db } from '../db/client';
 import { buyers, demands, type Demand } from '../db/schema';
 import { DomainError, notFound } from './errors';
 import { runMatching } from './matching';
+import { tryAlertOnNewRequest } from './alerts';
+import { publishLive } from './events';
+import { observePrice } from './priceIntel';
 import { convertToKg, getCommodityByCode, getRegion, getUnit } from './registries';
 import {
   expandPriceTerms,
@@ -92,8 +95,17 @@ export function createDemand(input: CreateDemandInput): Demand {
     .returning()
     .get();
 
+  // What the buyer is prepared to pay for the lowest grade they accept is a market signal too (D-053).
+  const wantedPerKg = priceTerms[minBand as keyof PriceTerms] as number | undefined;
+  if (wantedPerKg && wantedPerKg > 0) {
+    observePrice({ commodityId: commodity.id, regionCode: input.regionCode, pricePerKg: wantedPerKg, source: 'request', refId: demand.id });
+  }
+
+  publishLive({ topic: 'demands', audience: ['all'], ref: { demandId: demand.id } });
+
   // Matching runs the moment demand lands (and again on lot registration + sweep).
   runMatching({ demandId: demand.id });
+  tryAlertOnNewRequest(demand.id); // farmers who could supply it, and have nothing listed yet (D-055)
   return getDemand(demand.id); // re-read: matching may have moved it to partially_matched/fulfilled
 }
 

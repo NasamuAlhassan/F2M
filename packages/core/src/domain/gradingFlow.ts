@@ -9,7 +9,9 @@ import { contractPriceTerms, getContract } from './contracts';
 import { DomainError } from './errors';
 import { getFarmerById } from './farmers';
 import { queueSms } from './notifications';
-import { initiateRelease, refundHold } from './paymentFlow';
+import { getJobForContract } from './logistics';
+import { refundHold } from './paymentFlow';
+import { advanceFor, confirmReceipt, markDelivered, orderTotal, payAdvance } from './settlement';
 import { listPhotosForContract, photoAsGradingImage } from './photos';
 import { getActiveRubric, getCommodityById, getRubricById } from './registries';
 import { appendLotEvent } from './trace';
@@ -126,6 +128,21 @@ export async function runGrading(contractId: string): Promise<Grading> {
 
   if (result.gradeBand === 'REJECT') {
     refundHold(contractId, { reason: 'grade_reject', attempt });
+  } else {
+    // Phase 3 (the owner's rule): the farmer's advance goes out at pickup.
+    // Idempotent, so a re-grade after a dispute never sends it twice.
+    await payAdvance(contractId);
+    // A job whose driver already said "arrived", or that the buyer already
+    // confirmed, gets there now that the grade exists. With no transport job
+    // the receipt clock waits out the farmer's grade-dispute window first
+    // (sweepSettlement, or agreeGrading), so delivering never cuts it short.
+    // This runs on a re-grade too: a driver who arrived during a dispute
+    // could not deliver an order that was not GRADED, so the final grade does.
+    const job = getJobForContract(contractId);
+    if (job && ['ARRIVED', 'DELIVERED', 'PAID'].includes(job.state)) {
+      markDelivered(contractId, 'driver');
+      if (job.state !== 'ARRIVED') await confirmReceipt(contractId, { type: 'system' });
+    }
   }
 
   queueBuyerNotification({
@@ -163,6 +180,8 @@ export async function runGrading(contractId: string): Promise<Grading> {
               commodity: commodityName,
               band: t(farmer.locale, `band.${result.gradeBand}`),
               amount: formatGhs(finalAmount),
+              advance: formatGhs(advanceFor(getContract(contractId))),
+              rest: formatGhs(orderTotal(getContract(contractId)) - advanceFor(getContract(contractId))),
               reason,
               code: config.USSD_SHORTCODE,
             },
@@ -197,11 +216,23 @@ export function disputeGrading(contractId: string, farmerId: string, note?: stri
   return updated;
 }
 
-/** Farmer agrees with the grade — release the payout now instead of waiting out the window. */
+/**
+ * Farmer agrees with the grade. Since Phase 3 the advance already went out at
+ * grading and the balance follows the buyer's receipt, so agreeing only makes
+ * sure the advance is on its way (it is idempotent).
+ */
 export async function agreeGrading(contractId: string, farmerId: string): Promise<void> {
   const contract = getContract(contractId);
   if (contract.farmerId !== farmerId) {
     throw new DomainError('Not your contract', 'FORBIDDEN_ACTOR', 403);
   }
-  await initiateRelease(contractId);
+  await payAdvance(contractId);
+  // No dispute coming: an order with no transport job is the buyer's to receive now.
+  if (getContract(contractId).state === 'GRADED' && !liveTransport(contractId)) markDelivered(contractId, 'no_transport');
+}
+
+/** A transport job still carrying this order (not cancelled). */
+export function liveTransport(contractId: string): boolean {
+  const job = getJobForContract(contractId);
+  return Boolean(job && !['CANCELLED', 'CANCELLED_REFUNDED', 'NO_DRIVER'].includes(job.state));
 }

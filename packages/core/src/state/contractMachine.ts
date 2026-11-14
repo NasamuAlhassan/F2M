@@ -33,7 +33,13 @@ const TRANSITIONS: Record<string, { actors: Array<Actor['type']> }> = {
   'DISPUTED>GRADED': { actors: ['system'] }, // re-grade, final
   'DISPUTED>CANCELLED_REFUNDED': { actors: ['system'] },
   'GRADED>CANCELLED_REFUNDED': { actors: ['system'] }, // grade REJECT
-  'GRADED>SETTLED': { actors: ['system'] },
+  // Phase 3 (docs/PHASE3.md): the produce arrives, the buyer receives it or
+  // reports a problem, and the farmer's balance settles the order.
+  'GRADED>DELIVERED': { actors: ['system'] }, // driver arrived, or no transport job
+  'DELIVERED>RECEIVED': { actors: ['buyer', 'system'] }, // buyer confirms, or the 24 h clock
+  'DELIVERED>CLAIMED': { actors: ['buyer'] },
+  'CLAIMED>RECEIVED': { actors: ['system'] }, // farmer accepted, or F2M decided
+  'RECEIVED>SETTLED': { actors: ['system'] }, // the farmer's last payout landed
 };
 
 const EVENT_FOR_STATE: Record<ContractState, LotEventType | null> = {
@@ -47,6 +53,9 @@ const EVENT_FOR_STATE: Record<ContractState, LotEventType | null> = {
   PICKUP_CONFIRMED: 'PICKUP_CONFIRMED',
   GRADED: 'GRADED',
   DISPUTED: 'DISPUTE_OPENED',
+  DELIVERED: 'DELIVERED',
+  CLAIMED: 'CLAIM_RAISED',
+  RECEIVED: 'RECEIPT_CONFIRMED',
   CANCELLED_REFUNDED: 'REFUNDED',
   SETTLED: 'SETTLED',
 };
@@ -58,6 +67,10 @@ export interface TransitionExtra {
   finalAmount?: number;
   declineReasonKey?: string;
   disputeNote?: string;
+  /** DELIVERED: when the buyer's silence becomes a receipt. */
+  receiptDueAt?: number;
+  /** RECEIVED from a claim: the deduction agreed or decided. */
+  deductionAmount?: number;
   payload?: Record<string, unknown>;
   /** Extra work (e.g. ledger postings) that must commit atomically with the transition. */
   also?: (tx: DbLike, contract: Contract) => void;
@@ -101,6 +114,14 @@ export function transitionContract(
       updates.gradedAt = now;
       if (extra.finalGrade !== undefined) updates.finalGrade = extra.finalGrade;
       if (extra.finalAmount !== undefined) updates.finalAmount = extra.finalAmount;
+    }
+    if (to === 'DELIVERED') {
+      updates.deliveredAt = now;
+      if (extra.receiptDueAt !== undefined) updates.receiptDueAt = extra.receiptDueAt;
+    }
+    if (to === 'RECEIVED') {
+      updates.receivedAt = now;
+      if (extra.deductionAmount !== undefined) updates.deductionAmount = extra.deductionAmount;
     }
     if (to === 'SETTLED') {
       updates.settledAt = now;

@@ -1,4 +1,15 @@
-import { formatGhs, getCommodityByCode, listCommodities, listUnits, queueVoiceCall, registerLot, t, type GradeBand } from '@ftm/core';
+import {
+  formatGhs,
+  getCommodityByCode,
+  guidanceParams,
+  listCommodities,
+  listUnits,
+  priceGuidance,
+  queueVoiceCall,
+  registerLot,
+  t,
+  type GradeBand,
+} from '@ftm/core';
 import type { UssdCtx, UssdScreen } from '../machine';
 import { DAY_MS, invalid, listLines, paginate, parseSelection } from './common';
 import { parseGhs } from './offers';
@@ -140,7 +151,15 @@ export const sellReady: UssdScreen = {
 /** The farmer's own asking price per unit (Phase 1) — or 0 to let buyers make offers. */
 export const sellPrice: UssdScreen = {
   key: 'sell_price',
-  render: (ctx) => [{ key: 'ussd.sell.price', params: { unit: t(ctx.locale, `unit.${String(ctx.data.sellUnit)}`) } }],
+  render: (ctx) => {
+    const lines: Array<{ key: string; params?: Record<string, string | number> }> = [
+      { key: 'ussd.sell.price', params: { unit: t(ctx.locale, `unit.${String(ctx.data.sellUnit)}`) } },
+    ];
+    // What it has been fetching lately, so the farmer names a price knowing the market (D-053).
+    const g = sellGuidance(ctx, null);
+    if (g?.messageKey === 'price.hint.range') lines.push({ key: g.messageKey, params: guidanceParams(g) });
+    return lines;
+  },
   handleInput: (input, ctx) => {
     if (input.trim() === '0') {
       ctx.data.sellPrice = null;
@@ -153,9 +172,30 @@ export const sellPrice: UssdScreen = {
   },
 };
 
+/** Is the price on offer sensible? Null when the flow has no crop or unit yet. */
+function sellGuidance(ctx: UssdCtx, price: number | null) {
+  if (!ctx.data.sellCommodity || !ctx.data.sellUnit) return null;
+  try {
+    return priceGuidance({
+      commodityCode: String(ctx.data.sellCommodity),
+      unitCode: String(ctx.data.sellUnit),
+      regionCode: ctx.farmer?.regionCode,
+      price,
+      side: 'sell',
+    });
+  } catch {
+    return null; // advice must never get in the way of listing
+  }
+}
+
 export const sellConfirm: UssdScreen = {
   key: 'sell_confirm',
   render: (ctx) => [
+    // A price well off the market is flagged before the farmer presses 1 (D-053).
+    ...(() => {
+      const g = ctx.data.sellPrice ? sellGuidance(ctx, Number(ctx.data.sellPrice)) : null;
+      return g && g.verdict !== 'fair' && g.verdict !== 'unknown' ? [{ key: g.messageKey, params: guidanceParams(g) }] : [];
+    })(),
     {
       key: ctx.data.sellPrice ? 'ussd.sell.confirmPrice' : 'ussd.sell.confirm',
       params: {

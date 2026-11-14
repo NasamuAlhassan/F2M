@@ -8,9 +8,12 @@ import { accountRoleId, config, DomainError, getAccountByAuthUser, verifyAccessT
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { accountRoutes } from './routes/api/account';
+import { aiRoutes } from './routes/api/ai';
+import { alertRoutes } from './routes/api/alerts';
 import { demandRoutes } from './routes/api/demands';
 import { lotRoutes } from './routes/api/lots';
 import { contractRoutes } from './routes/api/contracts';
+import { dealRoutes } from './routes/api/deals';
 import { devRoutes } from './routes/api/dev';
 import { engineRoutes } from './routes/api/engine';
 import { logisticsRoutes } from './routes/api/logistics';
@@ -18,6 +21,8 @@ import { marketRoutes } from './routes/api/market';
 import { farmerPortalRoutes } from './routes/api/farmerPortal';
 import { notificationRoutes } from './routes/api/notifications';
 import { offerRoutes } from './routes/api/offers';
+import { priceRoutes } from './routes/api/prices';
+import { streamRoutes } from './routes/api/stream';
 import { publicRoutes } from './routes/api/public';
 import { registryRoutes } from './routes/api/registries';
 import type { Role } from './types';
@@ -110,6 +115,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   app.decorate('authDriver', roleGuard(['driver'], 'Driver login required'));
   app.decorate('authFarmer', roleGuard(['farmer'], 'Farmer login required'));
   app.decorate('authBuyerOrFarmer', roleGuard(['buyer', 'farmer'], 'Login required'));
+  app.decorate('authAnyRole', roleGuard(['buyer', 'driver', 'farmer'], 'Login required'));
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof DomainError) {
@@ -135,11 +141,16 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   await app.register(lotRoutes, { prefix: '/api' });
   await app.register(demandRoutes, { prefix: '/api' });
   await app.register(contractRoutes, { prefix: '/api' });
+  await app.register(dealRoutes, { prefix: '/api' });
   await app.register(logisticsRoutes, { prefix: '/api' });
   await app.register(notificationRoutes, { prefix: '/api' });
   await app.register(offerRoutes, { prefix: '/api' });
   await app.register(engineRoutes, { prefix: '/api' });
   await app.register(marketRoutes, { prefix: '/api' });
+  await app.register(priceRoutes, { prefix: '/api' });
+  await app.register(streamRoutes, { prefix: '/api' });
+  await app.register(alertRoutes, { prefix: '/api' });
+  await app.register(aiRoutes, { prefix: '/api' });
   await app.register(farmerPortalRoutes, { prefix: '/api' });
   await app.register(publicRoutes, { prefix: '/api' });
   // Simulator surfaces (D-047): the handset's SMS/call inboxes and the test clock.

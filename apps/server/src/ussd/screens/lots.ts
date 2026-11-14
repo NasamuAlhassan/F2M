@@ -1,6 +1,11 @@
 import {
+  advanceFor,
   agreeGrading,
+  answerClaim,
   confirmPickup,
+  farmerPaid,
+  listClaimsForContract,
+  orderTotal,
   disputeGrading,
   DomainError,
   getJobForContract,
@@ -62,9 +67,9 @@ export const lotsList: UssdScreen = {
   },
 };
 
-/** The lot's action-relevant contract: awaiting pickup confirmation or graded. */
+/** The lot's order the farmer can act on or follow: pickup, grade, delivery, a claim, receipt (Phase 3). */
 function activeContract(lotId: string): Contract | undefined {
-  return listContractsForLot(lotId).find((c) => c.state === 'FUNDS_HELD' || c.state === 'GRADED');
+  return listContractsForLot(lotId).find((c) => ['FUNDS_HELD', 'GRADED', 'DELIVERED', 'CLAIMED', 'RECEIVED'].includes(c.state));
 }
 
 export const lotDetail: UssdScreen = {
@@ -94,17 +99,35 @@ export const lotDetail: UssdScreen = {
       if (!getJobForContract(contract.id)) lines.push({ key: 'ussd.lot.askTransport' });
     } else if (contract?.state === 'GRADED' && contract.finalGrade) {
       // The grade is a number she can argue with: band, payout, and the reason.
+      // Phase 3: part of the money now, the rest when the buyer receives it.
       lines.push({
         key: 'ussd.grade.line',
         params: {
           band: t(ctx.locale, `band.${contract.finalGrade}`),
-          amount: formatGhs(contract.finalAmount ?? 0),
+          advance: formatGhs(advanceFor(contract)),
+          rest: formatGhs(orderTotal(contract) - advanceFor(contract)),
         },
       });
       const grading = listGradingsForContract(contract.id)[0];
       const reasons = grading?.reasons ? (JSON.parse(grading.reasons) as Array<{ observation: string }>) : [];
       if (reasons[0]) lines.push({ key: 'ussd.grade.reason', params: { observation: reasons[0].observation } });
       lines.push({ key: 'ussd.grade.agree' }, { key: 'ussd.grade.dispute' });
+    } else if (contract?.state === 'DELIVERED') {
+      lines.push({ key: 'ussd.lot.delivered' });
+    } else if (contract?.state === 'RECEIVED') {
+      const { landed } = farmerPaid(contract.id);
+      lines.push({ key: 'ussd.lot.received', params: { amount: formatGhs(Math.max(0, orderTotal(contract) - (contract.deductionAmount ?? 0) - landed)) } });
+    } else if (contract?.state === 'CLAIMED') {
+      const claim = listClaimsForContract(contract.id).at(-1);
+      if (claim?.status === 'awaiting_farmer') {
+        lines.push(
+          { key: 'ussd.lot.claim', params: { reason: t(ctx.locale, `claim.reason.${claim.reason}`), amount: formatGhs(claim.proposedDeduction) } },
+          { key: 'ussd.claim.accept' },
+          { key: 'ussd.claim.refuse' },
+        );
+      } else {
+        lines.push({ key: 'ussd.lot.claimReview' });
+      }
     } else if (lot.askingPricePerUnit) {
       lines.push({ key: 'ussd.lot.askingUnit', params: { price: formatGhs(lot.askingPricePerUnit) } });
     } else if (lot.askingPricePerKg) {
@@ -146,10 +169,20 @@ export const lotDetail: UssdScreen = {
       }
       return { end: [{ key: 'ussd.lot.transportAsked' }] };
     }
+    if (contract.state === 'CLAIMED') {
+      const claim = listClaimsForContract(contractId).at(-1);
+      if (claim?.status === 'awaiting_farmer' && (input === '1' || input === '2')) {
+        const held = orderTotal(contract) - farmerPaid(contractId).landed - farmerPaid(contractId).pending;
+        await answerClaim(claim.id, ctx.farmer.id, input === '1');
+        return input === '1'
+          ? { end: [{ key: 'ussd.claim.acceptedDone', params: { amount: formatGhs(Math.max(0, held - claim.proposedDeduction)) } }] }
+          : { end: [{ key: 'ussd.claim.refusedDone', params: { amount: formatGhs(Math.max(0, held - claim.proposedDeduction)) } }] };
+      }
+    }
     if (contract.state === 'GRADED') {
       if (input === '1') {
         await agreeGrading(contractId, ctx.farmer.id);
-        return { end: [{ key: 'ussd.grade.agreeDone', params: { amount: formatGhs(contract.finalAmount ?? 0) } }] };
+        return { end: [{ key: 'ussd.grade.agreeDone', params: { amount: formatGhs(advanceFor(contract)) } }] };
       }
       if (input === '2') {
         disputeGrading(contractId, ctx.farmer.id);
