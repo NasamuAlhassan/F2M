@@ -31,15 +31,23 @@ and save.
 
 ## 3. Turn on phone + password sign-in
 
-Dashboard → **Authentication → Sign In / Providers → Phone**:
+Supabase won't switch on phone sign-in until it knows how to send an SMS,
+and F2M can't send one until the sender ID is approved. A stand-in hook
+fills that gap:
 
-- **Enable phone provider**: on.
-- **Confirm phone**: off, until the SMS sender ID is approved. With it on,
-  every signup waits for a text that cannot arrive yet.
+1. **SQL Editor** → paste
+   [`migrations/0002_send_sms_hook.sql`](migrations/0002_send_sms_hook.sql) →
+   **Run**.
+2. **Authentication → Hooks → Send SMS** → choose **Postgres** → schema
+   `public` → function `hook_send_sms_unavailable` → enable and save.
+3. **Authentication → Sign In / Providers → Phone**:
+   - **Enable phone provider**: on.
+   - **Confirm phone**: off, until the SMS sender ID is approved. With it on,
+     every signup waits for a text that can't arrive yet.
 
-If the dashboard refuses to save without SMS provider details (Twilio and so
-on), leave it and say so. A Send SMS Hook routed through Africa's Talking
-replaces that field.
+The hook sends nothing. Anything that would text a code, like a password
+reset, gets the message "SMS is not available on F2M yet" instead of a code
+that never arrives. Sign-up and sign-in with a password don't use SMS at all.
 
 ## 4. Invite your numbers
 
