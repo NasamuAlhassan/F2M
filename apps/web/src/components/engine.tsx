@@ -267,7 +267,7 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
 
           {data?.reviewNote && (
             <p className="stamp mb-4 px-3 py-2 text-[11px] normal-case tracking-normal text-[var(--gold-deep)]">
-              Machine-drafted translation — requires native-speaker review (Khaya AI) before farmer-facing use.
+              Machine-drafted translation — requires native-speaker review before farmer-facing use.
             </p>
           )}
 

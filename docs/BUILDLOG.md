@@ -312,3 +312,18 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **New rail (D-041)**: `MT_PROVIDER=hf` (LLM translation on the router, `MT_MODEL` default Gemma-3-27B) and `ASR_PROVIDER=hf` (Whisper on hf-inference, `ASR_MODEL`) beside Khaya; the draft script switches engines by env and stamps its engine into each catalog. Probed and ruled out for now: NLLB + MMS-TTS on hf-inference.
 - **Bug the wire caught**: unquoted `#` in `.env` shortcodes is a comment — every SMS said "Dial *384*7247" with no `#`. Quoted in both env files; tests now pin the full code.
 - Verified: **170 tests green** (14 new HF-provider wire tests; locale tests made draft-agnostic), check clean, demo exit 0 on mocks.
+
+## 2026-11-13 · The language Space connects (D-045)
+
+- **`providers/space.ts`**: a small Gradio client (`spaceCall`) plus `LOCALE_TO_SPACE`. Timeouts, one retry for dropped connections only, and readable errors for an asleep Space, a non-2xx, a missing event id and the Space's own error events.
+- **Three providers on it**: `SpaceAsrProvider` (base64 WAV in, text out; refuses WebM), `SpaceMtProvider` (`covered:false` is an error, not a translation), `SpaceTtsProvider` (WAV cached by hash, English and failures → `<Say>`, 6 s budget with background completion). Selected with `ASR_PROVIDER` / `MT_PROVIDER` / `TTS_PROVIDER` = `space`; new `SPACE_URL`, `SPACE_TIMEOUT_MS`.
+- **Handset simulator** now encodes the recording as 16 kHz mono WAV in the browser; `/voice/upload-recording` keeps `.wav` vs `.webm` as sent.
+- **`i18n:draft`** can draft with the Space (`MT_PROVIDER=space`), the only engine that covers Kusaal.
+- Verified: typecheck clean; new wire tests (client, ASR, MT, TTS incl. the over-budget case, the upload route) green; live against the Space — a Twi sentence spoken by the Space's own voice, uploaded as WAV through the real server, was heard, translated and listed as 10 bags of maize (grade B). The heard text was not perfect ("a very good doughnut" for "good quality") — the parser's safe rules are what kept it a correct listing.
+
+## 2026-11-14 · Cleanup: unused integrations removed (D-046)
+
+- Deleted: the Khaya ASR/MT/TTS providers, the HF Whisper/LLM speech providers, `local-models/` (the Python service), the MTN MoMo provider with its callback routes and provisioning script, and the six test files that covered them.
+- `.env.example` rewritten to only the settings the code reads, grouped by what they switch on; `fly.toml` and `render.yaml` lost the removed settings.
+- README, DEMO, PRODUCT and COSTS updated to the current provider set.
+- Verified: typecheck clean, 179 tests green (the drop from 199 is the removed providers' own tests), `npm run demo` exit 0.

@@ -21,7 +21,6 @@ import { farmerPortalRoutes } from './routes/api/farmerPortal';
 import { notificationRoutes } from './routes/api/notifications';
 import { publicRoutes } from './routes/api/public';
 import { registryRoutes } from './routes/api/registries';
-import { momoCallbackRoutes } from './routes/momoCallbacks';
 import { ussdRoutes } from './routes/ussd';
 import { voiceRoutes } from './routes/voice';
 
@@ -50,7 +49,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     prefix: '/photos/',
     decorateReply: false,
   });
-  // Cached Khaya TTS audio for IVR <Play> (D-040) — synthesized once per phrase.
+  // Cached TTS audio for IVR <Play> (D-040, D-045) — synthesized once per phrase.
   fs.mkdirSync(path.join(config.storageDir, 'tts'), { recursive: true });
   await app.register(fastifyStatic, {
     root: path.join(config.storageDir, 'tts'),
@@ -118,7 +117,6 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
 
   await app.register(ussdRoutes);
   await app.register(voiceRoutes);
-  await app.register(momoCallbackRoutes);
   await app.register(authRoutes, { prefix: '/api' });
   await app.register(registryRoutes, { prefix: '/api' });
   await app.register(farmerRoutes, { prefix: '/api' });
@@ -141,7 +139,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   // and the honest 404 stands instead.
   const portalIndex = path.join(SERVER_ROOT, 'public', 'index.html');
   const hasPortal = fs.existsSync(portalIndex);
-  const WIRE_PREFIXES = ['/api', '/ussd', '/voice', '/callbacks', '/photos', '/tts', '/health'];
+  const WIRE_PREFIXES = ['/api', '/ussd', '/voice', '/photos', '/tts', '/recordings', '/health'];
   app.setNotFoundHandler((req, reply) => {
     const isPageRequest =
       (req.method === 'GET' || req.method === 'HEAD') &&

@@ -45,7 +45,7 @@ function LangLegend() {
           <span
             key={l.code}
             className="smallcaps cursor-not-allowed text-[var(--ink-4)]"
-            title="Machine-drafted only — awaiting native-speaker review (Khaya AI)"
+            title="Machine-drafted only — awaiting native-speaker review"
           >
             {l.label}
           </span>

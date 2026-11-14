@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "momo:provision": "tsx scripts/momo-provision.ts",
     "demo": "tsx scripts/demo.ts"
   },
   "dependencies": {

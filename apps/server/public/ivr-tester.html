@@ -203,7 +203,7 @@
   }
 
   // The open-ended listing call (D-038): drives the REAL inbound wire — the
-  // typed text stands in for the recording (mock ASR); Khaya transcribes later.
+  // typed text stands in for the recording (mock ASR); ASR_PROVIDER=space hears real audio.
   document.getElementById('speak').addEventListener('click', async () => {
     const speech = document.getElementById('speech').value.trim();
     const out = document.getElementById('speakout');

@@ -62,7 +62,7 @@ export { transitionJob, type JobActor, type JobTransitionExtra } from './state/d
 export * from './providers/asr/index';
 export * from './providers/mt/index';
 export * from './providers/tts/index';
-export { LOCALE_TO_KHAYA, khayaLang } from './providers/khaya';
+export { LOCALE_TO_SPACE, spaceLang, spaceCall } from './providers/space';
 export * from './providers/notify/index';
 export * from './providers/payment/index';
 export * from './providers/grading/index';

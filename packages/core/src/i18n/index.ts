@@ -7,7 +7,7 @@ import kus from './catalogs/kus.json' with { type: 'json' };
 import tw from './catalogs/tw.json' with { type: 'json' };
 
 // One flat catalog per locale; missing keys fall back to English. Non-en
-// catalogs are MACHINE-DRAFTED (Khaya MT) until a native speaker reviews one
+// catalogs are MACHINE-DRAFTED (npm run i18n:draft) until a native speaker reviews one
 // and sets its `_reviewed` metadata — the review gate (D-040) lives in t()
 // itself, so an unreviewed catalog resolves to English on every real surface
 // no matter what locale a farmer has chosen. Their choice is still persisted;

@@ -27,16 +27,13 @@ const envSchema = z
     // the original 7B VL retired from the router, verified live 2026-08-24.
     GRADING_MODEL: z.string().default('Qwen/Qwen3-VL-30B-A3B-Instruct'),
 
-    PAYMENT_PROVIDER: z.enum(['mock', 'momo']).default('mock'),
+    // Payments are simulated until Phase 3 picks a licensed payment provider
+    // (docs/COSTS.md §6). The value still matters: demo-only shortcuts such as
+    // "accept for the farmer" are locked to 'mock' and stay locked when a real
+    // provider is added here.
+    PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
     MOCK_PAYMENT_DELAY_MS: z.coerce.number().default(2000),
     PAYMENT_TIMEOUT_MS: z.coerce.number().default(120_000),
-    MOMO_BASE_URL: z.string().default('https://sandbox.momodeveloper.mtn.com'),
-    MOMO_SUB_KEY_COLLECTIONS: z.string().optional(),
-    MOMO_SUB_KEY_DISBURSEMENTS: z.string().optional(),
-    MOMO_API_USER: z.string().optional(),
-    MOMO_API_KEY: z.string().optional(),
-    MOMO_TARGET_ENV: z.string().default('sandbox'),
-    MOMO_CURRENCY: z.string().default('EUR'),
 
     AT_USERNAME: z.string().default('sandbox'),
     AT_API_KEY: z.string().optional(),
@@ -49,20 +46,17 @@ const envSchema = z
     AT_VOICE_NUMBER: z.string().optional(),
     VOICE_ANSWER_TIMEOUT_MS: z.coerce.number().default(120_000),
 
-    // Voice listing pipeline (D-038): speech → text → English → parsed lot.
-    // 'khaya' = GhanaNLP's hosted API (quota-metered); 'hf' = open models via
-    // the Hugging Face token (D-041) — LLM translation on the router, Whisper
-    // ASR on hf-inference. 'local' = open-weight models run in-process by
-    // local-models/server.py (D-044) — the only path that covers Kusaal,
-    // which neither Khaya nor a generic LLM handles well. TTS has no HF or
-    // local path yet (MMS not deployed on either).
-    ASR_PROVIDER: z.enum(['mock', 'khaya', 'hf', 'local']).default('mock'),
-    MT_PROVIDER: z.enum(['mock', 'khaya', 'hf', 'local']).default('mock'),
-    TTS_PROVIDER: z.enum(['mock', 'khaya']).default('mock'),
-    KHAYA_API_KEY: z.string().optional(),
-    MT_MODEL: z.string().default('google/gemma-3-27b-it'),
-    ASR_MODEL: z.string().default('openai/whisper-large-v3'),
-    LOCAL_MODELS_URL: z.string().default('http://localhost:8008'),
+    // Language layer (D-038, D-045): speech → text → English → parsed lot, and
+    // the IVR's local-language voice. 'space' = the owner's own Hugging Face
+    // language Space: hears, translates and speaks Twi/Ewe/Kusaal/Dagbani/Hausa
+    // on their own models, public and keyless. 'mock' = offline stand-ins.
+    ASR_PROVIDER: z.enum(['mock', 'space']).default('mock'),
+    MT_PROVIDER: z.enum(['mock', 'space']).default('mock'),
+    TTS_PROVIDER: z.enum(['mock', 'space']).default('mock'),
+    SPACE_URL: z.string().default('https://princealhassannasamu-tekyerema-lang.hf.space'),
+    // Cold first calls load a model (measured 33 s for English hearing), so the
+    // ceiling is generous; the TTS provider applies its own, shorter budget.
+    SPACE_TIMEOUT_MS: z.coerce.number().default(60_000),
 
     // Review gate escape hatch (D-040): 'true' lets machine-drafted catalogs
     // reach farmer-facing surfaces — the owner's own live testing ONLY.
@@ -77,21 +71,8 @@ const envSchema = z
     if (env.NOTIFY_PROVIDER === 'at' && !env.AT_API_KEY) {
       ctx.addIssue({ code: 'custom', message: 'NOTIFY_PROVIDER=at requires AT_API_KEY' });
     }
-    if ((env.ASR_PROVIDER === 'khaya' || env.MT_PROVIDER === 'khaya' || env.TTS_PROVIDER === 'khaya') && !env.KHAYA_API_KEY) {
-      ctx.addIssue({ code: 'custom', message: 'ASR/MT/TTS_PROVIDER=khaya requires KHAYA_API_KEY' });
-    }
-    if ((env.ASR_PROVIDER === 'hf' || env.MT_PROVIDER === 'hf') && !env.HF_TOKEN) {
-      ctx.addIssue({ code: 'custom', message: 'ASR/MT_PROVIDER=hf requires HF_TOKEN' });
-    }
     if (env.VOICE_PROVIDER === 'at' && (!env.AT_API_KEY || !env.AT_VOICE_NUMBER)) {
       ctx.addIssue({ code: 'custom', message: 'VOICE_PROVIDER=at requires AT_API_KEY and AT_VOICE_NUMBER' });
-    }
-    if (env.PAYMENT_PROVIDER === 'momo') {
-      for (const key of ['MOMO_SUB_KEY_COLLECTIONS', 'MOMO_SUB_KEY_DISBURSEMENTS', 'MOMO_API_USER', 'MOMO_API_KEY'] as const) {
-        if (!env[key]) {
-          ctx.addIssue({ code: 'custom', message: `PAYMENT_PROVIDER=momo requires ${key}` });
-        }
-      }
     }
   });
 

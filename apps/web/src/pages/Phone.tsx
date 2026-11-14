@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Handset, WaveBars, type SoftKey } from '../components/handset';
 import { F2MSeal } from '../components/engrave';
+import { blobToWav } from '../lib/wav';
 
 /**
  * The handset simulator — one device that does USSD, voice and SMS, because
@@ -325,7 +326,7 @@ export function PhonePage() {
 
     if (play) {
       // A real TTS provider sends audio rather than text (D-040). Play it —
-      // the old simulator only read <Say> and went blank the moment Khaya was on.
+      // the old simulator only read <Say> and went blank the moment a real TTS voice was on.
       const url = play.getAttribute('url');
       if (url) void new Audio(url).play().catch(() => undefined);
       setScreen('♪ voice prompt playing…');
@@ -452,8 +453,12 @@ export function PhonePage() {
     setWireError(null);
     setScreen('… calling the listing line');
     try {
+      // WAV, not the recorder's WebM: the language Space (and every other
+      // speech provider) reads it; if the browser can't convert, WebM goes up
+      // as before and only the ffmpeg-backed local service will take it.
+      const wav = await blobToWav(blob);
       const form = new FormData();
-      form.append('audio', blob, 'recording');
+      form.append('audio', wav.blob, wav.converted ? 'recording.wav' : 'recording');
       const uploadRes = await fetch('/voice/upload-recording', { method: 'POST', body: form });
       if (!uploadRes.ok) throw new Error(`Upload failed (${uploadRes.status}).`);
       const { recordingUrl } = (await uploadRes.json()) as { recordingUrl: string };

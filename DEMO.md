@@ -15,7 +15,9 @@ To run it against **real providers** instead of mocks, set in `.env` (see `.env.
 
 ```
 GRADING_PROVIDER=hf      # + HF_TOKEN — real vision-model grading
-PAYMENT_PROVIDER=momo    # + MoMo sandbox keys — real requesttopay/transfer
+ASR_PROVIDER=space       # the Tɛkyerɛma language Space hears, translates and speaks
+MT_PROVIDER=space
+TTS_PROVIDER=space
 ```
 
 ## The three-tab manual demo (the one to show a real buyer)

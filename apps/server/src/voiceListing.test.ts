@@ -138,4 +138,25 @@ describe('voice listing pipeline (M29, D-038)', () => {
     const sms = listNotificationsForPhone(phone, 5).find((n) => n.templateKey === 'sms.listingFailed');
     expect(sms).toBeDefined();
   });
+
+  it('keeps the container the client sent: a WAV upload stays .wav (the language Space cannot read WebM), anything else stays .webm', async () => {
+    async function upload(filename: string, type: string): Promise<string> {
+      const boundary = '----ftmtest';
+      const payload = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="${filename}"\r\nContent-Type: ${type}\r\n\r\n`),
+        Buffer.from([1, 2, 3, 4]),
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/voice/upload-recording',
+        payload,
+        headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      });
+      expect(res.statusCode).toBe(201);
+      return (res.json() as { recordingUrl: string }).recordingUrl;
+    }
+    expect(await upload('recording.wav', 'audio/wav')).toMatch(/\/recordings\/[0-9a-f-]+\.wav$/);
+    expect(await upload('recording', 'video/webm')).toMatch(/\/recordings\/[0-9a-f-]+\.webm$/);
+  });
 });

@@ -41,8 +41,6 @@ services:
       # back to the mock default in packages/core/src/config.ts.
       - key: GRADING_PROVIDER
         value: mock
-      - key: PAYMENT_PROVIDER
-        value: mock
       - key: NOTIFY_PROVIDER
         value: mock
       - key: VOICE_PROVIDER
@@ -66,6 +64,4 @@ services:
       - key: AT_VOICE_NUMBER
         sync: false
       - key: USSD_SHORTCODE
-        sync: false
-      - key: KHAYA_API_KEY
         sync: false

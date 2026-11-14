@@ -39,7 +39,10 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
     if (!file) throw new DomainError('Attach an audio file', 'NO_FILE', 400);
     const dir = path.join(config.storageDir, 'recordings');
     fs.mkdirSync(dir, { recursive: true });
-    const fileName = `${crypto.randomUUID()}.webm`;
+    // Keep the container the client actually sent: the simulator now uploads
+    // WAV (the language Space can't read WebM), older clients still send WebM.
+    const isWav = file.mimetype.includes('wav') || file.filename.toLowerCase().endsWith('.wav');
+    const fileName = `${crypto.randomUUID()}.${isWav ? 'wav' : 'webm'}`;
     fs.writeFileSync(path.join(dir, fileName), await file.toBuffer());
     return reply.code(201).send({ recordingUrl: `${config.PUBLIC_BASE_URL}/recordings/${fileName}` });
   });

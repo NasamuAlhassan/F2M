@@ -97,7 +97,7 @@ export async function contractRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Call-bridge stub (W4): queue a voice call to the farmer. Masking/translation
-  // arrive with Khaya + AT Voice — the queue and provider plumbing are live now.
+  // arrive with the language layer + AT Voice — the queue and provider plumbing are live now.
   app.post('/contracts/:id/call-farmer', { preHandler: [app.authBuyer] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const contract = ownedContract(req, id);

@@ -241,7 +241,7 @@ export const contracts = sqliteTable(
     priceTerms: text('price_terms').notNull(), // JSON, frozen at offer time — D-015
     holdAmount: integer('hold_amount').notNull(), // pesewas = qty × best-band price
     displayCurrency: text('display_currency').notNull().default('GHS'),
-    settlementCurrency: text('settlement_currency').notNull().default('GHS'), // EUR on the MoMo sandbox wire
+    settlementCurrency: text('settlement_currency').notNull().default('GHS'), // the currency the payment rail moves
     state: text('state', { enum: CONTRACT_STATES }).notNull().default('OFFERED'),
     finalGrade: text('final_grade'),
     finalAmount: integer('final_amount'), // pesewas = qty × price_terms[final_grade]
@@ -318,7 +318,7 @@ export const payments = sqliteTable(
       .references(() => contracts.id),
     jobId: text('job_id').references(() => deliveryJobs.id), // set for transport-fee payments
     direction: text('direction', { enum: ['collection', 'disbursement'] }).notNull(),
-    provider: text('provider', { enum: ['momo', 'mock'] }).notNull(),
+    provider: text('provider', { enum: ['mock'] }).notNull(), // a licensed payment provider joins in Phase 3
     providerRef: text('provider_ref').notNull(), // UUID sent as X-Reference-Id — idempotency key
     amount: integer('amount').notNull(), // pesewas
     currency: text('currency').notNull(),

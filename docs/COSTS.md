@@ -542,8 +542,9 @@ Sequence, with the slow things started first:
 Until the first of these is answered, `PAYMENT_PROVIDER=mock` is the correct
 setting. The ledger balances identically, so nothing is blocked by waiting.
 
-## 7. Local language (Khaya AI / GhanaNLP)
+## 7. Local language (the Tɛkyerɛma language Space)
 
-Khaya keys are free and quota-metered (`KHAYA_API_KEY`, D-038/D-041), and this
-pilot runs English-only regardless — the D-040 review gate resolves unreviewed
+The owner's own Space is public and keyless (D-045), so the language layer costs
+nothing to call. Its licence label is CC-BY-NC-4.0 (non-commercial), which must
+change before F2M earns money. The pilot runs English-only regardless — the D-040 review gate resolves unreviewed
 locales to English on every farmer-facing surface. **No cost until language day.**

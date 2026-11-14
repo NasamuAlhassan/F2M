@@ -15,8 +15,8 @@ export interface PaymentStatusResult {
 }
 
 export interface PaymentProvider {
-  readonly name: 'momo' | 'mock';
-  /** The currency that actually moves on the wire (EUR on the MoMo sandbox). */
+  readonly name: 'mock';
+  /** The currency that actually moves on the wire. */
   readonly settlementCurrency: string;
   requestHold(p: PaymentParams): Promise<PaymentStatusResult>;
   getHoldStatus(referenceId: string): Promise<PaymentStatusResult>;

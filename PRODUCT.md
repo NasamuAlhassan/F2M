@@ -35,14 +35,14 @@ The claim a neighboring marketplace cannot truthfully copy: **a farmer with a ba
 - Ghana; money rides MTN MoMo rails (integer pesewas end to end). USSD/SMS/voice ride Africa's Talking wire formats.
 - The live deployment serves **both a small real pilot and stakeholder/investor demos at once** (confirmed): flows must be honest enough for real users and presentable enough to drive live in a pitch. The three-tab demo story (USSD simulator + IVR simulator + portal) is part of how the product is evaluated.
 - Buyer scenes range from sunlit market stalls on Android phones to office laptops (see Users).
-- All external providers are mock-first and env-selected; the offline demo (`npm run demo`) must always exit green. Real keys (HuggingFace grading, MoMo sandbox, Africa's Talking, Khaya AI) are pending on the owner's accounts — each is a documented env flip, never a code change.
+- All external providers are mock-first and env-selected; the offline demo (`npm run demo`) must always exit green. Real keys (HuggingFace grading, Africa's Talking) are pending on the owner's accounts — each is a documented env flip, never a code change.
 
 ## Capabilities and Constraints
 
 - The full spine is live for 8 commodities with per-grade frozen price schedules, escrow hold/release, explainable grading with a dispute window, and settlement with buyer refunds of the grade delta.
 - Listings carry their **channel** (`web`/`ussd`/`ivr`): web listings show seller photos; USSD/IVR listings show the farmer's phone and a call-to-negotiate affordance instead (those farmers may not read SMS).
 - Logistics: rate-card quotes, sequential nearest-first dispatch, buyer direct-hire of a chosen driver, farmer-suggested delivery that the buyer approves and funds.
-- Voice listing pipeline: open IVR call → ASR → MT → registry-driven parser → live lot. Khaya AI (GhanaNLP) providers are implemented and gated on `KHAYA_API_KEY`.
+- Voice listing pipeline: open IVR call → ASR → MT → registry-driven parser → live lot. The owner's Tɛkyerɛma language Space hears, translates and speaks it (`*_PROVIDER=space`, D-045).
 - **Terminology:** lot, demand, match, offer, contract, band/grade (A/B/C/REJECT), hold, payout, spine, channel, pool bid.
 - **i18n rule:** every farmer-facing string lives behind catalog keys; Twi/Ewe/Dagbani exist only as machine-drafted, review-flagged subsets and must never be farmer-facing until native-speaker review. English is the working language until "language day."
 - Undecided (do not invent): real-provider go-live timing; final language rollout scope; pricing/fees for the platform itself (no platform fee exists today — never render one as if it did).
@@ -70,5 +70,5 @@ The claim a neighboring marketplace cannot truthfully copy: **a farmer with a ba
 ## Accessibility & Inclusion
 
 - Non-literate users are served by voice (IVR flows, open voice listing) and by phone-call affordances; text is never the only path to a farmer.
-- Local languages (Twi, Ewe, Dagbani, Hausa planned) arrive via Khaya AI ASR/MT/TTS, strictly gated on native-speaker review of catalogs.
+- Local languages (Twi, Ewe, Dagbani, Hausa, Kusaal) arrive via the owner's Tɛkyerɛma language Space, strictly gated on native-speaker review of catalogs.
 - Sunlight legibility and mid-range Android performance are real buyer conditions; functional text keeps an 11px floor (design detector enforced).
