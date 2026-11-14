@@ -76,17 +76,15 @@ flows you are trying to test.
 
 ### Seed the registries
 
-Migrations run automatically on boot (`apps/server/src/index.ts`), but they only
-create tables. The registries — regions, commodities, units, grading rubrics,
-the vehicle rate card, reference market prices — come from the seed, and without
-them there is nothing to list or grade:
+Nothing to do: on every start the server runs its migrations and then the seed
+in insert-only mode (`apps/server/src/index.ts`). The registries — regions,
+crops, units, grading rubrics, the vehicle rate card, reference market prices —
+appear on the first boot, and a crop added to the seed later reaches the live
+database on the next deploy without touching anything already there. (To reset
+the reference prices and rate card to the seed's values, run
+`npm run db:seed -w @ftm/core` in the machine's shell.)
 
-```bash
-fly ssh console -C "npm run db:seed -w @ftm/core"
-```
-
-The seed is idempotent and creates **no** people, lots, or contracts — only
-reference data. Everyone signs up on the web with their own phone number and
+The seed creates **no** people, lots, or contracts — only reference data. Everyone signs up on the web with their own phone number and
 password (D-047); set up Supabase first (`supabase/README.md`), including the
 invite list, or nobody can create an account.
 
@@ -156,9 +154,8 @@ etc. — stays empty until you flip that provider on (see "Flipping providers
 on" below). Copy the service's URL, something like
 `https://farm-to-market-server.onrender.com` — the next step needs it.
 
-Seed the registries the same way as Option A, via Render's shell tab or
-`render exec` if you have the CLI: `npm run db:seed -w @ftm/core`. Nothing to
-list or grade without it.
+The registries seed themselves on the first boot (see Option A), so there is
+nothing to run by hand.
 
 ## 2. Point the frontend at it
 
@@ -171,7 +168,15 @@ there's only ever one URL.
 ## 3. Deploy the frontend to Vercel
 
 Dashboard → New Project → import the repo → **set Root Directory to
-`apps/web`**. Vercel's npm-workspaces support and Vite framework preset
+`apps/web`**.
+
+**Vercel's import screen will offer "Services"** — it reads `render.yaml` and the
+Dockerfile and proposes a multi-service project with the server as a Vercel
+container or function, plus a list of the server's environment variables.
+**Don't take it.** The server must not run on Vercel (see "Why not serverless"
+above). Change Root Directory to `apps/web` so Vercel sees one Vite app, and
+give it only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The server's
+settings (and anything secret) belong in Render, never in Vercel. Vercel's npm-workspaces support and Vite framework preset
 handle the install/build/output detection from there with no further
 config — `apps/web/vercel.json` supplies only the rewrites (the API/USSD/
 voice/photos proxy to Render, plus the SPA fallback so a hard refresh on

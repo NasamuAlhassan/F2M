@@ -1,11 +1,44 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/api/:path*" },
-    { "source": "/ussd", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/ussd" },
-    { "source": "/voice/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/voice/:path*" },
-    { "source": "/photos/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/photos/:path*" },
-    { "source": "/tts/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/tts/:path*" },
-    { "source": "/recordings/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/recordings/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/api/:path*"
+    },
+    {
+      "source": "/ussd",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/ussd"
+    },
+    {
+      "source": "/voice/:path*",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/voice/:path*"
+    },
+    {
+      "source": "/photos/:path*",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/photos/:path*"
+    },
+    {
+      "source": "/tts/:path*",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/tts/:path*"
+    },
+    {
+      "source": "/recordings/:path*",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/recordings/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/health"
+    },
+    {
+      "source": "/ussd-tester.html",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/ussd-tester.html"
+    },
+    {
+      "source": "/ivr-tester.html",
+      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/ivr-tester.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
