@@ -33,6 +33,10 @@ primary_region = "lhr"
   # locale to English on SMS/USSD/IVR; this keeps drafts off farmer surfaces.
   I18N_DRAFT_LOCALES_LIVE = "false"
 
+  # The phone simulator stays on until a live USSD code and voice number exist
+  # (D-047). Switch it off with CARRIER_WEBHOOK_TOKEN set as a secret.
+  SIMULATOR_ENABLED = "true"
+
   # Every provider starts mocked so the FIRST deploy proves the container,
   # the volume, migrations and the portal on their own — with nothing external
   # able to muddy the result. Flip these one at a time afterwards; each flip is

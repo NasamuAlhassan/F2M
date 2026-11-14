@@ -10,9 +10,9 @@ import {
   setPaymentProvider,
   t,
   tDraft,
-  verifyBuyerLogin,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
+import { testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from './app';
@@ -24,13 +24,7 @@ let token: string;
 beforeAll(async () => {
   setPaymentProvider(new MockPaymentProvider(0));
   app = await buildServer({ logger: false });
-  const login = await app.inject({
-    method: 'POST',
-    url: '/api/auth/login',
-    payload: JSON.stringify({ email: 'buyer@demo.ftm', password: 'demo-buyer-2026' }),
-    headers: { 'content-type': 'application/json' },
-  });
-  token = login.json().token;
+  token = testBuyerToken();
 });
 afterAll(async () => {
   setPaymentProvider(null);
@@ -53,7 +47,7 @@ async function offeredContract(phone: string) {
     .set({ status: 'withdrawn' })
     .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered')))
     .run();
-  const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+  const buyer = testBuyer();
   const farmer = registerFarmer({ phone, name: 'Engine Farmer', regionCode: 'BONO_EAST' });
   registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
   createDemand({

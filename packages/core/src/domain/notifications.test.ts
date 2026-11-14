@@ -6,7 +6,7 @@ import { demands, lots } from '../db/schema';
 import { setGradingProvider } from '../providers/grading/index';
 import { MockNotifyProvider, setNotifyProvider } from '../providers/notify/index';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
-import { verifyBuyerLogin } from './buyers';
+import { testBuyer } from '../testing/fixtures';
 import { listContractsForFarmer } from './contracts';
 import { createDemand } from './demands';
 import { registerFarmer } from './farmers';
@@ -45,7 +45,7 @@ function isolateYamLane(): void {
 describe('SMS outbox (M11)', () => {
   it('texts the farmer at every step: offer, funding, grade, payout', async () => {
     isolateYamLane();
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const farmer = registerFarmer({ phone: '0292000111', name: 'Sms Flow', regionCode: 'WESTERN' });
     registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     createDemand({
@@ -112,7 +112,7 @@ describe('SMS outbox (M11)', () => {
 
   it('texts the rejection honestly', async () => {
     isolateYamLane();
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const farmer = registerFarmer({ phone: '0292000222', name: 'Sms Reject', regionCode: 'AHAFO' });
     const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     createDemand({

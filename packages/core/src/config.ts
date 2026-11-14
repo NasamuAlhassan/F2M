@@ -15,7 +15,9 @@ try {
 const envSchema = z
   .object({
     PORT: z.coerce.number().int().default(3000),
-    JWT_SECRET: z.string().default('dev-only-secret-change-me'),
+    // Web logins (D-047): the server verifies Supabase tokens against this
+    // project's public keys. The same value the browser uses, so one setting.
+    VITE_SUPABASE_URL: z.string().optional(),
     DATABASE_PATH: z.string().default('data/ftm.db'),
     STORAGE_DIR: z.string().default('apps/server/storage'),
     DISPUTE_WINDOW_MINUTES: z.coerce.number().default(10),
@@ -58,6 +60,17 @@ const envSchema = z
     // ceiling is generous; the TTS provider applies its own, shorter budget.
     SPACE_TIMEOUT_MS: z.coerce.number().default(60_000),
 
+    // The phone simulator (D-047): 'true' turns on the /phone handset, the
+    // USSD/IVR tester pages and their SMS/call inboxes, so real numbers can be
+    // tested before a live USSD code and voice number exist. Anyone who can
+    // reach the server can then act as any phone, so it is for a closed test
+    // group only — 'false' once the real carrier is live.
+    SIMULATOR_ENABLED: z.enum(['true', 'false']).default('true'),
+    // A secret Africa's Talking must send with every USSD/voice callback
+    // (?token=…) once the simulator is off. AT has no request signing, so an
+    // unguessable value in the callback URL is their own recommendation.
+    CARRIER_WEBHOOK_TOKEN: z.string().optional(),
+
     // Review gate escape hatch (D-040): 'true' lets machine-drafted catalogs
     // reach farmer-facing surfaces — the owner's own live testing ONLY.
     // Not z.coerce.boolean: the string 'false' would coerce to true.
@@ -74,6 +87,12 @@ const envSchema = z
     if (env.VOICE_PROVIDER === 'at' && (!env.AT_API_KEY || !env.AT_VOICE_NUMBER)) {
       ctx.addIssue({ code: 'custom', message: 'VOICE_PROVIDER=at requires AT_API_KEY and AT_VOICE_NUMBER' });
     }
+    if (env.SIMULATOR_ENABLED === 'false' && !env.CARRIER_WEBHOOK_TOKEN) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'SIMULATOR_ENABLED=false requires CARRIER_WEBHOOK_TOKEN — otherwise anyone can drive the USSD and voice endpoints',
+      });
+    }
   });
 
 const parsed = envSchema.safeParse(process.env);
@@ -89,6 +108,8 @@ export const config = {
   databasePath: path.isAbsolute(env.DATABASE_PATH) ? env.DATABASE_PATH : path.join(REPO_ROOT, env.DATABASE_PATH),
   storageDir: path.isAbsolute(env.STORAGE_DIR) ? env.STORAGE_DIR : path.join(REPO_ROOT, env.STORAGE_DIR),
   draftLocalesLive: env.I18N_DRAFT_LOCALES_LIVE === 'true',
+  supabaseUrl: env.VITE_SUPABASE_URL ? env.VITE_SUPABASE_URL.replace(/\/+$/, '') : null,
+  simulatorEnabled: env.SIMULATOR_ENABLED === 'true',
 };
 
 export type Config = typeof config;

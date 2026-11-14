@@ -1,5 +1,6 @@
 import { db, getLot, listNotificationsForPhone, parseListingText, registerFarmer, schema, setTtsProvider } from '@ftm/core';
 import { eq } from 'drizzle-orm';
+import { testBuyerToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from './app';
@@ -103,16 +104,10 @@ describe('voice listing pipeline (M29, D-038)', () => {
     expect(receipt!.message).toContain(lot.lotCode);
 
     // The marketplace shows it as a voice listing with the farmer's phone.
-    const login = await app.inject({
-      method: 'POST',
-      url: '/api/auth/login',
-      payload: JSON.stringify({ email: 'buyer@demo.ftm', password: 'demo-buyer-2026' }),
-      headers: { 'content-type': 'application/json' },
-    });
     const market = await app.inject({
       method: 'GET',
       url: '/api/market/lots',
-      headers: { authorization: `Bearer ${login.json().token}` },
+      headers: { authorization: `Bearer ${testBuyerToken()}` },
     });
     const card = (market.json().lots as Array<{ id: string; channel: string; farmerPhone: string | null }>).find(
       (l) => l.id === lot.id,

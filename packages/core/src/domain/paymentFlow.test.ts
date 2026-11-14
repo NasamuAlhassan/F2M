@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '../db/client';
@@ -19,7 +18,7 @@ import {
   releaseDuePayments,
 } from './paymentFlow';
 import { getTrace } from './trace';
-import { verifyBuyerLogin } from './buyers';
+import { testBuyer } from '../testing/fixtures';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -71,7 +70,7 @@ function offerFor(phone: string, buyerId: string) {
 
 describe('payment flow (M4)', () => {
   it('holds funds on accept and posts a balanced hold journal', async () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const { farmer, offer } = offerFor('0271000001', buyer.id);
 
     await acceptOfferAndHold(offer.id, farmer.id);
@@ -90,8 +89,7 @@ describe('payment flow (M4)', () => {
     const badBuyer = db
       .insert(buyers)
       .values({
-        email: 'declines@demo.ftm',
-        passwordHash: bcrypt.hashSync('x', 4),
+        phone: '+233555110000',
         name: 'Declining Buyer',
         momoMsisdn: '233555110000',
         regionCode: 'GREATER_ACCRA',
@@ -116,7 +114,7 @@ describe('payment flow (M4)', () => {
   });
 
   it('settles: releases the graded amount and refunds the remainder', async () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const { farmer, lot, offer } = offerFor('0271000003', buyer.id);
 
     await acceptOfferAndHold(offer.id, farmer.id);
@@ -147,7 +145,7 @@ describe('payment flow (M4)', () => {
   });
 
   it('refunds the full hold when a contract dies after funding', async () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const { farmer, lot, offer } = offerFor('0271000004', buyer.id);
     await acceptOfferAndHold(offer.id, farmer.id);
     await pollPaymentsOnce();

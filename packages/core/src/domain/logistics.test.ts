@@ -3,10 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '../db/client';
 import { buyerNotifications, deliveryJobOffers, demands, drivers as driversTable, lots } from '../db/schema';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
-import { verifyBuyerLogin } from './buyers';
+import { testBuyer } from '../testing/fixtures';
 import { getContract, listContractsForFarmer } from './contracts';
 import { createDemand } from './demands';
-import { driverRouteRegions, getDriverById, registerDriver, updateDriverProfile, verifyDriverLogin } from './drivers';
+import { driverRouteRegions, getDriverById, getDriverByPhone, registerDriver, updateDriverProfile } from './drivers';
 import { registerFarmer } from './farmers';
 import { accountBalance, ACCOUNTS, allJournalsBalanced, jobEscrowBalance } from './ledger';
 import {
@@ -64,7 +64,7 @@ async function fundedContract(regionCode = 'GREATER_ACCRA') {
     .where(and(eq(lots.commodityId, yam.id), eq(lots.status, 'registered')))
     .run();
 
-  const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+  const buyer = testBuyer();
   const farmer = registerFarmer({ phone: nextPhone('024'), name: 'Logistics Farmer', regionCode });
   const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
   createDemand({
@@ -220,11 +220,13 @@ describe('logistics (M13)', () => {
     expect(getJob(job.id).state).toBe('PICKED_UP');
   });
 
-  it('registers drivers with PIN login and blocks role collisions', async () => {
+  it('registers drivers (PIN optional — web signups have none) and blocks role collisions', async () => {
     const phone = nextPhone('055');
     registerDriver({ phone, name: 'Pin Driver', regionCode: 'BONO', vehicleClassCode: 'tricycle', pin: '4321' });
-    expect(verifyDriverLogin(phone, '4321').name).toBe('Pin Driver');
-    expect(() => verifyDriverLogin(phone, '0000')).toThrow(/Invalid/);
+    expect(getDriverByPhone(phone)!.pinHash).toBeTruthy();
+    const webPhone = nextPhone('055');
+    expect(registerDriver({ phone: webPhone, name: 'Web Driver', regionCode: 'BONO', vehicleClassCode: 'tricycle' }).pinHash).toBeNull();
+    expect(() => registerDriver({ phone: nextPhone('055'), name: 'X', regionCode: 'BONO', vehicleClassCode: 'van', pin: '12' })).toThrow(/4 digits/);
 
     const farmerPhone = nextPhone('026');
     registerFarmer({ phone: farmerPhone, name: 'Role Farmer', regionCode: 'BONO' });
@@ -262,7 +264,6 @@ describe('logistics (M13)', () => {
     // ...an OFFLINE driver must not be dispatched either...
     const offline = vanDriver('ASHANTI', 'Offline Driver');
     updateDriverProfile(offline.id, { active: false });
-    expect(verifyDriverLogin(offline.phone, '1234').id).toBe(offline.id); // offline can still log in
 
     // ...but an online driver serving Ashanti (or anywhere) gets the offer.
     const onRoute = vanDriver('NORTHERN', 'Ashanti Route');

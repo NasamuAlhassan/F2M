@@ -43,18 +43,38 @@ export const buyers = sqliteTable(
   'buyers',
   {
     id: id(),
-    email: text('email').notNull(),
-    passwordHash: text('password_hash').notNull(),
+    email: text('email'), // optional contact; logins are phone + password in Supabase (D-047)
     name: text('name').notNull(),
     company: text('company'),
-    phone: text('phone'),
+    phone: text('phone'), // E.164 — the login identity for buyers who signed up on the web
     momoMsisdn: text('momo_msisdn').notNull(),
     regionCode: text('region_code').references(() => regions.code),
     gpsLat: real('gps_lat'),
     gpsLng: real('gps_lng'),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('buyers_email_idx').on(t.email)],
+  (t) => [uniqueIndex('buyers_email_idx').on(t.email), uniqueIndex('buyers_phone_idx').on(t.phone)],
+);
+
+/**
+ * One row per web login (D-047): the Supabase user (the JWT `sub`) and the
+ * one F2M role that phone holds. Exactly one of farmerId/buyerId/driverId is
+ * set, matching `role`. USSD and IVR never need an account — the carrier
+ * tells us the caller's number.
+ */
+export const accounts = sqliteTable(
+  'accounts',
+  {
+    id: id(),
+    authUserId: text('auth_user_id').notNull(),
+    phone: text('phone').notNull(), // E.164
+    role: text('role', { enum: ['farmer', 'buyer', 'driver'] }).notNull(),
+    farmerId: text('farmer_id').references(() => farmers.id),
+    buyerId: text('buyer_id').references(() => buyers.id),
+    driverId: text('driver_id').references(() => drivers.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('accounts_auth_user_idx').on(t.authUserId), uniqueIndex('accounts_phone_idx').on(t.phone)],
 );
 
 export const commodities = sqliteTable(
@@ -443,7 +463,7 @@ export const drivers = sqliteTable(
     vehicleClassCode: text('vehicle_class_code')
       .notNull()
       .references(() => vehicleClasses.code),
-    pinHash: text('pin_hash').notNull(), // 4-digit PIN set at USSD registration — web login uses it too (D-021)
+    pinHash: text('pin_hash'), // 4-digit PIN set at USSD registration; web-registered drivers have none (D-047)
     active: integer('active', { mode: 'boolean' }).notNull().default(true), // the ONLINE/OFFLINE availability toggle
     routeRegions: text('route_regions').notNull().default('[]'), // JSON region codes served; empty = anywhere
     createdAt: createdAt(),
@@ -623,21 +643,6 @@ export const voiceListings = sqliteTable(
   (t) => [index('voice_listings_phone_idx').on(t.phone)],
 );
 
-// Farmer web-login OTPs (D-032): the code travels over the same SMS outbox as
-// every other farmer message — mock-visible offline, real SMS when AT keys land.
-export const loginOtps = sqliteTable(
-  'login_otps',
-  {
-    id: id(),
-    phone: text('phone').notNull(), // E.164, one live code per phone
-    codeHash: text('code_hash').notNull(),
-    attempts: integer('attempts').notNull().default(0),
-    expiresAt: integer('expires_at').notNull(),
-    createdAt: createdAt(),
-  },
-  (t) => [uniqueIndex('login_otps_phone_idx').on(t.phone)],
-);
-
 export const ussdSessions = sqliteTable('ussd_sessions', {
   sessionId: text('session_id').primaryKey(), // the gateway's sessionId
   phone: text('phone').notNull(),
@@ -650,6 +655,7 @@ export const ussdSessions = sqliteTable('ussd_sessions', {
 
 export type Farmer = typeof farmers.$inferSelect;
 export type Buyer = typeof buyers.$inferSelect;
+export type Account = typeof accounts.$inferSelect;
 export type Commodity = typeof commodities.$inferSelect;
 export type Unit = typeof units.$inferSelect;
 export type Rubric = typeof rubrics.$inferSelect;

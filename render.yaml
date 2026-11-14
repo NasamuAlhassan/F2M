@@ -33,8 +33,13 @@ services:
       # own public URL — QR codes, IVR <Play> audio, voice callbacks.
       - key: PUBLIC_BASE_URL
         sync: false
-      - key: JWT_SECRET
-        generateValue: true
+      # Logins (D-047): the server verifies Supabase tokens with this project URL.
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: SIMULATOR_ENABLED
+        value: 'true'
+      - key: CARRIER_WEBHOOK_TOKEN
+        sync: false
       # Every provider below defaults to mock (docs/DEPLOY.md, docs/COSTS.md
       # cover what each real flip needs and costs). Flip only what you're
       # ready to pay for and configure — a var left unset here just falls

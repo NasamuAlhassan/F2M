@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { and, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -7,7 +6,7 @@ import { buyers, demands, drivers as driversTable, lots } from '../db/schema';
 import { setGradingProvider } from '../providers/grading/index';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
 import { listBuyerNotifications, markNotificationsRead, unreadNotificationCount } from './buyerNotifications';
-import { verifyBuyerLogin } from './buyers';
+import { testBuyer } from '../testing/fixtures';
 import { listContractsForFarmer } from './contracts';
 import { createDemand } from './demands';
 import { registerDriver } from './drivers';
@@ -51,7 +50,7 @@ describe('buyer notification center (M15)', () => {
       .run();
     db.update(driversTable).set({ active: false }).run();
 
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
 
     const farmer = registerFarmer({ phone: '+233209334455', name: 'Notif Farmer', regionCode: 'BONO_EAST' });
     registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
@@ -110,14 +109,13 @@ describe('buyer notification center (M15)', () => {
   });
 
   it('scopes unread counts and mark-read to the owning buyer', () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     expect(unreadNotificationCount(buyer.id)).toBeGreaterThan(0);
 
     const other = db
       .insert(buyers)
       .values({
-        email: 'other@demo.ftm',
-        passwordHash: bcrypt.hashSync('x', 4),
+        phone: '+233555000777',
         name: 'Other Buyer',
         momoMsisdn: '233555000777',
         regionCode: 'ASHANTI',

@@ -13,8 +13,8 @@
   tDraft,
   setGradingProvider,
   setPaymentProvider,
-  verifyBuyerLogin,
 } from '@ftm/core';
+import { testBuyer } from '@ftm/core/testing';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { handleUssdRequest } from './index';
@@ -124,7 +124,7 @@ describe('USSD flows (M2)', () => {
   });
 
   it('shows an offer with the price-per-grade table and accepts it (M3)', async () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const now = Date.now();
     // Demand more than every maize lot combined so Ama's 500kg lot is offered
     // regardless of which other fixture lots exist when this file runs.

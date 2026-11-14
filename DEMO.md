@@ -5,7 +5,7 @@ Two ways to watch one lot move from a farmer's basic phone to a settled payment 
 ## The scripted demo (2 minutes, fully offline)
 
 ```
-npm run db:reset     # once — seeds commodities, rubrics, regions, rate card, demo buyer
+npm run db:reset     # once — seeds commodities, rubrics, regions, rate card
 npm run demo
 ```
 
@@ -32,7 +32,7 @@ npm run dev              # server on :3000, buyer portal on :5173
 
 **Tab 2 — the same phone, ringing:** `http://localhost:3000/ivr-tester.html` (set the same phone number). When the platform queues a voice call, this handset rings; **Answer** speaks the exact AT Voice callback format, and the keypad drives the flow.
 
-**Tab 3 — the buyer portal:** `http://localhost:5173` — `buyer@demo.ftm` (password printed by the seed). Watch the **ALERTS** bell as the engine works.
+**Tab 3 — the buyer portal:** `http://localhost:5173/login` — sign in with a buyer phone number on your Supabase invite list (create the account the first time). Watch the **ALERTS** bell as the engine works. One browser holds one login, so use a second browser or a private window to be the farmer or driver on the web at the same time.
 
 Then walk the spine:
 

@@ -3,6 +3,7 @@ import { config } from '../config';
 import { db } from '../db/client';
 import { contracts, voiceCalls, type VoiceCall } from '../db/schema';
 import { getVoiceProvider } from '../providers/voice/index';
+import { carrierCallbackUrl } from './carrier';
 import { appendLotEvent } from './trace';
 
 const MAX_CALL_ATTEMPTS = 2;
@@ -78,7 +79,7 @@ export async function placePendingVoiceCalls(): Promise<number> {
       const result = await provider.initiateCall({
         callId: call.id,
         phone: call.phone,
-        callbackUrl: `${config.PUBLIC_BASE_URL}/voice/answer?callId=${call.id}`,
+        callbackUrl: carrierCallbackUrl(`/voice/answer?callId=${call.id}`),
       });
       if (result.status === 'queued') {
         db.update(voiceCalls)

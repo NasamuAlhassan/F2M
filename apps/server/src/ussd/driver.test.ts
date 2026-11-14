@@ -13,11 +13,11 @@ import {
   schema,
   setDraftLocalesLive,
   setPaymentProvider,
-  verifyBuyerLogin,
   db,
   acceptOfferAndHold,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
+import { testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../app';
@@ -62,7 +62,7 @@ async function fundedContract() {
     .run();
   db.update(schema.drivers).set({ active: false }).where(eq(schema.drivers.active, true)).run();
 
-  const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+  const buyer = testBuyer();
   const farmer = registerFarmer({ phone: '+233209871100', name: 'Driver Test Farmer', regionCode: 'ASHANTI' });
   registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
   createDemand({
@@ -124,15 +124,9 @@ describe('driver surfaces (M14)', () => {
     expect(getContract(contractId).state).toBe('PICKUP_CONFIRMED'); // D-025 via the wire
   });
 
-  it('drives the same actions through the web API with role-checked JWTs', async () => {
-    const login = await app.inject({
-      method: 'POST',
-      url: '/api/auth/driver-login',
-      payload: JSON.stringify({ phone: DRIVER_PHONE, pin: '1234' }),
-      headers: { 'content-type': 'application/json' },
-    });
-    expect(login.statusCode).toBe(200);
-    const driverToken = login.json().token as string;
+  it('drives the same actions through the web API, with each login held to its own role', async () => {
+    const driverRow = getDriverByPhone(DRIVER_PHONE)!;
+    const driverToken = testToken('driver', driverRow.id, driverRow.phone);
 
     const jobs = await app.inject({
       method: 'GET',
@@ -150,13 +144,7 @@ describe('driver surfaces (M14)', () => {
     });
     expect(crossed.statusCode).toBe(401);
 
-    const buyerLogin = await app.inject({
-      method: 'POST',
-      url: '/api/auth/login',
-      payload: JSON.stringify({ email: 'buyer@demo.ftm', password: 'demo-buyer-2026' }),
-      headers: { 'content-type': 'application/json' },
-    });
-    const buyerToken = buyerLogin.json().token as string;
+    const buyerToken = testBuyerToken();
     const crossedBuyer = await app.inject({
       method: 'GET',
       url: '/api/driver/jobs',

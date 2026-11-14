@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  carrierCallbackUrl,
+  carrierRequestAllowed,
   config,
   DomainError,
   finishVoiceCall,
@@ -28,13 +30,21 @@ const answerSchema = z.object({
 });
 
 export async function voiceRoutes(app: FastifyInstance): Promise<void> {
+  // Only the carrier (or, while it is on, the simulator) may drive calls (D-047).
+  app.addHook('onRequest', async (req, reply) => {
+    if (!carrierRequestAllowed((req.query as { token?: unknown }).token)) {
+      await reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Unknown caller' } });
+    }
+  });
+
   // The web handset simulator's stand-in for a carrier's recorded-call upload
   // (D-038 real audio path): the browser records the farmer's mic with
   // MediaRecorder, POSTs the blob here, and gets back a URL it hands to
   // /voice/answer as recordingUrl — the same field a real Africa's Talking
   // callback would carry. No DB row: unlike lot photos, a recording is
   // input to the ASR step, not a marketplace asset worth keeping after.
-  app.post('/voice/upload-recording', async (req, reply) => {
+  // Simulator-only: a real carrier hosts its own recordings.
+  if (config.simulatorEnabled) app.post('/voice/upload-recording', async (req, reply) => {
     const file = await req.file();
     if (!file) throw new DomainError('Attach an audio file', 'NO_FILE', 400);
     const dir = path.join(config.storageDir, 'recordings');
@@ -80,7 +90,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
         }
         return reply
           .type('application/xml')
-          .send(await recordResponse(t(locale, 'voice.list.prompt'), locale, `${config.PUBLIC_BASE_URL}/voice/answer`));
+          .send(await recordResponse(t(locale, 'voice.list.prompt'), locale, carrierCallbackUrl('/voice/answer')));
       }
 
       const result = await processVoiceListing({
@@ -111,7 +121,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
       phone,
       sessionId: body.sessionId,
       dtmfDigits: body.dtmfDigits,
-      callbackUrl: `${config.PUBLIC_BASE_URL}/voice/answer?callId=${callId}`,
+      callbackUrl: carrierCallbackUrl(`/voice/answer?callId=${callId}`),
     });
     return reply.type('application/xml').send(xml);
     }

@@ -1,5 +1,6 @@
 import { db, registerFarmer, registerLot, schema } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
+import { testBuyerToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from './app';
@@ -28,13 +29,7 @@ interface MarketLotRow {
 
 beforeAll(async () => {
   app = await buildServer({ logger: false });
-  const login = await app.inject({
-    method: 'POST',
-    url: '/api/auth/login',
-    payload: JSON.stringify({ email: 'buyer@demo.ftm', password: 'demo-buyer-2026' }),
-    headers: { 'content-type': 'application/json' },
-  });
-  token = login.json().token;
+  token = testBuyerToken();
 });
 afterAll(async () => {
   await app.close();

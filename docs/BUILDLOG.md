@@ -327,3 +327,12 @@ Chronological record of what was built, changed, or edited, and why. One section
 - `.env.example` rewritten to only the settings the code reads, grouped by what they switch on; `fly.toml` and `render.yaml` lost the removed settings.
 - README, DEMO, PRODUCT and COSTS updated to the current provider set.
 - Verified: typecheck clean, 179 tests green (the drop from 199 is the removed providers' own tests), `npm run demo` exit 0.
+
+## 2026-11-14 · Phase 0: real accounts (D-047)
+
+- **Logins:** Supabase phone + password for all three roles; server-side JWKS verification (`packages/core/src/auth/tokens.ts`); `accounts` table and `registerAccount` (links USSD farmers, one role per phone, phone from the token); `GET /api/account/me`, `POST /api/account/register`. Old buyer/farmer-OTP/driver-PIN logins, `login_otps` and the seeded demo buyer removed. Migrations 0011–0012; the migrator now disables foreign keys around a run and checks every reference after.
+- **Supabase:** `0001_invite_only_signup.sql` — invite list plus a Before-User-Created hook; `supabase/README.md` rewritten.
+- **Web:** one `/login` (sign in / create account → profile step); routes guarded by the account's role; header shows the real name and role, with no "Verified" claim; old login pages, placeholders and the mock auth deleted.
+- **Open doors closed:** anonymous farmer/lot creation and phone lookups removed; owner-only full trace; `SIMULATOR_ENABLED` and `CARRIER_WEBHOOK_TOKEN`; demo acceptance locked to simulator + simulated payments.
+- **Project health:** `better-sqlite3`'s compile step denied — a clean `npm ci` now works with no compiler (it ships prebuilt binaries); test databases cleaned up after every run; the portal image takes the Supabase settings as build args.
+- Verified: typecheck clean, 185 tests green (new: account flow, USSD-farmer linking, role clashes, wrong-role tokens, removed routes, owner-only trace, carrier token, simulator switch), `npm run demo` exit 0, web build clean, clean `npm ci` exit 0. Not yet verified live: a real signup — phone sign-in is still off in the Supabase project.

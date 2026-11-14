@@ -5,7 +5,7 @@ import { db } from '../db/client';
 import { demands, lots } from '../db/schema';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
 import { setGradingProvider, type GradingResult } from '../providers/grading/index';
-import { verifyBuyerLogin } from './buyers';
+import { testBuyer } from '../testing/fixtures';
 import { getContract, listContractsForFarmer } from './contracts';
 import { createDemand } from './demands';
 import { registerFarmer } from './farmers';
@@ -57,7 +57,7 @@ async function fundedContract(phone: string) {
     .where(and(eq(lots.commodityId, yam.id), eq(lots.status, 'registered')))
     .run();
 
-  const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+  const buyer = testBuyer();
   const farmer = registerFarmer({ phone, name: `Grade ${phone.slice(-4)}`, regionCode: 'GREATER_ACCRA' });
   const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
   createDemand({

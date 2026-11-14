@@ -15,9 +15,9 @@ import {
   schema,
   setPaymentProvider,
   setTtsProvider,
-  verifyBuyerLogin,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
+import { testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../app';
@@ -48,7 +48,7 @@ function isolateYamLane(): void {
 
 async function offeredContract(phone: string) {
   isolateYamLane();
-  const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+  const buyer = testBuyer();
   const farmer = registerFarmer({ phone, name: `Voice ${phone.slice(-4)}`, regionCode: 'NORTHERN' });
   registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
   createDemand({

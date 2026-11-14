@@ -118,7 +118,7 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
         };
       });
 
-    return { lots, demands, matches, simulateEnabled: config.PAYMENT_PROVIDER === 'mock' };
+    return { lots, demands, matches, simulateEnabled: config.PAYMENT_PROVIDER === 'mock' && config.simulatorEnabled };
   });
 
   // The Voice & SMS simulation: render the exact alert templates for a match
@@ -174,8 +174,10 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
   // Demo-only: play the farmer's "press 1" from the portal. Gated to mock
   // payment mode — in anything real, only the farmer accepts (USSD/IVR).
   app.post('/engine/simulate-accept', { preHandler: [app.authBuyer] }, async (req) => {
-    if (config.PAYMENT_PROVIDER !== 'mock') {
-      throw new DomainError('Simulated acceptance is available in demo (mock) mode only', 'DEMO_ONLY', 403);
+    // Demo-only (D-029): a buyer must never accept on a farmer's behalf where
+    // money is real, nor outside the closed simulator test group (D-047).
+    if (config.PAYMENT_PROVIDER !== 'mock' || !config.simulatorEnabled) {
+      throw new DomainError('Simulated acceptance is available in simulator mode with simulated payments only', 'DEMO_ONLY', 403);
     }
     const { contractId } = simulateSchema.parse(req.body);
     const contract = getContract(contractId);

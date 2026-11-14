@@ -75,7 +75,7 @@ Requires Node 24+ (prebuilt binaries for better-sqlite3/sharp — no compiler to
 
 ```bash
 npm install
-npm run db:reset        # migrate + seed (prints the demo buyer login)
+npm run db:reset        # migrate + seed the reference data (no people — they sign up)
 npm run demo            # one lot end to end, fully offline: voice accept + transport leg, exit 0
 npm run dev             # server :3000 + portal :5173
 npm test                # 170 tests: scorers, state machines, ledger invariants, wire walks

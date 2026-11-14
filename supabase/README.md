@@ -1,86 +1,76 @@
 # Supabase setup
 
-This is the new unified auth system (role-picker signup: buyer / seller /
-driver) — a separate identity system from the existing SQLite
-`buyers`/`farmers`/`drivers` tables in `packages/core`. See the note in the
-plan this shipped from for why, and the decision still pending on how the
-two get reconciled.
+Supabase handles **logins only**: phone number + password, for farmers,
+buyers and drivers alike. Everything else about a person (their role, region,
+listings, offers and money) lives in F2M's own server database. The server
+checks each Supabase login and links it to that person's F2M record.
 
-## 1. Create the project
+Until an SMS sender ID is approved for Ghana, no confirmation code can be
+texted, so signup is **invite-only**: only phone numbers you have added can
+create an account.
 
-[supabase.com/dashboard](https://supabase.com/dashboard) → New project. Pick
-a region close to your users — Ghana has no Supabase region, so `eu-west-1`
-(London) or wherever your provider's nearest edge is will do; this is a
-choice to revisit once real usage tells you which way is faster.
+## 1. Run the SQL
 
-## 2. Run the migration
+Dashboard → **SQL Editor** → paste the contents of
+[`migrations/0001_invite_only_signup.sql`](migrations/0001_invite_only_signup.sql)
+→ **Run**. It is safe to run more than once. It creates:
 
-Dashboard → SQL Editor → paste the contents of
-[`migrations/0001_profiles.sql`](migrations/0001_profiles.sql) → Run.
+- `signup_invites`, the list of phone numbers allowed to sign up. The browser
+  can't read or change it, only the auth server and you can.
+- `hook_invite_only_signup`, the check Supabase runs before creating any
+  account.
 
-This creates:
-- `profiles` — one row per person, holding the role they signed up as and
-  the fields specific to it.
-- A trigger that creates the profile automatically the moment someone signs
-  up, reading the metadata the client sends.
-- Row-level security so a profile is only ever readable/writable by the
-  person it belongs to.
-- A **private** `driver-licenses` storage bucket, with policies so a driver
-  can upload and read only their own license photo — nobody else's, not even
-  another driver's.
+It also removes the earlier `profiles` design if it was ever run, because that
+design's signup trigger would reject phone signups.
 
-Nothing here needs to be run again unless the schema changes — future
-changes should be a new numbered migration file (`0002_...sql`), not an edit
-to this one, so the migration history stays honest.
+## 2. Turn the check on
 
-## 3. Get your keys
+Dashboard → **Authentication → Hooks** → **Before User Created** → choose
+**Postgres** → schema `public` → function `hook_invite_only_signup` → enable
+and save.
 
-Dashboard → Project Settings → API. You need two values:
+## 3. Turn on phone + password sign-in
 
-- **Project URL** — `https://<project-ref>.supabase.co`
-- **anon / public key** — safe to expose in the browser; RLS is what
-  actually protects the data, not keeping this key secret.
+Dashboard → **Authentication → Sign In / Providers → Phone**:
 
-**Do not use the `service_role` key here.** That key bypasses row-level
-security entirely — it belongs on a trusted server, never in browser code.
-Nothing in this phase needs it.
+- **Enable phone provider**: on.
+- **Confirm phone**: off, until the SMS sender ID is approved. With it on,
+  every signup waits for a text that cannot arrive yet.
 
-## 4. Wire it into the app
+If the dashboard refuses to save without SMS provider details (Twilio and so
+on), leave it and say so. A Send SMS Hook routed through Africa's Talking
+replaces that field.
 
-One `.env` for the whole project, at the repo root — same file
-`apps/server/src/config.ts` already reads (`vite.config.ts` points Vite's
-`envDir` there too, so there's no second `apps/web/.env` to keep in sync).
-Copy `.env.example` to `.env` at the repo root and fill in:
+## 4. Invite your numbers
 
+In the SQL Editor:
+
+```sql
+insert into public.signup_invites (phone, note) values
+  ('233XXXXXXXXX', 'me — farmer'),
+  ('233XXXXXXXXX', 'me — buyer'),
+  ('233XXXXXXXXX', 'friend — driver')
+on conflict (phone) do nothing;
 ```
+
+Write numbers as `233` followed by 9 digits, with no plus and no spaces. One
+role per phone number, the same rule USSD uses.
+
+## Keys
+
+`.env` at the repo root needs the **Project URL** and the **publishable** (or
+legacy anon) key:
+
+```bash
 VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=<the anon key>
+VITE_SUPABASE_ANON_KEY=<publishable or anon key>
 ```
 
-Then `npm run dev -w @ftm/web` and visit `/auth`. Signing up as each of the
-three roles should land you on the matching dashboard shell
-(`/app/buyer`, `/app/seller`, `/app/driver`), and a driver's dashboard
-should honestly read "Pending review" — nothing here fabricates a verified
-badge.
+Never put the `service_role` / secret key in this project. Nothing in F2M
+needs it, and it bypasses every protection above.
 
-## 5. Confirm the RLS policies actually hold
+## Later, when SMS works
 
-Worth doing once, by hand, before trusting this: sign up as two different
-people, open the Supabase dashboard's Table Editor as the `service_role`
-(which correctly bypasses RLS — that's the dashboard's job) and confirm both
-rows exist, then in the app itself confirm neither account can read the
-other's profile or license photo. If you can see the second signup's data
-while logged in as the first, a policy is wrong — stop and fix it before
-this touches anything real, since a driver's license photo is the kind of
-data that has to stay private.
-
-## What this doesn't do yet
-
-- Nothing here talks to `apps/server` or `packages/core` — a Supabase
-  signup can authenticate but can't yet list a lot, place a bid, or accept
-  a delivery job. Those still run on the old SQLite-backed identity system.
-  Reconciling the two is a real decision, not done here.
-- No real driver-license verification — `verification_status` starts and
-  stays `pending` until someone (a person, for now) changes it by hand in
-  the Table Editor. Automated verification is a future provider seam, not
-  built yet.
+Once the sender ID is approved, turn **Confirm phone** back on and connect
+SMS through a Send SMS Hook to Africa's Talking. The invite list can then be
+opened up or removed.

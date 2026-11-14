@@ -1,18 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  activeRole,
-  api,
-  dateTime,
-  loginPathFor,
-  rememberTabRole,
-  setToken,
-  type LocaleInfo,
-  type MarketLot,
-  type Me,
-  type Role,
-} from '../api';
+import { api, dateTime, type LocaleInfo, type MarketLot, type Role } from '../api';
+import { signOut, useAccount } from '../lib/session';
 import { POLL } from '../poll';
 import { F2MSeal, Glyph } from './engrave';
 
@@ -190,34 +180,10 @@ export function Layout({ role: routeRole }: { role?: Role }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  // The route declares which identity this tab is wearing. Only the shared
-  // surfaces (/prices) leave it open, falling back to the token actually held.
-  const role = activeRole(routeRole) ?? 'buyer';
-
-  // Remember it, so navigating on to a shared surface keeps this tab's chrome
-  // instead of resolving to whichever role sorts first.
-  useEffect(() => {
-    if (routeRole) rememberTabRole(routeRole);
-  }, [routeRole]);
-
-  const { data: me } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => api<Me>('/api/auth/me'),
-    enabled: role === 'buyer',
-    staleTime: 5 * 60 * 1000,
-  });
-  const { data: driverProfile } = useQuery({
-    queryKey: ['driver-profile'],
-    queryFn: () => api<{ profile: { name: string; phone: string } }>('/api/driver/profile'),
-    enabled: role === 'driver',
-    staleTime: 5 * 60 * 1000,
-  });
-  const { data: farmerDash } = useQuery({
-    queryKey: ['farmer-dashboard'],
-    queryFn: () => api<{ profile: { name: string } }>('/api/farmer/dashboard'),
-    enabled: role === 'farmer',
-    staleTime: 60 * 1000,
-  });
+  // One signed-in person per browser (D-047); the route's role is only a
+  // fallback while the account loads (RequireAuth has already checked it).
+  const { account } = useAccount();
+  const role: Role = account?.role ?? routeRole ?? 'buyer';
   const { data: market } = useQuery({
     queryKey: ['market-lots'],
     queryFn: () => api<{ lots: MarketLot[] }>('/api/market/lots'),
@@ -225,12 +191,7 @@ export function Layout({ role: routeRole }: { role?: Role }) {
     refetchInterval: POLL.slow,
   });
 
-  const displayName =
-    role === 'driver'
-      ? (driverProfile?.profile.name ?? 'Driver')
-      : role === 'farmer'
-        ? (farmerDash?.profile.name ?? 'Farmer')
-        : (me?.name ?? 'Buyer');
+  const displayName = account?.name || (role === 'driver' ? 'Driver' : role === 'farmer' ? 'Farmer' : 'Buyer');
   const lotCount = market?.lots.length ?? null;
   const homePath = role === 'driver' ? '/driver/jobs' : role === 'farmer' ? '/farmer/dashboard' : '/market';
 
@@ -278,11 +239,10 @@ export function Layout({ role: routeRole }: { role?: Role }) {
               <div className="hidden text-right sm:block">
                 <div className="text-sm font-semibold text-[var(--paper)]">{displayName}</div>
                 <div className="smallcaps text-[var(--ink-3)]">
-                  {role === 'driver'
-                    ? 'Verified Driver'
-                    : role === 'farmer'
-                      ? 'Verified Farmer'
-                      : `Verified Buyer${me?.regionCode ? ` · ${prettyRegion(me.regionCode)}` : ''}`}
+                  {/* No verification exists yet (D-047) — say the role, not a claim. */}
+                  {`${role === 'driver' ? 'Driver' : role === 'farmer' ? 'Farmer' : 'Buyer'}${
+                    account?.regionCode ? ` · ${prettyRegion(account.regionCode)}` : ''
+                  }`}
                 </div>
               </div>
               <span className="display flex h-10 w-10 items-center justify-center rounded-full border-[1.5px] border-[var(--gold)] text-sm font-semibold text-[var(--gold)] shadow-[inset_0_0_0_2.5px_var(--ink),inset_0_0_0_3.5px_var(--gold)]">
@@ -335,14 +295,13 @@ export function Layout({ role: routeRole }: { role?: Role }) {
               )}
               <button
                 className="smallcaps text-[var(--ink-3)] transition-colors hover:text-[var(--paper)]"
-                onClick={() => {
-                  // Sign out only this tab's identity; the other roles stay live.
-                  setToken(null, role);
+                onClick={async () => {
+                  await signOut();
                   // navigate() is a client-side transition, so without this the
-                  // signed-out buyer's name, alerts and contracts stay on screen
+                  // signed-out person's name, alerts and contracts stay on screen
                   // for the next person to sign in until each query refetches.
                   queryClient.clear();
-                  navigate(loginPathFor(role));
+                  navigate('/login');
                 }}
               >
                 Log out

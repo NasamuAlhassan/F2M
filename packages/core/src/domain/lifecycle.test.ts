@@ -5,7 +5,7 @@ import { db } from '../db/client';
 import { demands, lots } from '../db/schema';
 import { setGradingProvider } from '../providers/grading/index';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
-import { verifyBuyerLogin } from './buyers';
+import { testBuyer } from '../testing/fixtures';
 import { getContract, listContractsForFarmer } from './contracts';
 import { createDemand, getDemand } from './demands';
 import { registerFarmer } from './farmers';
@@ -42,7 +42,7 @@ function isolateYamLane(): void {
 
 describe('lifecycle sweeps (M8)', () => {
   it('expires demands whose delivery window closed', () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const now = Date.now();
     const demand = createDemand({
       buyerId: buyer.id,
@@ -63,7 +63,7 @@ describe('lifecycle sweeps (M8)', () => {
 
   it('refunds a funded contract whose pickup window passed with a day of grace', async () => {
     isolateYamLane();
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const farmer = registerFarmer({ phone: '0291000111', name: 'Missed Pickup', regionCode: 'OTI' });
     const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     const now = Date.now();
@@ -97,7 +97,7 @@ describe('lifecycle sweeps (M8)', () => {
 
   it('emits PAYMENT_RELEASED and DISPUTE_RESOLVED in the trace', async () => {
     isolateYamLane();
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const farmer = registerFarmer({ phone: '0291000222', name: 'Trace Events', regionCode: 'CENTRAL' });
     const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     createDemand({

@@ -3,15 +3,16 @@ import {
   db,
   getContract,
   listContractsForFarmer,
+  getFarmerByPhone,
   listNotificationsForPhone,
   MockPaymentProvider,
   registerFarmer,
   registerLot,
   schema,
   setPaymentProvider,
-  verifyBuyerLogin,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
+import { testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from './app';
@@ -23,13 +24,7 @@ let buyerToken: string;
 beforeAll(async () => {
   setPaymentProvider(new MockPaymentProvider(0));
   app = await buildServer({ logger: false });
-  const login = await app.inject({
-    method: 'POST',
-    url: '/api/auth/login',
-    payload: JSON.stringify({ email: 'buyer@demo.ftm', password: 'demo-buyer-2026' }),
-    headers: { 'content-type': 'application/json' },
-  });
-  buyerToken = login.json().token;
+  buyerToken = testBuyerToken();
 });
 afterAll(async () => {
   setPaymentProvider(null);
@@ -57,22 +52,17 @@ function yamJanitor() {
     .run();
 }
 
-async function farmerToken(phone: string): Promise<string> {
-  const otpRes = await post('/api/auth/farmer-otp', { phone });
-  expect(otpRes.statusCode).toBe(200);
-  const sms = listNotificationsForPhone(phone, 5).find((n) => n.templateKey === 'sms.loginCode');
-  expect(sms).toBeDefined();
-  const code = /code is (\d{6})/.exec(sms!.message)![1];
-  const loginRes = await post('/api/auth/farmer-login', { phone, code });
-  expect(loginRes.statusCode).toBe(200);
-  return loginRes.json().token as string;
+/** A web login acting as the farmer registered on this phone (D-047). */
+function farmerToken(phone: string): string {
+  const farmer = getFarmerByPhone(phone)!;
+  return testToken('farmer', farmer.id, farmer.phone);
 }
 
 describe('farmer web portal (M22)', () => {
   it('logs in with an OTP from the SMS outbox and accepts an offer — full parity with USSD', async () => {
     yamJanitor();
     const phone = '+233207460101';
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const farmer = registerFarmer({ phone, name: 'Portal Farmer', regionCode: 'BONO_EAST' });
     registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     createDemand({
@@ -87,12 +77,7 @@ describe('farmer web portal (M22)', () => {
     });
     const offered = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
 
-    // A wrong code is rejected before the right one works.
-    await post('/api/auth/farmer-otp', { phone });
-    const bad = await post('/api/auth/farmer-login', { phone, code: '000000' });
-    expect(bad.statusCode).toBe(401);
-
-    const token = await farmerToken(phone);
+    const token = farmerToken(phone);
     const dash = await app.inject({ method: 'GET', url: '/api/farmer/dashboard', headers: { authorization: `Bearer ${token}` } });
     expect(dash.statusCode).toBe(200);
     const body = dash.json();
@@ -187,15 +172,13 @@ describe('farmer web portal (M22)', () => {
       headers: { authorization: `Bearer ${buyerToken}` },
     });
     expect(dash.statusCode).toBe(401);
-    const otp = await post('/api/auth/farmer-otp', { phone: '+233209999999' });
-    expect(otp.statusCode).toBe(404);
   });
 });
 
 describe('public trace (M24, D-033)', () => {
   it('serves the chain of custody without auth — and without phones or money', async () => {
     yamJanitor();
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const farmer = registerFarmer({ phone: '+233207460303', name: 'Trace Farmer', regionCode: 'NORTHERN' });
     const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     createDemand({

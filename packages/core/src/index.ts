@@ -12,6 +12,7 @@ export {
   type Driver,
   type VehicleClass,
   type VoiceCall,
+  type Account,
   type Buyer,
   type Commodity,
   type Contract,
@@ -38,7 +39,9 @@ export { DomainError, notFound } from './domain/errors';
 export { appendLotEvent, getTrace, type DbLike, type LotEventInput, type TraceEvent } from './domain/trace';
 export * from './domain/registries';
 export * from './domain/farmers';
-export * from './domain/farmerAuth';
+export * from './domain/accounts';
+export { carrierCallbackUrl, carrierRequestAllowed } from './domain/carrier';
+export { verifyAccessToken, setTokenVerifier, type TokenVerifier, type VerifiedLogin } from './auth/tokens';
 export * from './domain/lots';
 export * from './domain/demands';
 export * from './domain/buyers';
@@ -80,4 +83,4 @@ export {
   setDraftLocalesLive,
   type I18nText,
 } from './i18n';
-export { seed, DEMO_BUYER } from './db/seed';
+export { seed } from './db/seed';

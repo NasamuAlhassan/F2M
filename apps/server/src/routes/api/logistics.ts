@@ -87,13 +87,7 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
 
   // The side-hustle directory (D-037): online drivers, browsable by buyers AND
   // sellers — call to inquire, or hire directly on a funded contract.
-  app.get('/drivers/available', async (req, reply) => {
-    try {
-      await req.jwtVerify();
-      if (req.user.kind !== 'buyer' && req.user.kind !== 'farmer') throw new Error('wrong role');
-    } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Login required' } });
-    }
+  app.get('/drivers/available', { preHandler: [app.authBuyerOrFarmer] }, async () => {
     const classes = new Map(listVehicleClasses().map((v) => [v.code, v]));
     return {
       drivers: listAvailableDrivers().map((d) => {

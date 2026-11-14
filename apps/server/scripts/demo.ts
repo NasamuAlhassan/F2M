@@ -24,6 +24,7 @@ import {
   formatGhs,
   getCommodityByCode,
   getContract,
+  getAccountByAuthUser,
   getDriverByPhone,
   getFarmerByPhone,
   getJob,
@@ -35,9 +36,11 @@ import {
   listVoiceCallsForPhone,
   placePendingVoiceCalls,
   pollPaymentsOnce,
+  registerAccount,
   runMigrations,
   schema,
   sendPendingNotifications,
+  setTokenVerifier,
 } from '@ftm/core';
 import { buildServer } from '../src/app';
 
@@ -59,6 +62,27 @@ async function sleep(ms: number): Promise<void> {
 
 runMigrations();
 const app = await buildServer({ logger: false });
+
+// The demo buyer signs in the way every web user does (D-047) — a Supabase
+// login linked to a buyer profile — except the login is local and demo-only:
+// this offline script cannot reach Supabase, so it trusts exactly one token of
+// its own. It never runs inside the server process.
+const DEMO_BUYER_PHONE = '+233555000123';
+const DEMO_LOGIN = { authUserId: 'demo-script-buyer', phone: DEMO_BUYER_PHONE.slice(1) };
+const DEMO_TOKEN = 'demo-script-token';
+setTokenVerifier(async (t) => {
+  if (t !== DEMO_TOKEN) throw new Error('not the demo token');
+  return DEMO_LOGIN;
+});
+if (!getAccountByAuthUser(DEMO_LOGIN.authUserId)) {
+  registerAccount({
+    ...DEMO_LOGIN,
+    role: 'buyer',
+    name: 'Adjoa Mensah',
+    company: 'Accra Fresh Markets Ltd',
+    regionCode: 'GREATER_ACCRA',
+  });
+}
 
 // ---- USSD wire: the Africa's Talking webhook format at POST /ussd ----
 function ussdSession(phone: string) {
@@ -233,10 +257,7 @@ for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt++) {
 
   // ---- 4. DEMAND + AUTO-MATCH (web API) ----
   step('Match — buyer posts demand; the autonomous engine matches and reserves the lot');
-  const { token } = await apiJson<{ token: string }>('POST', '/api/auth/login', {
-    email: 'buyer@demo.ftm',
-    password: 'demo-buyer-2026',
-  });
+  const token = DEMO_TOKEN;
   const now = Date.now();
   const { demand } = await apiJson<{ demand: { id: string; status: string; remainingKg: number } }>(
     'POST',

@@ -15,3 +15,10 @@ const { runMigrations } = await import('../db/migrate');
 runMigrations();
 const { seed } = await import('../db/seed');
 await seed();
+
+// Tests never reach the real Supabase project: bearer tokens are test tokens,
+// and the shared test buyer exists up front like the old seeded demo buyer did.
+const { setTokenVerifier } = await import('../auth/tokens');
+const { testBuyer, testTokenVerifier } = await import('./fixtures');
+setTokenVerifier(testTokenVerifier);
+testBuyer();

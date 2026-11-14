@@ -1,8 +1,7 @@
-import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { RubricDoc, ClockConfig } from '../domain/types';
 import { db } from './client';
-import { buyers, commodities, marketPrices, regions, rubrics, units, vehicleClasses } from './schema';
+import { commodities, marketPrices, regions, rubrics, units, vehicleClasses } from './schema';
 
 // Approximate region centroids — distance fallback when a farmer has no GPS fix.
 const REGION_SEED: Array<{ code: string; lat: number; lng: number }> = [
@@ -498,15 +497,6 @@ COMMODITY_SEED.push(
   },
 );
 
-export const DEMO_BUYER = {
-  email: 'buyer@demo.ftm',
-  password: 'demo-buyer-2026',
-  name: 'Adjoa Mensah',
-  company: 'Accra Fresh Markets Ltd',
-  momoMsisdn: '233555000123',
-  regionCode: 'GREATER_ACCRA',
-};
-
 export async function seed(): Promise<void> {
   for (const r of REGION_SEED) {
     db.insert(regions)
@@ -568,21 +558,7 @@ export async function seed(): Promise<void> {
       .run();
   }
 
-  const existingBuyer = db.select().from(buyers).where(eq(buyers.email, DEMO_BUYER.email)).get();
-  if (!existingBuyer) {
-    db.insert(buyers)
-      .values({
-        email: DEMO_BUYER.email,
-        passwordHash: bcrypt.hashSync(DEMO_BUYER.password, 10),
-        name: DEMO_BUYER.name,
-        company: DEMO_BUYER.company,
-        momoMsisdn: DEMO_BUYER.momoMsisdn,
-        regionCode: DEMO_BUYER.regionCode,
-      })
-      .run();
-  }
-
-  console.log(`Seed complete. Demo buyer login: ${DEMO_BUYER.email} / ${DEMO_BUYER.password}`);
+  console.log('Seed complete: regions, commodities, units, rubrics, market prices, vehicle rate card.');
 }
 
 // Reference market prices (GHS/kg → pesewas). Placeholder data clearly marked

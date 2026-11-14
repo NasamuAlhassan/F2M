@@ -6,7 +6,7 @@ import { getLot, registerLot } from './lots';
 import { acceptOffer, clockCompatible, declineOffer, expireOffers, scoreLotForDemand } from './matching';
 import { getDemand } from './demands';
 import { getTrace } from './trace';
-import { verifyBuyerLogin } from './buyers';
+import { testBuyer } from '../testing/fixtures';
 import type { ClockConfig } from './types';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -17,7 +17,7 @@ const perishableClock: ClockConfig = { offerTtlMinutes: 120, distanceDecayKm: 50
 const stats = { settled: 0, defaulted: 0 };
 
 function demoBuyerId(): string {
-  return verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026').id;
+  return testBuyer().id;
 }
 
 describe('scorer (pure)', () => {

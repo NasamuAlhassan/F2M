@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React, { lazy, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
-import { activeRole, getToken, loginPathFor, type Role } from './api';
+import type { Role } from './api';
 import { Layout } from './components/Layout';
-import { useAuth } from './hooks/useAuth';
+import { HOME_FOR, useAccount } from './lib/session';
 import './index.css';
 
 // Route-level code splitting: each page ships as its own chunk, so a phone on
@@ -17,8 +17,6 @@ const page = <T extends Record<string, unknown>, K extends keyof T>(
   lazy(() => loader().then((m) => ({ default: m[name] as React.ComponentType })));
 
 const LoginPage = page(() => import('./pages/Login'), 'LoginPage');
-const DriverLoginPage = page(() => import('./pages/DriverLogin'), 'DriverLoginPage');
-const FarmerLoginPage = page(() => import('./pages/FarmerLogin'), 'FarmerLoginPage');
 const PublicTracePage = page(() => import('./pages/PublicTrace'), 'PublicTracePage');
 const MarketplacePage = page(() => import('./pages/Marketplace'), 'MarketplacePage');
 const OrdersPage = page(() => import('./pages/Orders'), 'OrdersPage');
@@ -30,33 +28,22 @@ const DemandDetailPage = page(() => import('./pages/DemandDetail'), 'DemandDetai
 const ContractDetailPage = page(() => import('./pages/ContractDetail'), 'ContractDetailPage');
 const TracePage = page(() => import('./pages/Trace'), 'TracePage');
 const PhonePage = page(() => import('./pages/Phone'), 'PhonePage');
-const AuthPage = page(() => import('./pages/Auth'), 'AuthPage');
-const BuyerHomePage = page(() => import('./pages/BuyerHome'), 'BuyerHomePage');
-const SellerHomePage = page(() => import('./pages/SellerHome'), 'SellerHomePage');
-const DriverHomePage = page(() => import('./pages/DriverHome'), 'DriverHomePage');
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
 });
 
-// Auth is checked per role, because every tab carries its own identity — the
-// buyer portal, the seller desk and the dispatch board are meant to be open at
-// once. A group that names a role demands that role's token; the unnamed group
-// (/prices, which buyer and farmer both link to) accepts whichever identity
-// this tab happens to hold.
+// One signed-in person per browser (D-047): a Supabase login linked to one
+// F2M role. A group that names a role admits only that role, sending anyone
+// else to their own home; the unnamed group (/prices) admits any role.
+// Waiting on the account matters: the session check is async, and deciding
+// before it lands would bounce a signed-in person to /login on every refresh.
 function RequireAuth({ role }: { role?: Role }) {
-  if (role) return getToken(role) ? <Outlet /> : <Navigate to={loginPathFor(role)} replace />;
-  return activeRole() ? <Outlet /> : <Navigate to="/login" replace />;
-}
-
-// The new unified-signup identity (supabase/README.md) — separate from the
-// role-keyed JWT system above. useAuth()'s loading window matters here: a
-// Supabase session check is async, so redirecting before it resolves would
-// bounce a genuinely signed-in person back to /auth on every refresh.
-function RequireSupabaseAuth() {
-  const { session, loading } = useAuth();
+  const { loading, account } = useAccount();
   if (loading) return <PageLoading />;
-  return session ? <Outlet /> : <Navigate to="/auth" replace />;
+  if (!account) return <Navigate to="/login" replace />;
+  if (role && account.role !== role) return <Navigate to={HOME_FOR[account.role]} replace />;
+  return <Outlet />;
 }
 
 // The chunk-load interstitial, in the world's own voice.
@@ -68,25 +55,15 @@ const withSuspense = (el: React.ReactNode) => <Suspense fallback={<PageLoading /
 
 const router = createBrowserRouter([
   { path: '/login', element: withSuspense(<LoginPage />) },
-  { path: '/driver/login', element: withSuspense(<DriverLoginPage />) },
-  { path: '/farmer/login', element: withSuspense(<FarmerLoginPage />) },
+  // Old per-role login links stay alive (deploying live, no dead links).
+  { path: '/driver/login', element: <Navigate to="/login" replace /> },
+  { path: '/farmer/login', element: <Navigate to="/login" replace /> },
+  { path: '/auth', element: <Navigate to="/login" replace /> },
   // The QR destination — public by design (D-033), no auth wrapper.
   { path: '/t/:lotId', element: withSuspense(<PublicTracePage />) },
   // The handset simulator has no web login — a phone identifies itself by the
   // number it dials from, exactly as it does on a real shortcode.
   { path: '/phone', element: withSuspense(<PhonePage />) },
-  // The unified role-picker signup/login (supabase/README.md). Runs
-  // alongside the role-keyed JWT system above, not in place of it — see
-  // that README for what still needs reconciling between the two.
-  { path: '/auth', element: withSuspense(<AuthPage />) },
-  {
-    element: <RequireSupabaseAuth />,
-    children: [
-      { path: '/app/buyer', element: withSuspense(<BuyerHomePage />) },
-      { path: '/app/seller', element: withSuspense(<SellerHomePage />) },
-      { path: '/app/driver', element: withSuspense(<DriverHomePage />) },
-    ],
-  },
   {
     element: <RequireAuth role="buyer" />,
     children: [

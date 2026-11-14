@@ -233,17 +233,17 @@ export function DriverJobsPage() {
     // /api/jobs/:id/* is split between roles — accept, decline and pickup are
     // the driver's, while deliver and retry-dispatch belong to the buyer — so
     // the path cannot imply the identity and these three name it outright.
-    mutationFn: (id: string) => api(`/api/jobs/${id}/accept`, { method: 'POST', role: 'driver' }),
+    mutationFn: (id: string) => api(`/api/jobs/${id}/accept`, { method: 'POST' }),
     onSuccess: invalidate,
     onError,
   });
   const decline = useMutation({
-    mutationFn: (id: string) => api(`/api/jobs/${id}/decline`, { method: 'POST', role: 'driver' }),
+    mutationFn: (id: string) => api(`/api/jobs/${id}/decline`, { method: 'POST' }),
     onSuccess: invalidate,
     onError,
   });
   const pickup = useMutation({
-    mutationFn: (id: string) => api(`/api/jobs/${id}/pickup`, { method: 'POST', role: 'driver' }),
+    mutationFn: (id: string) => api(`/api/jobs/${id}/pickup`, { method: 'POST' }),
     onSuccess: invalidate,
     onError,
   });
