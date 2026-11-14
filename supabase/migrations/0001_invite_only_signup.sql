@@ -34,12 +34,21 @@ create table if not exists public.signup_invites (
   created_at timestamptz not null default now()
 );
 
--- Row-level security with NO policies: the browser (anon/authenticated) can
--- neither read nor change the list. Only the auth server and you, in the
--- dashboard, can.
+-- Row-level security: the browser (anon/authenticated) gets no policy, so it
+-- can neither read nor change the list. The auth server gets exactly one —
+-- read — because RLS blocks every role without a policy, the auth server
+-- included: without it the signup check sees an empty list and refuses
+-- every number. You, in the dashboard, are unaffected.
 alter table public.signup_invites enable row level security;
 grant all on table public.signup_invites to supabase_auth_admin;
 revoke all on table public.signup_invites from authenticated, anon, public;
+drop policy if exists "auth server can read the invite list" on public.signup_invites;
+create policy "auth server can read the invite list"
+  on public.signup_invites
+  as permissive
+  for select
+  to supabase_auth_admin
+  using (true);
 
 -- ── 3. The signup check ────────────────────────────────────────────────────
 -- Called by Supabase Auth before it creates any user. Returning {} allows the
