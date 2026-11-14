@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { api, ghs, placeName, sellerName, type MarketLot, type Registries } from '../api';
 import { POLL } from '../poll';
 import { CropMark, Glyph, VehicleMark } from '../components/engrave';
-import { ErrorStamp, GradeBadge } from '../components/ui';
+import { btnCls, BusyLabel, choiceCls, EmptyState, ErrorStamp, GradeBadge, LoadGate, textLinkCls } from '../components/ui';
+import { pillItemCls, SlidingPillGroup } from '../components/SlidingPill';
+import { useT } from '../lib/i18n';
 
 const BAND_ORDER: Record<string, number> = { A: 3, B: 2, C: 1 };
 
@@ -14,10 +16,11 @@ const BAND_ORDER: Record<string, number> = { A: 3, B: 2, C: 1 };
  * each farmer still consents to their own offer (D-034).
  */
 export function PoolBuilder() {
+  const { t } = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
-  const { data } = useQuery({
+  const { data, isError, isFetching, refetch } = useQuery({
     queryKey: ['market-lots'],
     queryFn: () => api<{ lots: MarketLot[] }>('/api/market/lots'),
     refetchInterval: POLL.ambient,
@@ -25,6 +28,7 @@ export function PoolBuilder() {
 
   const all = data?.lots ?? [];
   const commodityCodes = useMemo(() => [...new Set(all.map((l) => l.commodityCode))], [all]);
+  const commodityNames = useMemo(() => new Map(all.map((l) => [l.commodityCode, l.commodityName])), [all]);
   const [commodity, setCommodity] = useState<string | null>(null);
   const activeCommodity = commodity ?? commodityCodes[0] ?? null;
   const lots = all.filter((l) => l.commodityCode === activeCommodity);
@@ -83,212 +87,276 @@ export function PoolBuilder() {
       queryClient.invalidateQueries({ queryKey: ['demands'] });
       navigate('/orders');
     },
-    onError: (err) => setError(err instanceof Error ? err.message : 'Failed'),
+    onError: (err) =>
+      setError(err instanceof Error ? err.message : t('web.pool.failed', 'Could not post the order. Please try again.')),
   });
 
+  const ready = chosen.length > 0 && !overload;
+
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
-      {/* ── The waybill manifest ─────────────────────────────── */}
-      <aside className="w-full flex-shrink-0 lg:w-72">
-        <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
-          <div className="plate px-5 py-4">
-            <div className="display text-base font-semibold tracking-[0.08em]">CONSOLIDATION</div>
-            <div className="smallcaps mt-0.5 text-[var(--ink-3)]">bundle small lots into one dispatch</div>
-          </div>
-          <div className="h-[3px] w-full bg-[var(--gold)]" />
-          <div className="flex flex-col gap-5 p-5">
-            <div>
-              <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">Target Truck</p>
-              {vehicles.map((v) => (
-                <button
-                  key={v.code}
-                  onClick={() => setTruckCode(v.code)}
-                  className={`mb-2 flex w-full items-center gap-3 border p-3 text-left transition-colors ${
-                    truck?.code === v.code
-                      ? 'border-[var(--ink)] bg-[var(--gold-wash)]'
-                      : 'border-[var(--ink-2)] hover:border-[var(--ink-5)]'
-                  }`}
-                >
-                  <VehicleMark code={v.code} className="h-8 w-8 flex-shrink-0 text-[var(--ink)]" />
-                  <span>
-                    <span className="block text-sm font-bold text-[var(--ink)]">{v.name}</span>
-                    <span className="serial block text-[11px] text-[var(--ink-6)]">
-                      up to {v.capacityKg.toLocaleString()} kg
+    <div>
+      <div className="mb-5">
+        <h1 className="headline text-3xl text-[var(--ink)] sm:text-4xl">
+          {t('web.pool.title', 'Pool small lots')}
+        </h1>
+        <p className="mt-1 max-w-2xl text-sm text-[var(--ink-6)]">
+          {t(
+            'web.pool.subtitle',
+            'Pick small lots of the same crop to fill one vehicle. Each farmer still says yes or no to their own offer.',
+          )}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-6 lg:flex-row">
+        {/* ── The load summary ─────────────────────────────── */}
+        <aside className="w-full flex-shrink-0 lg:w-72" aria-label={t('web.pool.summaryLabel', 'Your load')}>
+          <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
+            <div className="plate on-dark px-5 py-5">
+              <p className="headline text-2xl">{t('web.pool.plateTitle', 'Your load')}</p>
+              <p className="mt-1 text-sm text-[var(--ink-2)]">{t('web.pool.plateEyebrow', 'One vehicle, many farmers')}</p>
+            </div>
+            <div className="flex flex-col gap-5 p-5">
+              <div role="group" aria-labelledby="pool-vehicle-label">
+                <p id="pool-vehicle-label" className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">
+                  {t('web.pool.vehicle', 'Choose a vehicle')}
+                </p>
+                {vehicles.map((v) => (
+                  <button
+                    key={v.code}
+                    type="button"
+                    aria-pressed={truck?.code === v.code}
+                    onClick={() => setTruckCode(v.code)}
+                    className={`${choiceCls(truck?.code === v.code)} mb-2`}
+                  >
+                    <VehicleMark code={v.code} className="h-8 w-8 flex-shrink-0 text-[var(--ink)]" />
+                    <span className="flex-1">
+                      <span className="block text-sm font-bold text-[var(--ink)]">{v.name}</span>
+                      <span className="serial block text-[11px] text-[var(--ink-6)]">
+                        {t('web.pool.upTo', 'up to {kg} kg', { kg: v.capacityKg.toLocaleString() })}
+                      </span>
                     </span>
+                    {truck?.code === v.code && <Glyph name="check" className="h-4 w-4 flex-shrink-0 text-[var(--forest-deep)]" />}
+                  </button>
+                ))}
+              </div>
+
+              <div>
+                <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">{t('web.pool.howFull', 'How full')}</p>
+                <div className="mb-1.5 flex items-end justify-between">
+                  <span
+                    className={`serial text-2xl font-bold ${
+                      overload ? 'text-[var(--stamp-deep)]' : full ? 'text-[var(--forest-deep)]' : 'text-[var(--ink-7)]'
+                    }`}
+                  >
+                    {pct}%
                   </span>
+                  <span className="serial text-xs text-[var(--ink-6)]">
+                    {totalKg.toLocaleString()} / {capacity.toLocaleString()} kg
+                  </span>
+                </div>
+                <div aria-hidden="true" className="h-4 rounded-full border border-[var(--ink-3)] bg-[var(--paper)] p-[2px]">
+                  <div
+                    className={`h-full rounded-full transition-[width,background-color] duration-[var(--dur-base)] ${
+                      overload ? 'bg-[var(--stamp)]' : full ? 'bg-[var(--forest)]' : 'bg-[var(--gold)]'
+                    }`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div aria-live="polite">
+                  {overload && (
+                    <p className="mt-1.5 text-[11px] font-semibold text-[var(--stamp-deep)]">
+                      {t('web.pool.overload', 'Too heavy for this vehicle. Remove a lot.')}
+                    </p>
+                  )}
+                  {full && (
+                    <p className="mt-1.5 text-[11px] font-semibold text-[var(--forest-deep)]">
+                      {t('web.pool.goodLoad', 'Good load. Ready to post.')}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <dl className="flex flex-col gap-1.5 border-t border-[var(--ink-2)] pt-4">
+                {(
+                  [
+                    [t('web.pool.sumLots', 'Lots picked'), `${chosen.length} / ${lots.length}`],
+                    [t('web.pool.sumWeight', 'Total weight'), `${totalKg.toLocaleString()} kg`],
+                    [t('web.pool.sumValue', 'Value of produce'), ghs(Math.round(value))],
+                    [t('web.pool.sumTransport', 'Transport, about'), chosen.length ? ghs(logisticsEst) : '—'],
+                    [t('web.pool.sumGrade', 'Lowest grade in load'), minBand],
+                  ] as const
+                ).map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-3 text-xs">
+                    <dt className="smallcaps text-[var(--ink-6)]">{k}</dt>
+                    <dd className="serial text-right font-semibold text-[var(--ink)]">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              {error && <ErrorStamp message={error} onDismiss={() => setError(null)} />}
+              <button
+                type="button"
+                disabled={!ready || poolBid.isPending}
+                aria-busy={poolBid.isPending || undefined}
+                onClick={() => poolBid.mutate()}
+                className={`${btnCls} w-full py-2.5`}
+              >
+                <BusyLabel
+                  busy={poolBid.isPending}
+                  label={
+                    ready
+                      ? t('web.pool.post', 'Post one order for {kg} kg', { kg: totalKg.toLocaleString() })
+                      : t('web.pool.pickFirst', 'Pick lots to build a load')
+                  }
+                  busyLabel={t('web.pool.posting', 'Posting your order…')}
+                />
+              </button>
+              <p className="text-[11px] leading-relaxed text-[var(--ink-6)]">
+                {t(
+                  'web.pool.explain',
+                  'This posts one order for the whole load. We send each farmer an offer for their part, and each one says yes or no. A driver is then booked for each deal.',
+                )}
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        {/* ── The board ────────────────────────────────────────── */}
+        <div className="min-w-0 flex-1">
+          {commodityCodes.length > 1 && (
+            <SlidingPillGroup
+              watch={activeCommodity}
+              role="group"
+              aria-label={t('web.pool.cropFilter', 'Crop')}
+              className="mb-4 inline-flex flex-wrap gap-1 rounded-full border border-[var(--ink-2)] bg-[var(--paper-lift)] p-1 shadow-sm"
+            >
+              {commodityCodes.map((code) => (
+                <button
+                  key={code}
+                  type="button"
+                  aria-pressed={activeCommodity === code}
+                  onClick={() => {
+                    setCommodity(code);
+                    setSelected(new Set());
+                  }}
+                  className={pillItemCls(activeCommodity === code)}
+                >
+                  <CropMark code={code} className="h-4 w-4" />
+                  {commodityNames.get(code) ?? code}
                 </button>
               ))}
-            </div>
+            </SlidingPillGroup>
+          )}
 
-            <div>
-              <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">Load Capacity</p>
-              <div className="mb-1.5 flex items-end justify-between">
-                <span
-                  className={`serial text-2xl font-bold ${
-                    overload ? 'text-[var(--stamp)]' : full ? 'text-[var(--forest)]' : 'text-[var(--ink-7)]'
-                  }`}
-                >
-                  {pct}%
-                </span>
-                <span className="serial text-xs text-[var(--ink-6)]">
-                  {totalKg.toLocaleString()} / {capacity.toLocaleString()} kg
-                </span>
-              </div>
-              <div className="h-4 border border-[var(--ink-3)] bg-[var(--paper)] p-[2px]">
-                <div
-                  className={`h-full transition-[width,background-color] duration-500 ${
-                    overload ? 'bg-[var(--stamp)]' : full ? 'bg-[var(--forest)]' : 'bg-[var(--gold)]'
-                  }`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              {overload && (
-                <p className="mt-1.5 text-[11px] font-semibold text-[var(--stamp)]">Exceeds truck capacity — remove lots</p>
+          {!data ? (
+            <div className="certificate bg-[var(--paper-lift)] p-5">
+              <LoadGate isError={isError} retrying={isFetching} onRetry={() => void refetch()} label={t('web.pool.loadLabel', 'the lots on the market')} />
+            </div>
+          ) : lots.length === 0 ? (
+            <EmptyState
+              icon={<Glyph name="scale" className="h-7 w-7" />}
+              title={t('web.pool.emptyTitle', 'No lots to pool right now')}
+              body={t(
+                'web.pool.emptyBody',
+                'When farmers list produce, you can pick small lots of the same crop here to fill one vehicle.',
               )}
-              {full && <p className="mt-1.5 text-[11px] font-semibold text-[var(--forest)]">Good load — ready to bid</p>}
-            </div>
-
-            <div className="flex flex-col gap-1.5 border-t border-[var(--ink-2)] pt-4">
-              {(
-                [
-                  ['Lots selected', `${chosen.length} / ${lots.length}`],
-                  ['Total cargo', `${totalKg.toLocaleString()} kg`],
-                  ['Estimated value', ghs(Math.round(value))],
-                  ['Logistics est.', chosen.length ? ghs(logisticsEst) : '—'],
-                  ['Pool min grade', minBand],
-                ] as const
-              ).map(([k, v]) => (
-                <div key={k} className="flex justify-between text-xs">
-                  <span className="smallcaps text-[var(--ink-6)]">{k}</span>
-                  <span className="serial font-semibold text-[var(--ink)]">{v}</span>
-                </div>
-              ))}
-            </div>
-
-            {error && (
-              <ErrorStamp message={error} onDismiss={() => setError(null)} />
-            )}
-            <button
-              disabled={chosen.length === 0 || overload || poolBid.isPending}
-              onClick={() => poolBid.mutate()}
-              className={`rounded-full py-2.5 text-sm font-semibold transition-colors ${
-                chosen.length && !overload
-                  ? 'bg-[var(--forest)] text-[var(--paper)] hover:bg-[var(--forest-deep)]'
-                  : 'cursor-not-allowed bg-[var(--ink-2)] text-[var(--ink-6)]'
-              }`}
-            >
-              {poolBid.isPending
-                ? 'Posting pool bid…'
-                : chosen.length && !overload
-                  ? `Place Pool Bid — ${totalKg.toLocaleString()} kg`
-                  : 'Select lots to build a load'}
-            </button>
-            <p className="text-[11px] leading-relaxed text-[var(--ink-6)]">
-              A pool bid posts one demand for the whole load. The engine offers each farmer their share — every farmer
-              accepts their own contract, then transport dispatches per contract.
-            </p>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── The board ────────────────────────────────────────── */}
-      <div className="min-w-0 flex-1">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <p className="text-sm text-[var(--ink-6)]">
-            Select same-crop lots to consolidate into one truck-sized pool bid — each farmer still accepts their own
-            offer
-          </p>
-          <div className="flex border border-[var(--ink-3)]">
-            {commodityCodes.map((code) => (
-              <button
-                key={code}
-                onClick={() => {
-                  setCommodity(code);
-                  setSelected(new Set());
-                }}
-                className={`smallcaps flex items-center gap-1.5 px-3 py-1.5 transition-colors ${
-                  activeCommodity === code
-                    ? 'bg-[var(--forest)] text-[var(--paper)]'
-                    : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'
-                }`}
-              >
-                <CropMark code={code} className="h-4 w-4" />
-                {code}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {lots.length === 0 ? (
-          <div className="certificate flex flex-col items-center justify-center bg-[var(--paper-lift)] py-20">
-            <Glyph name="scale" className="mb-3 h-12 w-12 text-[var(--ink-4)]" />
-            <p className="font-semibold text-[var(--ink-6)]">No open lots to consolidate</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {lots.map((lot) => {
-              const sel = selected.has(lot.id);
-              const wouldOverload = !sel && totalKg + lot.remainingKg > capacity;
-              return (
-                <div
-                  key={lot.id}
-                  onClick={() => !wouldOverload && toggle(lot.id)}
-                  className={`certificate p-4 transition-colors ${
-                    sel
-                      ? 'bg-[var(--gold-wash)]'
-                      : wouldOverload
-                        ? 'cursor-not-allowed bg-[var(--paper-lift)] opacity-40'
-                        : 'cursor-pointer bg-[var(--paper-lift)] hover:bg-[var(--paper)]'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span
-                      className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors ${
-                        sel ? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]' : 'border-[var(--ink-3)] text-[var(--ink-6)]'
+            />
+          ) : (
+            <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {lots.map((lot) => {
+                const sel = selected.has(lot.id);
+                const wouldOverload = !sel && totalKg + lot.remainingKg > capacity;
+                const place = placeName(lot.district);
+                return (
+                  <li key={lot.id}>
+                    {/* A real checkbox under the card: Space toggles it, a screen
+                        reader hears checked/unchecked, and the phone link inside
+                        stays its own target (a label never fires for a link). */}
+                    <label
+                      className={`certificate block h-full p-4 transition-colors has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-[var(--forest-night)] ${
+                        sel
+                          ? 'cursor-pointer bg-[var(--gold-wash)]'
+                          : wouldOverload
+                            ? 'cursor-not-allowed bg-[var(--paper-deep)]'
+                            : 'cursor-pointer bg-[var(--paper-lift)] hover:bg-[var(--paper)] active:bg-[var(--paper-deep)]'
                       }`}
                     >
-                      {sel ? <Glyph name="check" className="h-4 w-4" /> : <CropMark code={lot.commodityCode} className="h-5 w-5" />}
-                    </span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-[var(--ink)]">{sellerName(lot.farmerName)}</span>
-                        <GradeBadge grade={lot.declaredBand} />
-                      </div>
-                      <div className="mt-0.5 text-xs text-[var(--ink-6)]">
-                        {placeName(lot.district) ? `${placeName(lot.district)}, ` : ''}
-                        {lot.regionName} · {lot.distanceKm} km · <span className="serial">{lot.lotCode}</span>
-                        {lot.farmerPhone && (
-                          <>
-                            {' · '}
-                            <a
-                              href={`tel:${lot.farmerPhone}`}
-                              className="serial font-semibold text-[var(--stamp)] hover:underline"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {lot.farmerPhone}
-                            </a>
-                          </>
-                        )}
-                      </div>
-                      <div className="mt-2 flex items-center gap-5">
-                        <div>
-                          <div className="serial text-lg font-bold text-[var(--ink)]">{lot.remainingKg.toLocaleString()}</div>
-                          <div className="smallcaps text-[var(--ink-6)]">kg available</div>
-                        </div>
-                        <div>
-                          <div className="serial text-base font-bold text-[var(--gold-deep)]">
-                            {lot.pricePerUnit !== null ? ghs(lot.pricePerUnit) : '—'}
-                          </div>
-                          <div className="smallcaps text-[var(--ink-6)]">/ {lot.unitName}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={sel}
+                        disabled={wouldOverload}
+                        onChange={() => toggle(lot.id)}
+                        aria-label={t('web.pool.lotLabel', '{name}, {kg} kg, grade {g}', {
+                          name: sellerName(lot.farmerName),
+                          kg: lot.remainingKg.toLocaleString(),
+                          g: lot.declaredBand,
+                        })}
+                      />
+                      <span className="flex items-start gap-3">
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors ${
+                            sel ? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]' : 'border-[var(--ink-3)] text-[var(--ink-6)]'
+                          }`}
+                        >
+                          {sel ? <Glyph name="check" className="h-4 w-4" /> : <CropMark code={lot.commodityCode} className="h-5 w-5" />}
+                        </span>
+                        <span className="block flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-[var(--ink)]">{sellerName(lot.farmerName)}</span>
+                            <GradeBadge grade={lot.declaredBand} />
+                          </span>
+                          <span className="mt-0.5 block text-xs text-[var(--ink-6)]">
+                            {place ? `${place}, ` : ''}
+                            {lot.regionName} · {lot.distanceKm} km · <span className="serial">{lot.lotCode}</span>
+                            {lot.farmerPhone && (
+                              <>
+                                {' · '}
+                                <a
+                                  href={`tel:${lot.farmerPhone}`}
+                                  className={`${textLinkCls} serial font-semibold text-[var(--forest-deep)]`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  aria-label={t('web.pool.callFarmer', 'Call {name} on {phone}', {
+                                    name: sellerName(lot.farmerName),
+                                    phone: lot.farmerPhone,
+                                  })}
+                                >
+                                  {lot.farmerPhone}
+                                </a>
+                              </>
+                            )}
+                          </span>
+                          <span className="mt-2 flex items-center gap-5">
+                            <span className="block">
+                              <span className="serial block text-lg font-bold text-[var(--ink)]">
+                                {lot.remainingKg.toLocaleString()}
+                              </span>
+                              <span className="smallcaps block text-[var(--ink-6)]">{t('web.pool.kgAvailable', 'kg for sale')}</span>
+                            </span>
+                            <span className="block">
+                              <span className="serial block text-base font-bold text-[var(--gold-deep)]">
+                                {lot.pricePerUnit !== null ? ghs(lot.pricePerUnit) : '—'}
+                              </span>
+                              <span className="smallcaps block text-[var(--ink-6)]">
+                                {t('web.pool.perUnit', 'per {unit}', { unit: lot.unitName })}
+                              </span>
+                            </span>
+                          </span>
+                          {wouldOverload && (
+                            <span className="mt-2 block text-[11px] font-semibold text-[var(--ink-6)]">
+                              {t('web.pool.tooHeavy', 'Too heavy to add to this vehicle')}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from 'react';
+import { useId, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { useT } from '../lib/i18n';
 
 /**
  * The handset — a feature phone rendered as an object rather than a rectangle.
@@ -90,6 +91,8 @@ export function Handset({
   end,
   ok,
 }: HandsetProps) {
+  const { t } = useT();
+  const keypadHintId = useId();
   return (
     <div className={`w-[330px] flex-shrink-0 ${ringing ? 'handset-ring' : ''}`}>
       <div
@@ -130,7 +133,7 @@ export function Handset({
             style={
               powered
                 ? { background: '#8b9a3c', color: '#1a2005' }
-                : { background: '#3f4826', color: '#5c6438' }
+                : { background: '#7f8c38', color: '#1a2005' } // standby: dimmer than lit, still 4.5:1
             }
           >
             <div className="mb-2 flex items-center justify-between border-b border-[#1a2005]/25 pb-1.5 text-[10px] tracking-wide">
@@ -140,7 +143,9 @@ export function Handset({
               </span>
               <span>{statusRight}</span>
             </div>
-            <div className="flex-1 whitespace-pre-wrap break-words">{children}</div>
+            <div className="flex-1 whitespace-pre-wrap break-words" aria-live="polite" aria-atomic="true">
+              {children}
+            </div>
           </div>
         </div>
 
@@ -158,9 +163,22 @@ export function Handset({
         </div>
 
         {/* ── Keypad ── */}
+        <span id={keypadHintId} className="sr-only">
+          {t(
+            'web.phone.keypadHint',
+            'Tap, or press Enter, to cycle letters. Hold, or press Shift+Enter, for the digit.',
+          )}
+        </span>
         <div className="mt-3 grid grid-cols-3 gap-x-2.5 gap-y-2">
           {KEYS.map(([digit, letters]) => (
-            <KeypadButton key={digit} digit={digit} letters={letters} disabled={keysDisabled || !onKey} onKey={onKey} />
+            <KeypadButton
+              key={digit}
+              digit={digit}
+              letters={letters}
+              disabled={keysDisabled || !onKey}
+              onKey={onKey}
+              describedBy={keypadHintId}
+            />
           ))}
         </div>
 
@@ -188,7 +206,7 @@ function SoftButton({ soft, align }: { soft?: SoftKey; align: 'left' | 'right' }
       type="button"
       disabled={soft.disabled}
       onClick={soft.onClick}
-      className={`smallcaps h-[26px] w-[86px] border border-black/45 text-[9px] text-[var(--paper)] shadow-[0_2px_0_#0a1c17] transition-[transform,box-shadow] active:translate-y-[2px] active:shadow-none disabled:opacity-30 disabled:active:translate-y-0 disabled:active:shadow-[0_2px_0_#0a1c17] ${
+      className={`smallcaps h-[26px] w-[86px] border border-black/45 text-[9px] text-[var(--paper)] shadow-[0_2px_0_#0a1c17] transition-[translate,box-shadow,filter] not-disabled:hover:brightness-115 active:translate-y-[2px] active:shadow-none disabled:opacity-30 disabled:active:translate-y-0 disabled:active:shadow-[0_2px_0_#0a1c17] ${
         align === 'left' ? 'rounded-[4px_12px_12px_4px]' : 'rounded-[12px_4px_4px_12px]'
       }`}
       style={{ background: 'linear-gradient(180deg, #2f5449 0%, #1c3b33 100%)' }}
@@ -209,7 +227,7 @@ function CallKey({ soft, tone }: { soft?: SoftKey; tone: 'send' | 'end' }) {
       type="button"
       disabled={soft.disabled}
       onClick={soft.onClick}
-      className="smallcaps h-[34px] w-[62px] rounded-[10px] border border-black/45 text-[8.5px] text-[var(--paper)] shadow-[0_2.5px_0_#0a1c17] transition-[transform,box-shadow] active:translate-y-[2.5px] active:shadow-none disabled:opacity-30 disabled:active:translate-y-0 disabled:active:shadow-[0_2.5px_0_#0a1c17]"
+      className="smallcaps h-[34px] w-[62px] rounded-[10px] border border-black/45 text-[8.5px] text-[var(--paper)] shadow-[0_2.5px_0_#0a1c17] transition-[translate,box-shadow,filter] not-disabled:hover:brightness-115 active:translate-y-[2.5px] active:shadow-none disabled:opacity-30 disabled:active:translate-y-0 disabled:active:shadow-[0_2.5px_0_#0a1c17]"
       style={{ background: face }}
     >
       {soft.label}
@@ -232,7 +250,7 @@ function DPad({ ok }: { ok?: SoftKey }) {
           disabled={ok.disabled}
           onClick={ok.onClick}
           aria-label={ok.label}
-          className="serial flex h-[22px] w-[22px] items-center justify-center rounded-full border border-black/40 bg-[#14322b] text-[8px] font-bold text-[#8fd0a8] shadow-[inset_0_1px_2px_rgba(0,0,0,.6)] transition-opacity active:opacity-70 disabled:opacity-40"
+          className="serial flex h-[22px] w-[22px] items-center justify-center rounded-full border border-black/40 bg-[#14322b] text-[8px] font-bold text-[#8fd0a8] relative shadow-[inset_0_1px_2px_rgba(0,0,0,.6)] transition-opacity before:absolute before:-inset-[6px] before:rounded-full active:opacity-70 disabled:opacity-40"
         >
           OK
         </button>
@@ -255,11 +273,13 @@ function KeypadButton({
   letters,
   disabled,
   onKey,
+  describedBy,
 }: {
   digit: string;
   letters: string;
   disabled: boolean;
   onKey?: (key: string, held: boolean) => void;
+  describedBy?: string;
 }) {
   const timerRef = useRef<number | null>(null);
   const firedRef = useRef(false);
@@ -291,6 +311,22 @@ function KeypadButton({
     firedRef.current = true;
   };
 
+  // Keyboard: Enter/Space arrive as a click with detail 0 and count as a tap.
+  // Pointer clicks (detail >= 1) are already handled by the pointer events.
+  const onClick = (e: MouseEvent<HTMLButtonElement>) => {
+    if (disabled || e.detail !== 0 || e.shiftKey || e.altKey) return;
+    onKey?.(digit, false);
+  };
+
+  // Shift/Alt + Enter or Space is the keyboard's press-and-hold: the digit itself.
+  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (disabled || !(e.shiftKey || e.altKey)) return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    if (e.repeat) return;
+    onKey?.(digit, true);
+  };
+
   return (
     <button
       type="button"
@@ -298,10 +334,13 @@ function KeypadButton({
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
       onContextMenu={(e) => e.preventDefault()}
-      className="group flex h-[42px] flex-col items-center justify-center rounded-[9px] border border-black/45 leading-none text-[var(--paper)] shadow-[0_2.5px_0_#0a1c17] transition-[transform,box-shadow] active:translate-y-[2.5px] active:shadow-none disabled:opacity-35 disabled:active:translate-y-0 disabled:active:shadow-[0_2.5px_0_#0a1c17]"
+      className="group flex h-[42px] flex-col items-center justify-center rounded-[9px] border border-black/45 leading-none text-[var(--paper)] shadow-[0_2.5px_0_#0a1c17] transition-[translate,box-shadow,filter] not-disabled:hover:brightness-115 active:translate-y-[2.5px] active:shadow-none disabled:opacity-60 disabled:active:translate-y-0 disabled:active:shadow-[0_2.5px_0_#0a1c17]"
       style={{ background: 'linear-gradient(180deg, #2f5449 0%, #1c3b33 100%)', touchAction: 'manipulation' }}
-      aria-label={letters ? `${digit} ${letters} — tap to cycle letters, hold for the digit` : digit}
+      aria-label={letters ? `${digit} ${letters}` : digit}
+      aria-describedby={describedBy}
     >
       <span
         className={`text-[15px] font-semibold ${

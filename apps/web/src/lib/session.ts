@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { Role } from '../api';
-import { requireSupabase, supabase } from './supabase';
+import { getSupabase, hasStoredSession, onAuthChange, requireSupabase } from './supabase';
 
 /**
  * The signed-in person (D-047). Supabase holds the login (phone + password);
@@ -34,6 +34,9 @@ export function toE164(raw: string): string {
 }
 
 export async function accessToken(): Promise<string | null> {
+  // No saved login: nothing to load, and the visitor never downloads the library.
+  if (!hasStoredSession()) return null;
+  const supabase = await getSupabase();
   if (!supabase) return null;
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
@@ -52,13 +55,13 @@ async function fetchAccount(): Promise<{ signedIn: boolean; account: AccountView
 /** The current session + profile, kept in step with Supabase's sign-in/sign-out events. */
 export function useAccount() {
   const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!supabase) return;
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      void queryClient.invalidateQueries({ queryKey: ['account'] });
-    });
-    return () => data.subscription.unsubscribe();
-  }, [queryClient]);
+  useEffect(
+    () =>
+      onAuthChange(() => {
+        void queryClient.invalidateQueries({ queryKey: ['account'] });
+      }),
+    [queryClient],
+  );
 
   const query = useQuery({ queryKey: ['account'], queryFn: fetchAccount, staleTime: 5 * 60 * 1000, retry: false });
   return {
@@ -79,12 +82,12 @@ function friendly(message: string): string {
 }
 
 export async function signIn(phone: string, password: string): Promise<void> {
-  const { error } = await requireSupabase().auth.signInWithPassword({ phone: toE164(phone), password });
+  const { error } = await (await requireSupabase()).auth.signInWithPassword({ phone: toE164(phone), password });
   if (error) throw new Error(friendly(error.message));
 }
 
 export async function signUp(phone: string, password: string): Promise<void> {
-  const { data, error } = await requireSupabase().auth.signUp({ phone: toE164(phone), password });
+  const { data, error } = await (await requireSupabase()).auth.signUp({ phone: toE164(phone), password });
   if (error) throw new Error(friendly(error.message));
   if (!data.session) {
     // Supabase is waiting for an SMS code — phone confirmation is still on.
@@ -93,5 +96,6 @@ export async function signUp(phone: string, password: string): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
-  await supabase?.auth.signOut();
+  if (!hasStoredSession()) return;
+  await (await getSupabase())?.auth.signOut();
 }

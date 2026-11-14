@@ -2,24 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>Farm to Market</title>
-    <meta name="theme-color" content="#163c2f" />
+    <meta
+      name="description"
+      content="Farm to Market connects farmers in Ghana to buyers and drivers. List produce by voice on any phone, in your own language."
+    />
+    <!-- The browser bar matches the cream masthead (D-048). -->
+    <meta name="theme-color" content="#efe9df" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <!-- The one voice of the first viewport, fetched before the CSS asks. -->
+    <!-- Both voices of the first viewport, fetched before the CSS asks:
+         Hanken Grotesk for text, Newsreader for the headlines. -->
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/HankenGrotesk-variable.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/Newsreader-latin.woff2" />
   </head>
   <body>
-    <!--
-    The D-039 banknote/security-print world this comment used to describe has
-    been retired — deep forest green, white photo-led cards, warm amber,
-    pinned to the owner's original Figma prototype (see git history for the
-    full direction). Deliberately not re-writing this as a finished direction
-    contract: a teammate's real design system replaces this again shortly, so
-    DESIGN.md and this comment get rewritten once THAT lands, not before.
-    -->
+    <!-- The Harvest Journal (D-048): cream ground, plain serif headlines,
+         deep-green feature sections. See apps/web/DESIGN.md. -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

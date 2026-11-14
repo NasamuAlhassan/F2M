@@ -29,7 +29,7 @@ export function QrImage({ url }: { url: string }) {
   if (failed) {
     return (
       <div className="hatch flex h-full w-full items-center justify-center p-2">
-        <span className="smallcaps text-center text-[10px] leading-tight text-[var(--ink-6)]">QR unavailable</span>
+        <span className="smallcaps text-center text-[11px] leading-tight text-[var(--ink-6)]">QR unavailable</span>
       </div>
     );
   }
