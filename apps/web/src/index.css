@@ -12,82 +12,137 @@
   src: url('/fonts/HankenGrotesk-variable.woff2') format('woff2');
 }
 
+/* Newsreader — the editorial serif for headlines (D-048). Variable over
+   weight 300–600 and optical size; latin + latin-ext so Ghanaian letters
+   (ɛ, ɔ, ŋ) never fall back to another face mid-word. */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/Newsreader-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/Newsreader-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/Newsreader-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/Newsreader-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 /* ============================================================
-   THE MARKET WORLD (retires D-039's paper world, seed pinned to
-   the owner's own Figma prototype, D-030's photographic register).
-   Deep forest green as a bold brand color, not a neutral; white
-   cards on a soft green-tinted ground; warm amber accent; a full
-   named palette for state so a scan reads status at a glance.
+   THE HARVEST JOURNAL (D-048, replaces D-042's Market World).
+   An editorial world: a warm cream ground, serif headlines with
+   one italic word, deep-green feature sections, pill controls.
+   F2M green stays the brand and every primary action; gold is
+   the italic accent and the money colour.
    ============================================================ */
 
 :root {
-  /* Page ground / recessed zones / raised card white. Kept the --paper*
-     names on purpose: they're internal CSS variables, never user-visible,
-     and ~130 call sites across every page already read them — repointing
-     the values here reskins the whole app without an error-prone sweep. */
-  --paper: #f5f8f3;
-  --paper-deep: #eaf0e6; /* tint zones, alternating rows, recessed wells */
-  --paper-lift: #ffffff; /* cards, inputs — literally raised off the ground */
+  /* Ground / recessed zones / raised cards. The --paper* names are internal
+     and read by ~130 call sites, so repointing them reskins the whole app. */
+  --paper: #efe9df; /* warm cream page ground */
+  --paper-deep: #e5ddcf; /* tint zones, alternating rows, recessed wells */
+  --paper-lift: #fbf8f3; /* cards, inputs: warm white raised off the cream */
 
-  /* Neutral text/border ramp — recalibrated light-to-dark for white cards
-     instead of tinted paper, with a faint green bias so the neutrals still
-     feel chosen rather than defaulted to. */
-  --ink: #16241e;
-  --ink-8: #2a3d34;
-  --ink-7: #3e544a;
-  --ink-6: #58705f;
-  --ink-5: #748b7a;
-  --ink-4: #93a696;
-  --ink-3: #b3c2b3;
-  --ink-2: #d2ddcf;
-  --ink-1: #e6ede3;
+  /* Text/border ramp: warm neutrals with a green undertone. --ink-6 is the
+     lightest permitted on functional small text (at least 4.5:1 on --paper). */
+  --ink: #14231b;
+  --ink-8: #26352c;
+  --ink-7: #3d4a41;
+  --ink-6: #56625a;
+  --ink-5: #7a8279;
+  --ink-4: #9a9f95;
+  --ink-3: #bcbdb1;
+  --ink-2: #d9d3c6;
+  --ink-1: #e8e2d6;
 
-  /* The bold brand green — masthead, primary actions, live accents.
-     Distinct from --ink: that ramp is neutral text, this is a saturated
-     brand color used deliberately, not diluted into a text ramp. Lifted
-     from a near-black forest to a confident, daylight-legible green: the
-     masthead should read as "alive," not as corporate charcoal. */
-  --forest: #158a4a;
+  /* The brand green: primary actions, active nav, done/positive states.
+     --forest-night is the deep field for feature sections and the footer. */
+  --forest: #147f44; /* 4.78:1 under white button text (was #158a4a, 4.16) */
   --forest-deep: #0f6d3a;
-  --forest-wash: #e2f5e8;
+  --forest-night: #0c3d24;
+  --forest-wash: #dcebd9;
 
-  /* Amber accent — money, live states, calls to action. More saturated
-     than the old muted security-print gold. */
+  /* Gold: the italic accent word, money, live states, focus. */
   --gold: #d97a1f;
   --gold-deep: #b3620f;
-  --gold-ink: #8a4c0c; /* small gold type on washes — contrast-safe */
-  --gold-wash: #fbe9d3;
+  --gold-ink: #8a4c0c; /* small gold type on washes, contrast-safe */
+  --gold-wash: #f6e2c6;
 
-  /* Failed / disputed / refused. Kept the --stamp* names for the same
-     reason as --paper — internal only, and widely referenced already. */
+  /* Failed / disputed / refused. */
   --stamp: #c0392b;
   --stamp-deep: #962c21;
-  --stamp-wash: #f8dcd7;
+  --stamp-wash: #f5d8d1;
 
   /* Assigned / in progress. */
-  --info: #1d5fd9;
-  --info-wash: #dbe7fb;
+  --info: #1a55c4;
+  --info-wash: #dbe5f6;
 
   /* En route / picked up. */
   --transit: #6d3fc4;
-  --transit-wash: #e7ddf7;
+  --transit-wash: #e6ddf2;
 
-  /* Settled / delivered / confirmed. A true green distinct from the
-     brand --forest, so "the money landed" reads unambiguously. */
-  --success: #1f8a4c;
-  --success-wash: #dcf0e2;
+  /* Settled / delivered / confirmed, distinct from the brand --forest. */
+  --success: #18753f; /* 4.6:1 on its wash */
+  --success-wash: #d8ecd8;
+
+  /* Gold that keeps 4.5:1 on the deep-green field (plain --gold is 3.95). */
+  --gold-bright: #e8953f;
+  /* Input borders must show where a field is: 3:1 against both grounds. */
+  --field-border: #80857b;
+
+  --serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+
+  /* The motion scale. One curve for anything that answers a person (quick
+     start, long soft landing), one for ambient loops, and three durations:
+     fast = press and hover colour, base = state changes and fades,
+     slow = things that travel (the sliding pill, dialogs, toasts).
+     Overriding Tailwind's --ease-out / --ease-in-out keeps its ease-out and
+     ease-in-out utilities on the same curves. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  /* Tailwind's bare transition-* utilities read these two, so a
+     transition-colors with no duration class is already "fast". */
+  --default-transition-duration: var(--dur-fast);
+  --default-transition-timing-function: var(--ease-out);
 }
 
-* {
-  font-family: 'Hanken Grotesk', 'Segoe UI', system-ui, sans-serif;
-  box-sizing: border-box;
-}
+/* In @layer base, not unlayered: an unlayered `*` font rule beats every
+   layered class, which silently kept .headline in Hanken Grotesk. */
+@layer base {
+  * {
+    font-family: 'Hanken Grotesk', 'Segoe UI', system-ui, sans-serif;
+    box-sizing: border-box;
+  }
 
-body {
-  background-color: var(--paper);
-  color: var(--ink);
-  margin: 0;
-  font-variant-numeric: tabular-nums;
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 /* Every custom class below that gets combined with Tailwind utilities in a
@@ -127,6 +182,42 @@ body {
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
+
+  /* Editorial serif headline (D-048): light weight, tight tracking. Pair
+     with one <em> for the italic accent word. */
+  .headline {
+    font-family: var(--serif);
+    font-weight: 400;
+    letter-spacing: -0.015em;
+    line-height: 1.08;
+    font-optical-sizing: auto;
+    /* No lonely last word ("farm." on a line of its own). */
+    text-wrap: balance;
+  }
+  .headline em,
+  .accent-word {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--gold-deep);
+  }
+  .on-dark .headline em,
+  .on-dark .accent-word,
+  .plate .headline em {
+    color: var(--gold-bright);
+  }
+
+  /* Widely tracked section label above a headline. */
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--gold-ink);
+  }
+  .on-dark .eyebrow,
+  .plate .eyebrow {
+    color: var(--gold-bright);
+  }
 }
 
 /* ── Browser surfaces carry the design too ─────────────────── */
@@ -139,9 +230,20 @@ textarea,
 select {
   caret-color: var(--gold);
 }
+/* Native checkboxes, radios and range sliders take the brand green, not the
+   browser's default blue. */
+:root {
+  accent-color: var(--forest);
+}
+/* The focus ring: deep green on light grounds (10:1), bright gold on the
+   dark field. Offset so it never sits on top of the control it marks. */
 :focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 1px;
+  outline: 2px solid var(--forest-night);
+  outline-offset: 2px;
+}
+.plate :focus-visible,
+.on-dark :focus-visible {
+  outline-color: var(--gold-bright);
 }
 ::-webkit-scrollbar {
   width: 10px;
@@ -159,7 +261,7 @@ select {
   background: var(--ink-5);
 }
 ::placeholder {
-  color: var(--ink-5);
+  color: #6b7369; /* 4.6:1 on cards: a hint must be readable */
   opacity: 1;
 }
 
@@ -176,12 +278,13 @@ select {
     background: var(--paper-lift);
     border: 1px solid var(--ink-1);
     border-radius: 20px;
-    box-shadow: 0 1px 2px rgba(22, 36, 30, 0.05), 0 12px 28px -14px rgba(22, 36, 30, 0.18);
+    box-shadow: 0 1px 2px rgba(40, 30, 15, 0.05), 0 18px 40px -22px rgba(40, 30, 15, 0.28);
   }
 
-  /* Solid brand-green field — masthead, modal headers, dark accents. */
+  /* The deep-green field: feature sections, panel and modal headers, the
+     footer. White type; gold eyebrows and italic accents via .on-dark. */
   .plate {
-    background: var(--forest);
+    background: var(--forest-night);
     color: var(--paper-lift);
     position: relative;
   }
@@ -212,26 +315,48 @@ select {
   }
 }
 
-/* ── Motion — unchanged grammar, new palette underneath ─────── */
-@keyframes seal-land {
-  0% {
-    transform: scale(1.35) rotate(-6deg);
+/* ── Motion ────────────────────────────────────────────────────
+   Every animation here says something: a thing arrived, a thing is live, a
+   thing is loading, a thing moved. Only transform and opacity move (the
+   skeleton shimmer and the handset backlight are the two paint-only
+   exceptions). Durations come from the scale in :root, and one
+   prefers-reduced-motion block at the end of this section switches all of
+   it off. Presses and hovers are transitions on the controls themselves
+   (btnCls and friends in ui.tsx), so a second tap interrupts them cleanly. */
+
+/* A new card (an offer, a match, a payout) settles into place: a few pixels
+   and a fade, not a stamp, because these cards remount on every visit. */
+@keyframes card-land {
+  from {
     opacity: 0;
-  }
-  55% {
-    transform: scale(0.96) rotate(1deg);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1) rotate(0deg);
-    opacity: 1;
+    transform: translateY(6px) scale(0.985);
   }
 }
 .seal-land {
-  animation: seal-land 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top center;
+  animation: card-land var(--dur-slow) var(--ease-out) both;
 }
 
-/* Route legs draw themselves in — the spine's own motion. */
+/* A grade being stamped: the one place the seal still presses down. */
+@keyframes stamp-land {
+  0% {
+    transform: scale(1.3) rotate(-4deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.97) rotate(0.5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+.stamp-land {
+  animation: stamp-land var(--dur-slow) var(--ease-out) both;
+}
+
+/* Finished route legs draw themselves in, once, when the trace opens. */
 @keyframes route-ink {
   from {
     stroke-dashoffset: var(--route-len, 120);
@@ -241,21 +366,22 @@ select {
   }
 }
 .route-ink {
-  animation: route-ink 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: route-ink var(--dur-slow) var(--ease-out) both;
 }
 
-/* A live pulse — gold, damped, for states in motion. */
+/* A live pulse, gold and damped, for states in motion (waiting on a farmer,
+   a driver on the road, matching running). Never on static content. */
 @keyframes ember {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.35;
+    opacity: 0.4;
   }
 }
 .ember {
-  animation: ember 1.8s ease-in-out infinite;
+  animation: ember 1.8s var(--ease-in-out) infinite;
 }
 
 /* ── The handset ───────────────────────────────────────────────
@@ -281,10 +407,11 @@ select {
   }
 }
 .handset-ring {
-  animation: handset-ring 1.4s ease-in-out infinite;
+  transform-origin: bottom center;
+  animation: handset-ring 1.4s var(--ease-in-out) infinite;
 }
 
-/* Backlight surge under the ring, and the idle glow of a live screen. */
+/* Backlight surge under the ring. */
 @keyframes lcd-pulse {
   0%,
   100% {
@@ -295,30 +422,350 @@ select {
   }
 }
 .lcd-pulse {
-  animation: lcd-pulse 1.4s ease-in-out infinite;
+  animation: lcd-pulse 1.4s var(--ease-in-out) infinite;
 }
 
-/* Speaking indicator — the four-bar waveform while the IVR talks. */
+/* Speaking indicator: four bars that grow from the baseline while the IVR
+   talks. scaleY, not height, so nothing around them reflows. */
 @keyframes wave-bar {
   0%,
   100% {
-    height: 4px;
+    transform: scaleY(0.27);
   }
   50% {
-    height: 15px;
+    transform: scaleY(1);
   }
 }
 .wave-bar {
-  animation: wave-bar 0.6s ease-in-out infinite;
+  height: 15px;
+  transform-origin: bottom;
+  animation: wave-bar 0.6s var(--ease-in-out) infinite;
 }
 
+/* Loading bars shimmer left to right in the cream ramp, and only appear
+   after 150ms, so a fast load never flashes them. */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--paper-deep) 0%, var(--paper-lift) 50%, var(--paper-deep) 100%);
+  background-size: 200% 100%;
+  animation:
+    appear var(--dur-base) var(--ease-out) 150ms both,
+    shimmer 1.6s var(--ease-in-out) infinite;
+}
+
+/* A toast rises from the bottom edge it is pinned to, and sinks back. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+.toast-in {
+  transform-origin: bottom center;
+  animation: toast-in var(--dur-slow) var(--ease-out) both;
+}
+.toast-out {
+  transform-origin: bottom center;
+  animation: toast-out var(--dur-base) var(--ease-in-out) both;
+}
+
+/* Dialogs: the veil fades, the panel rises a few pixels and settles. The
+   curve lands most of the way in the first ~120ms; the rest is the soft
+   settle. The side drawer slides in from the edge it is attached to.
+   Closing is instant: a dismissed thing should just be gone. */
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+.scrim-in {
+  animation: scrim-in var(--dur-base) var(--ease-out) both;
+}
+.dialog-in {
+  transform-origin: top center;
+  animation: dialog-in var(--dur-slow) var(--ease-out) both;
+}
+.drawer-in {
+  animation: drawer-in var(--dur-slow) var(--ease-out) both;
+}
+/* On a phone a dialog is a sheet at the bottom of the screen, so it rises. */
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+}
+@media (max-width: 39.99rem) {
+  .dialog-in {
+    transform-origin: bottom center;
+    animation-name: sheet-in;
+  }
+}
+
+/* The sliding highlight in pill groups (SlidingPillGroup): it travels from
+   the old choice to the new one, like an iOS segmented control. */
+.pill-indicator.is-animated {
+  transition:
+    transform var(--dur-slow) var(--ease-out),
+    width var(--dur-slow) var(--ease-out),
+    height var(--dur-slow) var(--ease-out);
+}
+
+/* Navigation in progress: a hairline across the top that creeps toward the
+   end. Hidden for the first 150ms, so quick switches show nothing at all. */
+@keyframes nav-progress {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(0.85);
+    opacity: 1;
+  }
+}
+.nav-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 60;
+  height: 2px;
+  background: var(--forest);
+  transform-origin: left;
+  animation: nav-progress 3s cubic-bezier(0.1, 0.7, 0.3, 1) 0.15s both;
+}
+
+/* Disclosures open by growing to their height where the browser can animate
+   to `auto` (Chromium); elsewhere they open at once. The chevron beside the
+   summary turns either way. */
+@supports (interpolate-size: allow-keywords) {
+  details {
+    interpolate-size: allow-keywords;
+  }
+  details::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition:
+      block-size var(--dur-base) var(--ease-out),
+      content-visibility var(--dur-base) allow-discrete;
+  }
+  details[open]::details-content {
+    block-size: auto;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* The off switch for everything above. */
 @media (prefers-reduced-motion: reduce) {
   .seal-land,
+  .stamp-land,
   .route-ink,
   .ember,
   .handset-ring,
   .lcd-pulse,
-  .wave-bar {
+  .wave-bar,
+  .skeleton,
+  .toast-in,
+  .toast-out,
+  .scrim-in,
+  .dialog-in,
+  .drawer-in {
     animation: none;
+  }
+  .wave-bar {
+    transform: scaleY(0.6);
+  }
+  .pill-indicator.is-animated,
+  details::details-content {
+    transition: none;
+  }
+  .nav-progress {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 0.6;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ── Interaction details (D-048 polish; Vercel/WCAG 2.2/HIG research) ── */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Anchor jumps and keyboard focus land below the sticky header,
+       never under it (WCAG 2.4.11 Focus Not Obscured). */
+    scroll-padding-top: 96px;
+  }
+  /* A tap is a tap: no 300ms double-tap-zoom wait, no grey flash. */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  label,
+  summary,
+  [role='button'] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Under a mouse, pressable things say so (Tailwind v4 leaves buttons on the
+     arrow), disabled ones say no, and ones waiting on the network say wait. */
+  button:not(:disabled),
+  [role='button'],
+  summary,
+  select:not(:disabled),
+  label:has(input[type='checkbox']:not(:disabled), input[type='radio']:not(:disabled), input[type='file']) {
+    cursor: pointer;
+  }
+  button:disabled,
+  label:has(input[type='checkbox']:disabled, input[type='radio']:disabled) {
+    cursor: not-allowed;
+  }
+  button[aria-busy='true'],
+  a[aria-busy='true'] {
+    cursor: wait;
+  }
+  /* Disclosures draw their own chevron (see the rotating Glyph beside each
+     summary), so the browser's triangle goes. */
+  summary {
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  /* Windows dark mode otherwise paints native dropdowns unreadable. */
+  select {
+    background-color: var(--paper-lift);
+    color: var(--ink);
+  }
+  /* Paragraphs avoid a lone last word. */
+  p,
+  li {
+    text-wrap: pretty;
+  }
+  /* Opening quotes hang outside the text edge (Safari), as in print. */
+  .headline {
+    hanging-punctuation: first;
+  }
+}
+
+/* Desktop: no rubber-band bounce of the whole page; touch keeps pull-to-refresh. */
+@media (pointer: fine) {
+  html {
+    overscroll-behavior: none;
+  }
+}
+
+/* People who ask their system for more contrast get it. */
+@media (prefers-contrast: more) {
+  :root {
+    --ink-6: #3d4a41;
+    --ink-5: #56625a;
+    --ink-2: #9a9f95;
+    --ink-1: #bcbdb1;
+    --field-border: #3d4a41;
+  }
+  .certificate {
+    border-color: var(--ink-5);
+  }
+}
+
+/* Windows high-contrast (forced colours): keep shapes visible. */
+@media (forced-colors: active) {
+  .certificate,
+  .stamp,
+  .skeleton {
+    border: 1px solid CanvasText;
+  }
+  button,
+  a[class*='rounded-full'] {
+    border: 1px solid ButtonText;
+  }
+  :focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* A photo that is still loading shows a soft cream block, not a white hole. */
+.certificate img,
+img[src*='/photos/'],
+img[src*='/images/crops/'] {
+  background-color: var(--paper-deep);
+}
+
+/* A row that scrolls sideways on a phone: no scrollbar, and its edges fade
+   so it is plain there is more to the right. */
+.scroll-row {
+  scrollbar-width: none;
+}
+.scroll-row::-webkit-scrollbar {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .scroll-row {
+    mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 24px), transparent 100%);
+  }
+}
+
+/* Printing a contract or a trace record gives a clean page: no header, nav,
+   footer, toasts or shadows, and links show where they go. */
+@media print {
+  header,
+  nav,
+  footer,
+  [aria-live] {
+    display: none !important;
+  }
+  body,
+  .plate {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .certificate {
+    box-shadow: none !important;
+    border: 1px solid #999 !important;
+    break-inside: avoid;
+  }
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.8em;
   }
 }

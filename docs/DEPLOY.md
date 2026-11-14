@@ -63,7 +63,7 @@ fly launch --no-deploy          # claims the app name, keeps this fly.toml
 fly volumes create ftm_data --size 3 --region jnb
 fly platform regions            # confirm jnb exists; lhr (London) is the fallback
 
-fly secrets set JWT_SECRET="$(openssl rand -hex 32)"
+fly secrets set VITE_SUPABASE_URL="https://<project-ref>.supabase.co"
 fly deploy
 fly secrets set PUBLIC_BASE_URL="https://<your-app>.fly.dev"
 ```
@@ -85,12 +85,21 @@ them there is nothing to list or grade:
 fly ssh console -C "npm run db:seed -w @ftm/core"
 ```
 
-The seed is idempotent and creates **no** fake farmers, lots, or contracts. It
-does create one demo buyer, `buyer@demo.ftm`.
+The seed is idempotent and creates **no** people, lots, or contracts — only
+reference data. Everyone signs up on the web with their own phone number and
+password (D-047); set up Supabase first (`supabase/README.md`), including the
+invite list, or nobody can create an account.
 
-> **Change or remove that account before real users touch this.** Its password
-> is hardcoded in `packages/core/src/db/seed.ts` and is now on the public
-> internet. It is a demo credential, not a pilot credential.
+Supabase reaches F2M in two places. The **server** reads `VITE_SUPABASE_URL` at
+run time to verify logins (the `fly secrets set` line above). The **portal** has
+both values baked in when the image builds, so pass them as build args —
+both are public by design:
+
+```bash
+fly deploy --build-arg VITE_SUPABASE_URL="https://<project-ref>.supabase.co" \n           --build-arg VITE_SUPABASE_ANON_KEY="<publishable or anon key>"
+```
+
+Forget them and the portal deploys fine but its login page says logins are not set up.
 
 ### Verify
 
@@ -142,7 +151,7 @@ and proposes the service. Before applying, note what it already sets:
 
 Apply the blueprint, let it deploy once, then fill in the secrets `render.yaml`
 left as `sync: false` (Render dashboard → your service → Environment):
-`JWT_SECRET` is auto-generated; everything else — `HF_TOKEN`, `AT_API_KEY`,
+`VITE_SUPABASE_URL` (the server verifies logins with it); everything else — `HF_TOKEN`, `AT_API_KEY`,
 etc. — stays empty until you flip that provider on (see "Flipping providers
 on" below). Copy the service's URL, something like
 `https://farm-to-market-server.onrender.com` — the next step needs it.

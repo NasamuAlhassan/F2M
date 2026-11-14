@@ -4,7 +4,7 @@
 
 **A national marketplace connecting Ghanaian farmers to verified buyers —<br/>built so a farmer with a basic phone can use every part of it.**
 
-<img src="https://img.shields.io/badge/tests-170%20passing-14322b?style=flat-square&labelColor=efebdd" alt="170 tests" />
+<img src="https://img.shields.io/badge/tests-402%20passing-14322b?style=flat-square&labelColor=efebdd" alt="402 tests" />
 <img src="https://img.shields.io/badge/demo-offline%2C%20exit%200-a87b23?style=flat-square&labelColor=efebdd" alt="offline demo" />
 <img src="https://img.shields.io/badge/languages-6%20locales-14322b?style=flat-square&labelColor=efebdd" alt="six locales" />
 <img src="https://img.shields.io/badge/design-The%20Trade%20Instrument-9e3b2c?style=flat-square&labelColor=efebdd" alt="The Trade Instrument" />
@@ -38,7 +38,7 @@ The web portal ships **The Trade Instrument** (D-039): the design grammar of the
 
 ## Six languages, honestly gated
 
-English, **Twi**, **Eʋegbe**, **Dagbanli**, **Hausa**, and **Kʋsaal**. Catalogs are machine-drafted (Khaya AI / HF models) but the review gate lives inside the translator itself: an unreviewed catalog resolves to English on every real farmer-facing surface — SMS, USSD, IVR — until a native speaker signs it off, while the farmer's chosen language is preserved and switches on retroactively (D-040). New callers pick their language from a menu where **every language names itself**.
+English, **Twi**, **Eʋegbe**, **Dagbanli**, **Hausa**, and **Kʋsaal**. Catalogs are machine-drafted (with the Tɛkyerɛma language Space) but the review gate lives inside the translator itself: an unreviewed catalog resolves to English on every real farmer-facing surface — SMS, USSD, IVR — until a native speaker signs it off, while the farmer's chosen language is preserved and switches on retroactively (D-040). New callers pick their language from a menu where **every language names itself**.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ flowchart LR
     Web --> API
     API --> CORE["@ftm/core — one domain layer<br/>state machines · matching · dispatch<br/>double-entry ledger · i18n gate"]
     CORE --> DB[("SQLite<br/>append-only trace")]
-    CORE --> PROV["Provider seams (all mock-first)<br/>grading: HF vision · pay: MoMo<br/>SMS/voice: Africa's Talking<br/>ASR/MT/TTS: Khaya ⇄ HF"]
+    CORE --> PROV["Provider seams (all mock-first)<br/>grading: HF vision · pay: simulated<br/>SMS/voice: Africa's Talking<br/>ASR/MT/TTS: Tɛkyerɛma Space"]
 ```
 
 ```
@@ -75,10 +75,10 @@ Requires Node 24+ (prebuilt binaries for better-sqlite3/sharp — no compiler to
 
 ```bash
 npm install
-npm run db:reset        # migrate + seed (prints the demo buyer login)
+npm run db:reset        # migrate + seed the reference data (no people — they sign up)
 npm run demo            # one lot end to end, fully offline: voice accept + transport leg, exit 0
 npm run dev             # server :3000 + portal :5173
-npm test                # 170 tests: scorers, state machines, ledger invariants, wire walks
+npm test                # 402 tests: scorers, state machines, ledger invariants, accounts, negotiation, wire walks
 ```
 
 Then follow [`DEMO.md`](DEMO.md) for the three-tab demo: the USSD tester and the ringing IVR tester (`localhost:3000/ussd-tester.html`, `/ivr-tester.html`) as the farmer/driver phones, the portal (`localhost:5173`) as the buyer.
@@ -90,19 +90,17 @@ Mock mode needs zero keys — every external boundary has a deterministic mock b
 | Layer | Provider | Flip |
 |---|---|---|
 | AI grading | HF router vision models (live-verified: grade A at 95% on a real photo) | `HF_TOKEN` + `GRADING_PROVIDER=hf` |
-| Translation | Khaya AI (GhanaNLP) **or** LLMs via the HF router | `MT_PROVIDER=khaya` \| `hf` |
-| Speech-to-text | Khaya AI **or** Whisper on hf-inference | `ASR_PROVIDER=khaya` \| `hf` |
-| Text-to-speech | Khaya AI (IVR `<Play>` with `<Say>` fail-open) | `TTS_PROVIDER=khaya` |
+| Language (hear · translate · speak) | **The Tɛkyerɛma language Space** — the owner's own models for Twi, Ewe, Kusaal, Dagbani, Hausa (D-045). Public, keyless; the one provider that does all three | `ASR_PROVIDER=space` `MT_PROVIDER=space` `TTS_PROVIDER=space` |
 | SMS | Africa's Talking (sandbox host auto-selected) | `AT_API_KEY` + `NOTIFY_PROVIDER=at` |
 | Voice/IVR | Africa's Talking Voice | `+ AT_VOICE_NUMBER` + `VOICE_PROVIDER=at` |
 | USSD | Africa's Talking (service code + tunnel → `/ussd`) | dashboard callback |
-| Payments | MTN MoMo sandbox (Collections + Disbursements) | `npm run momo:provision` + `PAYMENT_PROVIDER=momo` |
+| Payments | Simulated for now — a licensed payment provider is chosen in Phase 3 ([`docs/COSTS.md`](docs/COSTS.md) §6) | — |
 
-Catalog drafting: `npm run i18n:draft` (Khaya) or `MT_PROVIDER=hf npm run i18n:draft` (HF LLMs) — drafted catalogs stay behind the native-review gate either way.
+Catalog drafting: `npm run i18n:draft` drafts every language with the Space (keyless; the only engine that covers Kusaal) — drafted catalogs stay behind the native-review gate.
 
 ## The record
 
-Every architectural choice, with its reasons and its rejected alternatives: [`docs/DECISIONS.md`](docs/DECISIONS.md) (D-001 → D-041). Everything built, in order, with verified counts: [`docs/BUILDLOG.md`](docs/BUILDLOG.md). Vision, MVP criteria, and live status: [`docs/PROJECT.md`](docs/PROJECT.md).
+Every architectural choice, with its reasons and its rejected alternatives: [`docs/DECISIONS.md`](docs/DECISIONS.md) (D-001 → D-057). Everything built, in order, with verified counts: [`docs/BUILDLOG.md`](docs/BUILDLOG.md). Vision, MVP criteria, and live status: [`docs/PROJECT.md`](docs/PROJECT.md).
 
 <div align="center">
 <sub>Built in Ghana, for the farmer with the smallest phone. 🇬🇭</sub>

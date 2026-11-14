@@ -11,7 +11,7 @@ import { getActiveRubric, listCommodities } from './registries';
 describe('registry coherence (M9)', () => {
   const commodities = listCommodities();
 
-  it('seeds all eight commodities, most-traded first', () => {
+  it('seeds all thirteen commodities, most-traded first', () => {
     expect(commodities.map((c) => c.code)).toEqual([
       'MAIZE',
       'TOMATO',
@@ -21,6 +21,11 @@ describe('registry coherence (M9)', () => {
       'PEPPER',
       'ONION',
       'PLANTAIN',
+      'CASSAVA',
+      'MILLET',
+      'SORGHUM',
+      'SOYBEAN',
+      'COWPEA',
     ]);
   });
 

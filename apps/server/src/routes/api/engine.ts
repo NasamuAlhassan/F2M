@@ -1,5 +1,9 @@
 import {
   acceptOfferAndHold,
+  acceptOfferThread,
+  describeOffer,
+  getOffer,
+  listOffersForBuyer,
   AVAILABLE_LOCALES,
   bestBand,
   config,
@@ -10,6 +14,7 @@ import {
   getCommodityById,
   getContract,
   getFarmerById,
+  getRegion,
   listNotificationsForPhone,
   listVoiceCallsForPhone,
   quoteTransportOptions,
@@ -23,8 +28,9 @@ import { desc, eq, gt, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-const simulateSchema = z.object({ contractId: z.string() });
-const previewSchema = z.object({ contractId: z.string(), locale: z.string().default('en') });
+// Phase 1: offers are threads; contractId stays accepted for the older drawer until the web moves.
+const simulateSchema = z.object({ offerId: z.string().optional(), contractId: z.string().optional() });
+const previewSchema = z.object({ offerId: z.string().optional(), contractId: z.string().optional(), locale: z.string().default('en') });
 
 /**
  * The AI Intent & Auto-Matching Engine's window: the live intent feed (buy
@@ -52,6 +58,7 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
           remainingKg: l.remainingKg,
           declaredBand: l.declaredBand,
           regionCode: l.regionCode,
+          regionName: t('en', getRegion(l.regionCode).nameKey),
           readyDate: l.readyDate,
           farmerName: farmer?.name ?? null,
           createdAt: l.createdAt,
@@ -77,6 +84,7 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
           windowStart: d.windowStart,
           windowEnd: d.windowEnd,
           regionCode: d.regionCode,
+          regionName: t('en', getRegion(d.regionCode).nameKey),
           mine: d.buyerId === buyerId,
           createdAt: d.createdAt,
         };
@@ -118,13 +126,44 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
         };
       });
 
-    return { lots, demands, matches, simulateEnabled: config.PAYMENT_PROVIDER === 'mock' };
+    const offers = listOffersForBuyer(buyerId, 'open').map((o) => describeOffer(o));
+    return { lots, demands, matches, offers, simulateEnabled: config.PAYMENT_PROVIDER === 'mock' && config.simulatorEnabled };
   });
 
   // The Voice & SMS simulation: render the exact alert templates for a match
   // in any supported locale — what a Twi/Ewe/Dagbani farmer would receive.
   app.get('/engine/alert-preview', { preHandler: [app.authBuyer] }, async (req) => {
-    const { contractId, locale } = previewSchema.parse(req.query ?? {});
+    const { offerId, contractId: legacyContractId, locale } = previewSchema.parse(req.query ?? {});
+    if (offerId) {
+      const offer = getOffer(offerId);
+      if (offer.buyerId !== req.user.sub) throw new DomainError('Not your offer', 'FORBIDDEN', 403);
+      const v = describeOffer(offer);
+      const farmer = getFarmerById(offer.farmerId);
+      const params = {
+        buyer: v.buyer.company ?? v.buyer.name,
+        units: v.current.units,
+        unit: tDraft(locale, `unit.${v.lot.unitCode}`),
+        commodity: tDraft(locale, `commodity.${v.lot.commodityCode}`),
+        price: formatGhs(v.current.pricePerUnit),
+        total: formatGhs(v.current.total),
+        code: config.USSD_SHORTCODE,
+      };
+      const smsRecord = farmer ? listNotificationsForPhone(farmer.phone, 20).find((n) => n.templateKey === 'sms.bidReceived' && n.lotId === offer.lotId) : undefined;
+      const callRecord = farmer ? listVoiceCallsForPhone(farmer.phone, 20).find((c) => c.flow === 'bid' && c.offerId === offer.id) : undefined;
+      return {
+        locales: AVAILABLE_LOCALES.map((l) => ({ ...l, reviewed: isLocaleReviewed(l.code) })),
+        locale,
+        reviewNote: !isLocaleReviewed(locale),
+        farmerName: farmer?.name ?? null,
+        farmerPhone: farmer?.phone ?? null,
+        sms: tDraft(locale, 'sms.bidReceived', params),
+        voice: [tDraft(locale, 'voice.bid.intro', params), tDraft(locale, 'voice.bid.menu2', params)],
+        smsStatus: smsRecord?.status ?? null,
+        callStatus: callRecord?.status ?? null,
+      };
+    }
+    if (!legacyContractId) throw new DomainError('Say which offer to preview', 'VALIDATION', 400);
+    const contractId = legacyContractId;
     const contract = getContract(contractId);
     if (contract.buyerId !== req.user.sub) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
     const farmer = getFarmerById(contract.farmerId);
@@ -174,10 +213,19 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
   // Demo-only: play the farmer's "press 1" from the portal. Gated to mock
   // payment mode — in anything real, only the farmer accepts (USSD/IVR).
   app.post('/engine/simulate-accept', { preHandler: [app.authBuyer] }, async (req) => {
-    if (config.PAYMENT_PROVIDER !== 'mock') {
-      throw new DomainError('Simulated acceptance is available in demo (mock) mode only', 'DEMO_ONLY', 403);
+    // Demo-only (D-029): a buyer must never accept on a farmer's behalf where
+    // money is real, nor outside the closed simulator test group (D-047).
+    if (config.PAYMENT_PROVIDER !== 'mock' || !config.simulatorEnabled) {
+      throw new DomainError('Simulated acceptance is available in simulator mode with simulated payments only', 'DEMO_ONLY', 403);
     }
-    const { contractId } = simulateSchema.parse(req.body);
+    const { offerId, contractId } = simulateSchema.parse(req.body ?? {});
+    if (offerId) {
+      const offer = getOffer(offerId);
+      if (offer.buyerId !== req.user.sub) throw new DomainError('Not your offer', 'FORBIDDEN', 403);
+      const { contract } = await acceptOfferThread(offerId, 'farmer', offer.farmerId, 'system');
+      return { contract: { id: contract.id, state: contract.state } };
+    }
+    if (!contractId) throw new DomainError('Say which offer to accept', 'VALIDATION', 400);
     const contract = getContract(contractId);
     if (contract.buyerId !== req.user.sub) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
     const accepted = await acceptOfferAndHold(contractId, contract.farmerId);

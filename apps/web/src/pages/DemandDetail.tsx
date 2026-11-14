@@ -3,93 +3,127 @@ import { Link, useParams } from 'react-router-dom';
 import { api, ghs, shortDate, type Demand, type MatchRow } from '../api';
 import { POLL } from '../poll';
 import { Glyph } from '../components/engrave';
-import { Bar, Card, GradeBadge, LoadGate, Stat, StateBadge } from '../components/ui';
+import { Bar, Card, EmptyState, GradeBadge, LoadGate, backLinkCls, pillCls, Stat, StateBadge } from '../components/ui';
+import { useT } from '../lib/i18n';
+
+/** UPPER_EAST → "Upper East": region codes never reach the screen raw. */
+const regionLabel = (code: string): string =>
+  code
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
+    .join(' ');
 
 export function DemandDetailPage() {
+  const { t } = useT();
   const { id } = useParams<{ id: string }>();
-  const { data, isError, refetch } = useQuery({
+  const { data, isError, isFetching, refetch } = useQuery({
     queryKey: ['demand', id],
     queryFn: () => api<{ demand: Demand; matches: MatchRow[] }>(`/api/demands/${id}`),
     refetchInterval: POLL.active,
   });
-  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="this order" />;
+  if (!data) return <LoadGate isError={isError} retrying={isFetching} onRetry={() => void refetch()} label={t('web.demand.loadLabel', 'this order')} />;
   const { demand, matches } = data;
+  const n = matches.length;
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-3">
+      <Link
+        to="/orders"
+        className={backLinkCls}
+      >
+        <span aria-hidden="true">←&nbsp;</span>
+        {t('web.demand.back', 'All orders')}
+      </Link>
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">Demand</h1>
-          <p className="mt-1 text-sm text-[var(--ink-6)]">Matches ranked by score — every score explains itself</p>
+          <h1 className="headline text-3xl text-[var(--ink)] sm:text-4xl">
+            {t('web.demand.title', 'Your order')}
+          </h1>
+          <p className="mt-1 text-sm text-[var(--ink-6)]">
+            {t('web.demand.subtitle', 'Farmers whose produce fits this order, best fit first. Each score shows why.')}
+          </p>
         </div>
         <StateBadge state={demand.status} />
       </div>
 
       <Card>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <Info label="Quantity" value={`${demand.quantityKg} kg`} serial />
-          <Info label="Remaining" value={`${demand.remainingKg} kg`} serial />
+        <dl className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <Info label={t('web.demand.quantity', 'Quantity')} value={`${demand.quantityKg} kg`} serial />
+          <Info label={t('web.demand.remaining', 'Still needed')} value={`${demand.remainingKg} kg`} serial />
           <div>
-            <p className="smallcaps text-[var(--ink-6)]">Minimum Grade</p>
-            <p className="mt-1.5">
+            <dt className="smallcaps text-[var(--ink-6)]">{t('web.demand.minGrade', 'Lowest grade you take')}</dt>
+            <dd className="mt-1.5">
               <GradeBadge grade={demand.minBand} />
-            </p>
+            </dd>
           </div>
           <div>
-            <p className="smallcaps text-[var(--ink-6)]">Prices /kg</p>
-            <p className="serial mt-1 text-sm font-semibold text-[var(--ink-7)]">
+            <dt className="smallcaps text-[var(--ink-6)]">{t('web.demand.prices', 'Your price per kg')}</dt>
+            <dd className="serial mt-1 text-sm font-semibold text-[var(--ink-7)]">
               A {ghs(demand.priceTerms.A)} · B {ghs(demand.priceTerms.B)} · C {ghs(demand.priceTerms.C)}
-            </p>
+            </dd>
           </div>
-          <Info label="Window" value={`${shortDate(demand.windowStart)} – ${shortDate(demand.windowEnd)}`} />
-        </div>
+          <Info
+            label={t('web.demand.window', 'Wanted between')}
+            value={`${shortDate(demand.windowStart)} – ${shortDate(demand.windowEnd)}`}
+          />
+        </dl>
       </Card>
 
-      <Card title={`Matches (${matches.length})`}>
-        {matches.length === 0 ? (
-          <p className="text-sm text-[var(--ink-6)]">
-            No matches yet. Offers appear here the moment an eligible lot is registered — matching also re-runs on the sweep.
-          </p>
+      <Card
+        title={`${t('web.demand.matchesTitle', 'Farmers matched')}${
+          n ? ` — ${n === 1 ? t('web.demand.lotOne', '1 lot') : t('web.demand.lotMany', '{n} lots', { n })}` : ''
+        }`}
+      >
+        {n === 0 ? (
+          <EmptyState
+            compact
+            icon={<Glyph name="farmer" className="h-5 w-5" />}
+            title={t('web.demand.emptyTitle', 'No farmers matched yet')}
+            body={t(
+              'web.demand.emptyBody',
+              'When a farmer lists produce that fits, it shows here straight away. We also check again every minute.',
+            )}
+          />
         ) : (
-          <div>
+          <ul>
             {matches.map((m) => (
-              <div
+              <li
                 key={m.id}
                 className="flex flex-wrap items-center gap-5 border-b border-[var(--ink-2)] py-3.5 last:border-b-0"
               >
                 <div className="flex w-44 items-center gap-3">
                   <Glyph name="farmer" className="h-8 w-8 flex-shrink-0 text-[var(--ink-6)]" />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-[var(--ink)]">{m.farmerName ?? 'Farmer'}</p>
+                    <p className="truncate text-sm font-bold text-[var(--ink)]">
+                      {m.farmerName ?? t('web.demand.farmer', 'Farmer')}
+                    </p>
                     <p className="serial truncate text-[11px] text-[var(--ink-6)]">
-                      {m.lotCode} · {m.farmerRegion ?? ''}
+                      {m.lotCode}
+                      {m.farmerRegion ? ` · ${regionLabel(m.farmerRegion)}` : ''}
                     </p>
                   </div>
                 </div>
-                <Stat value={`${m.allocatedKg} kg`} caption="allocated" />
-                <Stat value={m.score.toFixed(2)} caption="match score" accent />
-                <Stat value={`${m.breakdown.distanceKm} km`} caption="distance" />
+                <Stat value={`${m.allocatedKg} kg`} caption={t('web.demand.allocated', 'for you')} />
+                <Stat value={m.score.toFixed(2)} caption={t('web.demand.score', 'fit score')} accent />
+                <Stat value={`${m.breakdown.distanceKm} km`} caption={t('web.demand.distance', 'away')} />
                 <div className="min-w-52 flex-1 space-y-1">
-                  <Bar label="Distance" value={m.breakdown.distance} />
-                  <Bar label="Quantity fit" value={m.breakdown.quantityFit} />
-                  <Bar label="History" value={m.breakdown.farmerHistory} />
+                  <Bar label={t('web.demand.barDistance', 'Nearby')} value={m.breakdown.distance} />
+                  <Bar label={t('web.demand.barQuantity', 'Amount fit')} value={m.breakdown.quantityFit} />
+                  <Bar label={t('web.demand.barHistory', 'Track record')} value={m.breakdown.farmerHistory} />
                 </div>
-                <div className="w-36 text-right">
+                <div className="flex w-36 flex-col items-end gap-1.5 text-right">
                   <StateBadge state={m.contractState ?? m.status} />
                   {m.contractId && (
-                    <p className="mt-1.5">
-                      <Link
-                        className="text-xs font-semibold text-[var(--gold-deep)] hover:underline"
-                        to={`/contracts/${m.contractId}`}
-                      >
-                        View Contract
-                      </Link>
-                    </p>
+                    <Link className={pillCls} to={`/deals/${m.contractId}`}>
+                      {t('web.demand.viewContract', 'See contract')}
+                    </Link>
                   )}
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </Card>
     </div>
@@ -99,8 +133,8 @@ export function DemandDetailPage() {
 function Info({ label, value, serial }: { label: string; value: string; serial?: boolean }) {
   return (
     <div>
-      <p className="smallcaps text-[var(--ink-6)]">{label}</p>
-      <p className={`mt-1 text-sm font-bold text-[var(--ink)] ${serial ? 'serial' : ''}`}>{value}</p>
+      <dt className="smallcaps text-[var(--ink-6)]">{label}</dt>
+      <dd className={`mt-1 text-sm font-bold text-[var(--ink)] ${serial ? 'serial' : ''}`}>{value}</dd>
     </div>
   );
 }

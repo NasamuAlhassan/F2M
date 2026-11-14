@@ -2,26 +2,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import formbody from '@fastify/formbody';
-import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { config, DomainError } from '@ftm/core';
-import Fastify, { type FastifyInstance } from 'fastify';
+import { accountRoleId, config, DomainError, getAccountByAuthUser, verifyAccessToken } from '@ftm/core';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
-import { authRoutes } from './routes/api/auth';
+import { accountRoutes } from './routes/api/account';
+import { aiRoutes } from './routes/api/ai';
+import { alertRoutes } from './routes/api/alerts';
 import { demandRoutes } from './routes/api/demands';
-import { farmerRoutes } from './routes/api/farmers';
 import { lotRoutes } from './routes/api/lots';
 import { contractRoutes } from './routes/api/contracts';
+import { dealRoutes } from './routes/api/deals';
 import { devRoutes } from './routes/api/dev';
 import { engineRoutes } from './routes/api/engine';
 import { logisticsRoutes } from './routes/api/logistics';
 import { marketRoutes } from './routes/api/market';
 import { farmerPortalRoutes } from './routes/api/farmerPortal';
 import { notificationRoutes } from './routes/api/notifications';
+import { offerRoutes } from './routes/api/offers';
+import { priceRoutes } from './routes/api/prices';
+import { streamRoutes } from './routes/api/stream';
 import { publicRoutes } from './routes/api/public';
 import { registryRoutes } from './routes/api/registries';
-import { momoCallbackRoutes } from './routes/momoCallbacks';
+import type { Role } from './types';
 import { ussdRoutes } from './routes/ussd';
 import { voiceRoutes } from './routes/voice';
 
@@ -42,7 +46,14 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
 
   await app.register(formbody); // Africa's Talking posts form-encoded USSD payloads
   await app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024, files: 5 } });
-  await app.register(jwt, { secret: config.JWT_SECRET });
+  // The USSD/IVR tester pages are simulator surfaces (D-047): gone when it is off.
+  if (!config.simulatorEnabled) {
+    app.addHook('onRequest', async (req, reply) => {
+      if (/^\/(ussd|ivr)-tester\.html/.test(req.url)) {
+        await reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Not found' } });
+      }
+    });
+  }
   await app.register(fastifyStatic, { root: path.join(SERVER_ROOT, 'public') });
   fs.mkdirSync(path.join(config.storageDir, 'photos'), { recursive: true });
   await app.register(fastifyStatic, {
@@ -50,7 +61,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     prefix: '/photos/',
     decorateReply: false,
   });
-  // Cached Khaya TTS audio for IVR <Play> (D-040) — synthesized once per phrase.
+  // Cached TTS audio for IVR <Play> (D-040, D-045) — synthesized once per phrase.
   fs.mkdirSync(path.join(config.storageDir, 'tts'), { recursive: true });
   await app.register(fastifyStatic, {
     root: path.join(config.storageDir, 'tts'),
@@ -73,31 +84,38 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     },
   });
 
-  // Role-checked guards — a valid JWT of the WRONG kind must not pass (D-021).
-  app.decorate('authBuyer', async (req, reply) => {
+  // Web logins (D-047): verify the Supabase token, then the account behind
+  // it. A valid login of the WRONG role must not pass (D-021).
+  async function readLogin(req: FastifyRequest): Promise<boolean> {
+    const header = req.headers.authorization ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    if (!token) return false;
     try {
-      await req.jwtVerify();
-      if (req.user.kind !== 'buyer') throw new Error('wrong role');
-    } catch {
-      await reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Buyer login required' } });
+      req.login = await verifyAccessToken(token);
+      return true;
+    } catch (err) {
+      if (err instanceof DomainError && err.code === 'AUTH_NOT_CONFIGURED') throw err;
+      return false;
     }
+  }
+  const unauthorized = (reply: FastifyReply, message: string) =>
+    reply.code(401).send({ error: { code: 'UNAUTHORIZED', message } });
+  const roleGuard = (roles: Role[], message: string) => async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!(await readLogin(req))) return unauthorized(reply, message);
+    const account = getAccountByAuthUser(req.login.authUserId);
+    if (!account || !roles.includes(account.role)) return unauthorized(reply, message);
+    req.user = { sub: accountRoleId(account), kind: account.role, authUserId: account.authUserId };
+  };
+  app.decorateRequest('user', null as unknown as FastifyRequest['user']);
+  app.decorateRequest('login', null as unknown as FastifyRequest['login']);
+  app.decorate('authLogin', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!(await readLogin(req))) return unauthorized(reply, 'Sign in required');
   });
-  app.decorate('authDriver', async (req, reply) => {
-    try {
-      await req.jwtVerify();
-      if (req.user.kind !== 'driver') throw new Error('wrong role');
-    } catch {
-      await reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Driver login required' } });
-    }
-  });
-  app.decorate('authFarmer', async (req, reply) => {
-    try {
-      await req.jwtVerify();
-      if (req.user.kind !== 'farmer') throw new Error('wrong role');
-    } catch {
-      await reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Farmer login required' } });
-    }
-  });
+  app.decorate('authBuyer', roleGuard(['buyer'], 'Buyer login required'));
+  app.decorate('authDriver', roleGuard(['driver'], 'Driver login required'));
+  app.decorate('authFarmer', roleGuard(['farmer'], 'Farmer login required'));
+  app.decorate('authBuyerOrFarmer', roleGuard(['buyer', 'farmer'], 'Login required'));
+  app.decorate('authAnyRole', roleGuard(['buyer', 'driver', 'farmer'], 'Login required'));
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof DomainError) {
@@ -118,20 +136,25 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
 
   await app.register(ussdRoutes);
   await app.register(voiceRoutes);
-  await app.register(momoCallbackRoutes);
-  await app.register(authRoutes, { prefix: '/api' });
+  await app.register(accountRoutes, { prefix: '/api' });
   await app.register(registryRoutes, { prefix: '/api' });
-  await app.register(farmerRoutes, { prefix: '/api' });
   await app.register(lotRoutes, { prefix: '/api' });
   await app.register(demandRoutes, { prefix: '/api' });
   await app.register(contractRoutes, { prefix: '/api' });
+  await app.register(dealRoutes, { prefix: '/api' });
   await app.register(logisticsRoutes, { prefix: '/api' });
   await app.register(notificationRoutes, { prefix: '/api' });
+  await app.register(offerRoutes, { prefix: '/api' });
   await app.register(engineRoutes, { prefix: '/api' });
   await app.register(marketRoutes, { prefix: '/api' });
+  await app.register(priceRoutes, { prefix: '/api' });
+  await app.register(streamRoutes, { prefix: '/api' });
+  await app.register(alertRoutes, { prefix: '/api' });
+  await app.register(aiRoutes, { prefix: '/api' });
   await app.register(farmerPortalRoutes, { prefix: '/api' });
   await app.register(publicRoutes, { prefix: '/api' });
-  await app.register(devRoutes, { prefix: '/api' });
+  // Simulator surfaces (D-047): the handset's SMS/call inboxes and the test clock.
+  if (config.simulatorEnabled) await app.register(devRoutes, { prefix: '/api' });
 
   // In production the built portal ships inside public/ (see Dockerfile), so
   // client-side routes must survive a hard refresh — a buyer scanning a QR
@@ -141,7 +164,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   // and the honest 404 stands instead.
   const portalIndex = path.join(SERVER_ROOT, 'public', 'index.html');
   const hasPortal = fs.existsSync(portalIndex);
-  const WIRE_PREFIXES = ['/api', '/ussd', '/voice', '/callbacks', '/photos', '/tts', '/health'];
+  const WIRE_PREFIXES = ['/api', '/ussd', '/voice', '/photos', '/tts', '/recordings', '/health'];
   app.setNotFoundHandler((req, reply) => {
     const isPageRequest =
       (req.method === 'GET' || req.method === 'HEAD') &&

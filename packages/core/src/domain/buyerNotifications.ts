@@ -2,6 +2,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
 import { buyerNotifications, type BuyerNotification } from '../db/schema';
 import { t } from '../i18n';
+import { publishLive } from './events';
 
 export interface QueueBuyerNotificationInput {
   buyerId: string;
@@ -15,7 +16,7 @@ export interface QueueBuyerNotificationInput {
 
 /** Queue an in-app notification. Message resolved NOW — what was said is archived. */
 export function queueBuyerNotification(input: QueueBuyerNotificationInput): BuyerNotification {
-  return db
+  const row = db
     .insert(buyerNotifications)
     .values({
       buyerId: input.buyerId,
@@ -28,6 +29,8 @@ export function queueBuyerNotification(input: QueueBuyerNotificationInput): Buye
     })
     .returning()
     .get();
+  publishLive({ topic: 'notifications', audience: [`buyer:${input.buyerId}`] });
+  return row;
 }
 
 export function listBuyerNotifications(buyerId: string, limit = 15): BuyerNotification[] {

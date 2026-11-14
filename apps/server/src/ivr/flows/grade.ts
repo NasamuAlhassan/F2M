@@ -1,5 +1,7 @@
 import {
+  advanceFor,
   agreeGrading,
+  orderTotal,
   disputeGrading,
   formatGhs,
   getCommodityById,
@@ -13,7 +15,8 @@ import type { IvrCtx, IvrFlow, IvrResult } from '../machine';
 
 function gradeGuard(ctx: IvrCtx): I18nText[] | null {
   const contract = ctx.call.contractId ? getContract(ctx.call.contractId) : null;
-  if (!contract || contract.state !== 'GRADED' || !contract.finalGrade) return [{ key: 'voice.common.gone' }];
+  // Phase 3: an order with no transport job is already DELIVERED once graded; the grade is still hers to hear.
+  if (!contract || !['GRADED', 'DELIVERED'].includes(contract.state) || !contract.finalGrade) return [{ key: 'voice.common.gone' }];
   return null;
 }
 
@@ -28,11 +31,12 @@ function gradeSay(ctx: IvrCtx): I18nText[] {
       params: {
         commodity: t(ctx.locale, commodity.nameKey),
         band: t(ctx.locale, `band.${contract.finalGrade}`),
-        amount: formatGhs(contract.finalAmount ?? 0),
+        advance: formatGhs(advanceFor(contract)),
+        rest: formatGhs(orderTotal(contract) - advanceFor(contract)),
         reason: reasons[0]?.observation ?? '',
       },
     },
-    { key: 'voice.grade.menu' },
+    { key: contract.state === 'GRADED' ? 'voice.grade.menu' : 'voice.grade.menuNoDispute' },
   ];
 }
 
@@ -41,16 +45,16 @@ async function gradeDigits(digits: string, ctx: IvrCtx): Promise<IvrResult> {
   const farmer = getFarmerByPhone(ctx.call.phone);
   if (!contractId || !farmer) return { end: [{ key: 'voice.common.goodbye' }], outcome: { result: 'no_context' } };
   const contract = getContract(contractId);
-  if (contract.state !== 'GRADED') return { end: [{ key: 'voice.common.gone' }], outcome: { result: 'gone' } };
+  if (!['GRADED', 'DELIVERED'].includes(contract.state)) return { end: [{ key: 'voice.common.gone' }], outcome: { result: 'gone' } };
 
   if (digits === '1') {
     await agreeGrading(contractId, farmer.id);
     return {
-      end: [{ key: 'voice.grade.agreed', params: { amount: formatGhs(contract.finalAmount ?? 0) } }],
+      end: [{ key: 'voice.grade.agreed', params: { amount: formatGhs(advanceFor(contract)) } }],
       outcome: { result: 'agreed' },
     };
   }
-  if (digits === '2') {
+  if (digits === '2' && contract.state === 'GRADED') {
     disputeGrading(contractId, farmer.id);
     return { end: [{ key: 'voice.grade.disputed' }], outcome: { result: 'disputed' } };
   }

@@ -2,18 +2,24 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { clockConfigSchema, rubricDocSchema } from '../domain/types';
 import { db } from './client';
-import { commodities, farmers, lots, regions, rubrics, units } from './schema';
+import { commodities, farmers, lots, marketPrices, regions, rubrics, units } from './schema';
+import { seed } from './seed';
 
 describe('schema + seed', () => {
   it('seeds the three registries', () => {
     const all = db.select().from(commodities).all();
     expect(all.map((c) => c.code).sort()).toEqual([
+      'CASSAVA',
+      'COWPEA',
       'GROUNDNUT',
       'MAIZE',
+      'MILLET',
       'ONION',
       'PEPPER',
       'PLANTAIN',
       'RICE',
+      'SORGHUM',
+      'SOYBEAN',
       'TOMATO',
       'YAM',
     ]);
@@ -27,6 +33,21 @@ describe('schema + seed', () => {
       const doc = rubricDocSchema.parse(JSON.parse(rubric!.doc));
       expect(doc.criteria.length).toBeGreaterThanOrEqual(4);
     }
+  });
+
+  it('the start-up seed adds what is missing and changes nothing that exists', async () => {
+    const maize = db.select().from(commodities).where(eq(commodities.code, 'MAIZE')).get()!;
+    const price = db.select().from(marketPrices).where(eq(marketPrices.commodityId, maize.id)).get()!;
+    db.update(marketPrices).set({ pricePerKg: 999 }).where(eq(marketPrices.id, price.id)).run();
+    const cassava = db.select().from(commodities).where(eq(commodities.code, 'CASSAVA')).get()!;
+    db.delete(marketPrices).where(eq(marketPrices.commodityId, cassava.id)).run();
+
+    await seed({ refresh: false });
+    expect(db.select().from(marketPrices).where(eq(marketPrices.id, price.id)).get()!.pricePerKg).toBe(999);
+    expect(db.select().from(marketPrices).where(eq(marketPrices.commodityId, cassava.id)).all()).toHaveLength(4);
+
+    await seed(); // db:reset's refresh puts the reference value back
+    expect(db.select().from(marketPrices).where(eq(marketPrices.id, price.id)).get()!.pricePerKg).toBe(price.pricePerKg);
   });
 
   it('enforces the perishable/storable clock split in seed data', () => {

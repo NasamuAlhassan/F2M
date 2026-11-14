@@ -43,18 +43,38 @@ export const buyers = sqliteTable(
   'buyers',
   {
     id: id(),
-    email: text('email').notNull(),
-    passwordHash: text('password_hash').notNull(),
+    email: text('email'), // optional contact; logins are phone + password in Supabase (D-047)
     name: text('name').notNull(),
     company: text('company'),
-    phone: text('phone'),
+    phone: text('phone'), // E.164 — the login identity for buyers who signed up on the web
     momoMsisdn: text('momo_msisdn').notNull(),
     regionCode: text('region_code').references(() => regions.code),
     gpsLat: real('gps_lat'),
     gpsLng: real('gps_lng'),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('buyers_email_idx').on(t.email)],
+  (t) => [uniqueIndex('buyers_email_idx').on(t.email), uniqueIndex('buyers_phone_idx').on(t.phone)],
+);
+
+/**
+ * One row per web login (D-047): the Supabase user (the JWT `sub`) and the
+ * one F2M role that phone holds. Exactly one of farmerId/buyerId/driverId is
+ * set, matching `role`. USSD and IVR never need an account — the carrier
+ * tells us the caller's number.
+ */
+export const accounts = sqliteTable(
+  'accounts',
+  {
+    id: id(),
+    authUserId: text('auth_user_id').notNull(),
+    phone: text('phone').notNull(), // E.164
+    role: text('role', { enum: ['farmer', 'buyer', 'driver'] }).notNull(),
+    farmerId: text('farmer_id').references(() => farmers.id),
+    buyerId: text('buyer_id').references(() => buyers.id),
+    driverId: text('driver_id').references(() => drivers.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('accounts_auth_user_idx').on(t.authUserId), uniqueIndex('accounts_phone_idx').on(t.phone)],
 );
 
 export const commodities = sqliteTable(
@@ -123,14 +143,21 @@ export const lots = sqliteTable(
     // sellers may not read SMS, so buyers see their phone and call instead.
     channel: text('channel', { enum: ['web', 'ussd', 'ivr'] }).notNull().default('ussd'),
     readyDate: integer('ready_date').notNull(), // ms; future date on a storable = forward listing
-    askingPricePerKg: integer('asking_price_per_kg'), // pesewas, optional
+    askingPricePerKg: integer('asking_price_per_kg'), // pesewas, optional — derived from the per-unit price when one is set
+    // The farmer's own asking price per unit of the listing (per bag, crate…), pesewas (Phase 1).
+    askingPricePerUnit: integer('asking_price_per_unit'),
+    harvestedAt: integer('harvested_at'), // ms, optional
+    community: text('community'), // town/village — finer than the region (vision §5.2)
+    landmark: text('landmark'), // "behind the Methodist school" — for the driver
+    expiresAt: integer('expires_at'), // ms; the listing lapses then unless renewed (Phase 1)
+    expiryWarnedAt: integer('expiry_warned_at'), // ms; the warning SMS went out
     regionCode: text('region_code')
       .notNull()
       .references(() => regions.code),
     gpsLat: real('gps_lat'),
     gpsLng: real('gps_lng'),
     status: text('status', {
-      enum: ['registered', 'matched', 'contracted', 'graded', 'settled', 'expired', 'withdrawn'],
+      enum: ['registered', 'matched', 'contracted', 'graded', 'settled', 'expired', 'withdrawn', 'sold'],
     })
       .notNull()
       .default('registered'),
@@ -169,6 +196,9 @@ export const demands = sqliteTable(
     })
       .notNull()
       .default('open'),
+    // 'request' = a buyer's public request; 'deal' = the record behind a negotiated
+    // order (Phase 1) — never shown as a request, never re-opened for matching.
+    origin: text('origin', { enum: ['request', 'deal'] }).notNull().default('request'),
     createdAt: createdAt(),
   },
   (t) => [index('demands_buyer_idx').on(t.buyerId), index('demands_commodity_status_idx').on(t.commodityId, t.status)],
@@ -210,6 +240,12 @@ export const CONTRACT_STATES = [
   'PICKUP_CONFIRMED',
   'GRADED',
   'DISPUTED',
+  // Phase 3 (docs/PHASE3.md): the produce has arrived and the buyer's receipt
+  // clock runs; the buyer reported a problem; the buyer received it (or the
+  // clock did) and the farmer's balance is on its way.
+  'DELIVERED',
+  'CLAIMED',
+  'RECEIVED',
   'CANCELLED_REFUNDED',
   'SETTLED',
 ] as const;
@@ -241,10 +277,16 @@ export const contracts = sqliteTable(
     priceTerms: text('price_terms').notNull(), // JSON, frozen at offer time — D-015
     holdAmount: integer('hold_amount').notNull(), // pesewas = qty × best-band price
     displayCurrency: text('display_currency').notNull().default('GHS'),
-    settlementCurrency: text('settlement_currency').notNull().default('GHS'), // EUR on the MoMo sandbox wire
+    settlementCurrency: text('settlement_currency').notNull().default('GHS'), // the currency the payment rail moves
     state: text('state', { enum: CONTRACT_STATES }).notNull().default('OFFERED'),
     finalGrade: text('final_grade'),
     finalAmount: integer('final_amount'), // pesewas = qty × price_terms[final_grade]
+    // A negotiated deal's exact total (units × price per unit), pesewas. Set → the farmer is
+    // paid this whatever the grade (REJECT still refunds) until Phase 3 reworks quality.
+    agreedTotal: integer('agreed_total'),
+    // Phase 3 money: the advance paid at pickup, the deduction agreed on a claim (pesewas).
+    advanceAmount: integer('advance_amount'),
+    deductionAmount: integer('deduction_amount'),
     declineReasonKey: text('decline_reason_key'),
     disputeNote: text('dispute_note'),
     fundingAttempts: integer('funding_attempts').notNull().default(0),
@@ -252,6 +294,10 @@ export const contracts = sqliteTable(
     fundedAt: integer('funded_at'),
     pickupConfirmedAt: integer('pickup_confirmed_at'),
     gradedAt: integer('graded_at'),
+    deliveredAt: integer('delivered_at'),
+    /** When a silent buyer's delivery confirms itself (Phase 3: delivered + 24 h). */
+    receiptDueAt: integer('receipt_due_at'),
+    receivedAt: integer('received_at'),
     settledAt: integer('settled_at'),
     closedAt: integer('closed_at'),
     createdAt: createdAt(),
@@ -318,7 +364,9 @@ export const payments = sqliteTable(
       .references(() => contracts.id),
     jobId: text('job_id').references(() => deliveryJobs.id), // set for transport-fee payments
     direction: text('direction', { enum: ['collection', 'disbursement'] }).notNull(),
-    provider: text('provider', { enum: ['momo', 'mock'] }).notNull(),
+    /** What a farmer payout is for (Phase 3): the advance at pickup, or the balance on receipt. Null for holds, driver fees, legacy rows. */
+    kind: text('kind', { enum: ['advance', 'balance'] }),
+    provider: text('provider', { enum: ['mock'] }).notNull(), // a licensed payment provider joins in Phase 6
     providerRef: text('provider_ref').notNull(), // UUID sent as X-Reference-Id — idempotency key
     amount: integer('amount').notNull(), // pesewas
     currency: text('currency').notNull(),
@@ -351,6 +399,10 @@ export const ledgerEntries = sqliteTable(
 
 export const LOT_EVENT_TYPES = [
   'LOT_REGISTERED',
+  'LOT_WITHDRAWN',
+  'LOT_UPDATED',
+  'LOT_SOLD',
+  'LOT_EXPIRED',
   'MATCHED',
   'CONTRACT_OFFERED',
   'CONTRACT_ACCEPTED',
@@ -376,6 +428,15 @@ export const LOT_EVENT_TYPES = [
   'DRIVER_PAID',
   'TRANSPORT_CANCELLED',
   'VOICE_CALL',
+  // Phase 3: delivery milestones, receipt, claims.
+  'DRIVER_AT_PICKUP',
+  'DRIVER_DEPARTED',
+  'DRIVER_ARRIVED',
+  'DELIVERED',
+  'RECEIPT_CONFIRMED',
+  'CLAIM_RAISED',
+  'CLAIM_ANSWERED',
+  'CLAIM_RESOLVED',
 ] as const;
 export type LotEventType = (typeof LOT_EVENT_TYPES)[number];
 
@@ -418,6 +479,87 @@ export const marketPrices = sqliteTable(
 
 // ---- Logistics: the middle-mile bridge ----
 
+/**
+ * Every price the platform has ever seen, one row each (D-053). `market_prices`
+ * keeps only the latest quote per market, so it cannot show a trend; this is
+ * the history behind trends, the fair-price range and the alerts.
+ *
+ * `source` says how much to trust a row: 'deal' is money that changed hands,
+ * 'market' is a survey or feed (WFP, FAO, a partner's file), 'ask' and 'offer'
+ * are what people hoped for, 'reference' is seed placeholder data.
+ */
+export const PRICE_SOURCES = ['deal', 'market', 'ask', 'offer', 'request', 'reference'] as const;
+export type PriceSource = (typeof PRICE_SOURCES)[number];
+
+export const priceObservations = sqliteTable(
+  'price_observations',
+  {
+    id: id(),
+    commodityId: text('commodity_id')
+      .notNull()
+      .references(() => commodities.id),
+    regionCode: text('region_code').references(() => regions.code),
+    market: text('market'), // proper noun when the price is a market quote
+    pricePerKg: integer('price_per_kg').notNull(), // pesewas
+    source: text('source', { enum: PRICE_SOURCES }).notNull(),
+    /** Where a 'market' row came from: 'wfp', 'fpma', 'feed', 'manual'. */
+    dataset: text('dataset'),
+    /** The thing this price describes (a lot, an offer, a feed row) — lets a changed listing update its row, and an import run twice add nothing. */
+    refId: text('ref_id'),
+    observedAt: integer('observed_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('price_obs_commodity_time_idx').on(t.commodityId, t.observedAt),
+    uniqueIndex('price_obs_source_ref_idx').on(t.source, t.refId),
+  ],
+);
+
+/**
+ * What a buyer or farmer asked to be told (D-055). 'listing': tell me when
+ * someone lists this crop at or under the price (per kg, pesewas). 'price_above'
+ * / 'price_below': tell me when the market price crosses it.
+ */
+export const WATCH_KINDS = ['listing', 'price_above', 'price_below'] as const;
+export type WatchKind = (typeof WATCH_KINDS)[number];
+
+export const priceWatches = sqliteTable(
+  'price_watches',
+  {
+    id: id(),
+    role: text('role', { enum: ['buyer', 'farmer'] }).notNull(),
+    ownerId: text('owner_id').notNull(), // buyers.id or farmers.id, by role
+    commodityId: text('commodity_id')
+      .notNull()
+      .references(() => commodities.id),
+    regionCode: text('region_code').references(() => regions.code), // null = anywhere in Ghana
+    kind: text('kind', { enum: WATCH_KINDS }).notNull(),
+    thresholdPerKg: integer('threshold_per_kg').notNull(), // pesewas
+    lastNotifiedAt: integer('last_notified_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('price_watches_owner_idx').on(t.role, t.ownerId), index('price_watches_commodity_idx').on(t.commodityId)],
+);
+
+/**
+ * Every alert we sent, so the same news never reaches the same person twice
+ * and nobody is texted more than a few times a day (D-055).
+ */
+export const alertLog = sqliteTable(
+  'alert_log',
+  {
+    id: id(),
+    kind: text('kind').notNull(), // 'lot_match', 'request_nearby', 'price_move', 'watch_price', 'watch_listing'
+    recipient: text('recipient').notNull(), // 'buyer:<id>' or 'farmer:<id>'
+    subject: text('subject').notNull(), // the lot, request or crop-and-week it was about
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('alert_log_once_idx').on(t.kind, t.recipient, t.subject),
+    index('alert_log_recipient_idx').on(t.recipient, t.createdAt),
+  ],
+);
+
 export const vehicleClasses = sqliteTable('vehicle_classes', {
   code: text('code').primaryKey(), // tricycle | van | light_truck
   nameKey: text('name_key').notNull(),
@@ -443,7 +585,7 @@ export const drivers = sqliteTable(
     vehicleClassCode: text('vehicle_class_code')
       .notNull()
       .references(() => vehicleClasses.code),
-    pinHash: text('pin_hash').notNull(), // 4-digit PIN set at USSD registration — web login uses it too (D-021)
+    pinHash: text('pin_hash'), // 4-digit PIN set at USSD registration; web-registered drivers have none (D-047)
     active: integer('active', { mode: 'boolean' }).notNull().default(true), // the ONLINE/OFFLINE availability toggle
     routeRegions: text('route_regions').notNull().default('[]'), // JSON region codes served; empty = anywhere
     createdAt: createdAt(),
@@ -458,6 +600,7 @@ export const DELIVERY_JOB_STATES = [
   'FUNDING_FAILED',
   'FUNDS_HELD',
   'PICKED_UP',
+  'ARRIVED', // the driver is at the destination (Phase 3) — the buyer confirms receipt next
   'DELIVERED',
   'PAID',
   'CANCELLED',
@@ -560,8 +703,14 @@ export const voiceCalls = sqliteTable(
     id: id(),
     phone: text('phone').notNull(),
     locale: text('locale').notNull().default('en'),
-    flow: text('flow', { enum: ['offer', 'grade', 'bridge'] }).notNull(),
+    // 'listing' = a guided voice listing (Phase 2), 'line' = a farmer calling
+    // the listing line: sell, hear and change listings, answer offers.
+    flow: text('flow', { enum: ['offer', 'grade', 'bridge', 'bid', 'listing', 'line', 'claim'] }).notNull(), // 'claim' = a buyer's claim read to the farmer (Phase 3)
+    direction: text('direction', { enum: ['outbound', 'inbound'] }).notNull().default('outbound'),
+    /** The call's memory between answers (Phase 2): a listing draft, the offer being heard, retries. JSON. */
+    state: text('state'),
     contractId: text('contract_id').references(() => contracts.id),
+    offerId: text('offer_id').references(() => offers.id), // the 'bid' flow: hear an offer thread's proposal (Phase 1)
     currentNode: text('current_node'),
     status: text('status', { enum: VOICE_CALL_STATUSES }).notNull().default('pending'),
     attempts: integer('attempts').notNull().default(0),
@@ -623,19 +772,66 @@ export const voiceListings = sqliteTable(
   (t) => [index('voice_listings_phone_idx').on(t.phone)],
 );
 
-// Farmer web-login OTPs (D-032): the code travels over the same SMS outbox as
-// every other farmer message — mock-visible offline, real SMS when AT keys land.
-export const loginOtps = sqliteTable(
-  'login_otps',
+/**
+ * Offer threads (Phase 1): one negotiation between one buyer and one farmer
+ * about one listing, whoever started it — a buyer bid, a farmer answering a
+ * buyer request, or the matching engine. The current proposal lives on the
+ * row; every move is an offer_events row.
+ */
+export const OFFER_STATUSES = ['open', 'accepted', 'rejected', 'withdrawn', 'expired'] as const;
+export const offers = sqliteTable(
+  'offers',
   {
     id: id(),
-    phone: text('phone').notNull(), // E.164, one live code per phone
-    codeHash: text('code_hash').notNull(),
-    attempts: integer('attempts').notNull().default(0),
-    expiresAt: integer('expires_at').notNull(),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => lots.id),
+    buyerId: text('buyer_id')
+      .notNull()
+      .references(() => buyers.id),
+    farmerId: text('farmer_id')
+      .notNull()
+      .references(() => farmers.id),
+    demandId: text('demand_id').references(() => demands.id), // set when it started from a buyer request
+    status: text('status', { enum: OFFER_STATUSES }).notNull().default('open'),
+    turn: text('turn', { enum: ['buyer', 'farmer'] }), // who must act; null once closed
+    units: real('units').notNull(), // in the listing's unit
+    pricePerUnit: integer('price_per_unit').notNull(), // pesewas
+    proposedBy: text('proposed_by', { enum: ['buyer', 'farmer'] }).notNull(),
+    proposedAt: integer('proposed_at').notNull(),
+    expiresAt: integer('expires_at'), // the current proposal lapses then
+    // Request-started threads hold this many kg of the request so the engine never over-buys.
+    heldDemandKg: real('held_demand_kg').notNull().default(0),
+    contractId: text('contract_id').references(() => contracts.id),
+    reminderSentAt: integer('reminder_sent_at'), // the "someone is waiting for your answer" SMS for this proposal
+    createdAt: createdAt(),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .$defaultFn(() => Date.now()),
+  },
+  (t) => [
+    index('offers_lot_idx').on(t.lotId),
+    index('offers_buyer_idx').on(t.buyerId),
+    index('offers_farmer_idx').on(t.farmerId),
+    index('offers_status_idx').on(t.status),
+  ],
+);
+
+export const offerEvents = sqliteTable(
+  'offer_events',
+  {
+    id: id(),
+    offerId: text('offer_id')
+      .notNull()
+      .references(() => offers.id),
+    by: text('by', { enum: ['buyer', 'farmer', 'system'] }).notNull(),
+    action: text('action', { enum: ['bid', 'counter', 'accept', 'reject', 'withdraw', 'expire'] }).notNull(),
+    units: real('units'),
+    pricePerUnit: integer('price_per_unit'),
+    channel: text('channel', { enum: ['web', 'ussd', 'ivr', 'system'] }).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('login_otps_phone_idx').on(t.phone)],
+  (t) => [index('offer_events_offer_idx').on(t.offerId)],
 );
 
 export const ussdSessions = sqliteTable('ussd_sessions', {
@@ -650,6 +846,7 @@ export const ussdSessions = sqliteTable('ussd_sessions', {
 
 export type Farmer = typeof farmers.$inferSelect;
 export type Buyer = typeof buyers.$inferSelect;
+export type Account = typeof accounts.$inferSelect;
 export type Commodity = typeof commodities.$inferSelect;
 export type Unit = typeof units.$inferSelect;
 export type Rubric = typeof rubrics.$inferSelect;
@@ -665,6 +862,9 @@ export type LotEvent = typeof lotEvents.$inferSelect;
 export type UssdSession = typeof ussdSessions.$inferSelect;
 export type Region = typeof regions.$inferSelect;
 export type MarketPrice = typeof marketPrices.$inferSelect;
+export type PriceObservation = typeof priceObservations.$inferSelect;
+export type PriceWatch = typeof priceWatches.$inferSelect;
+export type AlertLogRow = typeof alertLog.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type VehicleClass = typeof vehicleClasses.$inferSelect;
 export type BuyerNotification = typeof buyerNotifications.$inferSelect;
@@ -673,3 +873,42 @@ export type VoiceListing = typeof voiceListings.$inferSelect;
 export type Driver = typeof drivers.$inferSelect;
 export type DeliveryJob = typeof deliveryJobs.$inferSelect;
 export type DeliveryJobOffer = typeof deliveryJobOffers.$inferSelect;
+export type Offer = typeof offers.$inferSelect;
+export type OfferEvent = typeof offerEvents.$inferSelect;
+
+/**
+ * A buyer's claim on a delivered order (Phase 3, vision §20): what is wrong,
+ * the deduction the buyer proposes, the farmer's answer, and F2M's review.
+ * Every claim is reviewed — an accepted one as an audit, a refused one for a
+ * decision on the disputed amount.
+ */
+export const CLAIM_REASONS = ['short_weight', 'quality', 'damaged', 'late', 'not_delivered', 'other'] as const;
+export const CLAIM_STATUSES = ['awaiting_farmer', 'accepted', 'awaiting_review', 'resolved'] as const;
+export const orderClaims = sqliteTable(
+  'order_claims',
+  {
+    id: id(),
+    contractId: text('contract_id')
+      .notNull()
+      .references(() => contracts.id),
+    buyerId: text('buyer_id')
+      .notNull()
+      .references(() => buyers.id),
+    reason: text('reason', { enum: CLAIM_REASONS }).notNull(),
+    note: text('note'),
+    proposedDeduction: integer('proposed_deduction').notNull(), // pesewas, ≤ what was still held
+    status: text('status', { enum: CLAIM_STATUSES }).notNull().default('awaiting_farmer'),
+    farmerAnswer: text('farmer_answer', { enum: ['accepted', 'refused', 'no_answer'] }),
+    answerDueAt: integer('answer_due_at').notNull(),
+    answeredAt: integer('answered_at'),
+    /** F2M's decision (Phase 4 admin; the simulator route until then). */
+    finalDeduction: integer('final_deduction'),
+    reviewStatus: text('review_status', { enum: ['pending', 'reviewed'] }).notNull().default('pending'),
+    reviewNote: text('review_note'),
+    reviewedBy: text('reviewed_by'),
+    reviewedAt: integer('reviewed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('order_claims_contract_idx').on(t.contractId), index('order_claims_status_idx').on(t.status)],
+);
+export type OrderClaim = typeof orderClaims.$inferSelect;

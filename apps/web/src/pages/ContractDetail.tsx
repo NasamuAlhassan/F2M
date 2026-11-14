@@ -5,19 +5,71 @@ import { api, dateTime, ghs, type AvailableDriver, type ContractDetail, type Job
 import { POLL } from '../poll';
 import { Glyph, VehicleMark } from '../components/engrave';
 import { QrImage } from '../components/QrImage';
-import { btnCls, btnGhostCls, Card, ErrorStamp, GradeBadge, LoadGate, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import {
+  backLinkCls,
+  btnCls,
+  btnGhostCls,
+  BusyLabel,
+  Card,
+  EmptyState,
+  ErrorStamp,
+  GradeBadge,
+  LoadGate,
+  numCls,
+  pillCls,
+  pillSolidCls,
+  Skeleton,
+  Spinner,
+  StateBadge,
+  tableCls,
+  TableScroll,
+  tdCls,
+  thCls,
+} from '../components/ui';
+import { useT, type UiLanguage } from '../lib/i18n';
+
+type T = UiLanguage['t'];
+
+/** UPPER_EAST → "Upper East": region codes never reach the screen raw. */
+const regionLabel = (code: string): string =>
+  code
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
+    .join(' ');
+
+/** Ledger account ids ("escrow:contract:…") in words; the raw id stays in the tooltip for audits. */
+function accountLabel(account: string, t: T): string {
+  if (account === 'external:momo') return t('web.contract.acctMomo', 'Mobile money');
+  if (account.startsWith('escrow:contract:')) return t('web.contract.acctEscrow', 'Held for this deal');
+  if (account.startsWith('escrow:job:')) return t('web.contract.acctEscrowJob', 'Held for the driver');
+  if (account.startsWith('farmer:') && account.endsWith(':payable')) return t('web.contract.acctFarmer', 'Owed to the farmer');
+  if (account.startsWith('driver:') && account.endsWith(':payable')) return t('web.contract.acctDriver', 'Owed to the driver');
+  if (account.startsWith('buyer:') && account.endsWith(':refunds')) return t('web.contract.acctRefund', 'Returned to you');
+  return account;
+}
+
 
 /** The escrow lifecycle as numbered engraved stations + the payout advice. */
 function TransactionFlow({ data }: { data: ContractDetail }) {
+  const { t } = useT();
   const { contract, lot, farmer } = data;
   const payout = data.payments.find((p) => p.direction === 'disbursement' && p.jobId === null);
   const steps = [
-    { label: 'Accepted', sublabel: 'farmer consented', at: contract.acceptedAt },
-    { label: 'Escrow', sublabel: 'hold secured', at: contract.fundedAt },
-    { label: 'Picked Up', sublabel: 'goods collected', at: contract.pickupConfirmedAt },
-    { label: 'Graded', sublabel: contract.finalGrade ? `grade ${contract.finalGrade}` : 'quality checked', at: contract.gradedAt },
-    { label: 'Payout', sublabel: 'escrow released', at: payout ? payout.createdAt : null },
-    { label: 'Settled', sublabel: 'books balanced', at: contract.settledAt },
+    { key: 'accepted', label: t('web.contract.stepAccepted', 'Accepted'), sublabel: t('web.contract.stepAcceptedSub', 'farmer said yes'), at: contract.acceptedAt },
+    { key: 'held', label: t('web.contract.stepHeld', 'Money held'), sublabel: t('web.contract.stepHeldSub', 'your payment is safe'), at: contract.fundedAt },
+    { key: 'collected', label: t('web.contract.stepCollected', 'Collected'), sublabel: t('web.contract.stepCollectedSub', 'goods picked up'), at: contract.pickupConfirmedAt },
+    {
+      key: 'graded',
+      label: t('web.contract.stepGraded', 'Graded'),
+      sublabel: contract.finalGrade
+        ? t('web.contract.stepGradedSubDone', 'grade {g}', { g: contract.finalGrade })
+        : t('web.contract.stepGradedSub', 'quality checked'),
+      at: contract.gradedAt,
+    },
+    { key: 'paid', label: t('web.contract.stepPaid', 'Farmer paid'), sublabel: t('web.contract.stepPaidSub', 'money sent'), at: payout ? payout.createdAt : null },
+    { key: 'done', label: t('web.contract.stepDone', 'Done'), sublabel: t('web.contract.stepDoneSub', 'all accounts closed'), at: contract.settledAt },
   ];
   const activeIdx = steps.findIndex((s) => s.at === null);
   // The rail stops at the first unfinished station, not at the tally of
@@ -27,68 +79,85 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
   const refund = contract.finalAmount !== null ? contract.holdAmount - contract.finalAmount : null;
 
   return (
-    <Card title="Transaction Flow — Mobile Money Escrow">
+    <Card title={`${t('web.contract.flowTitle', 'Progress')} — ${t('web.contract.flowSub', 'your money is held safely until the produce is graded')}`}>
       {/* Six stations need ~600px of rail; on narrow paper the strip scrolls in
           its own frame — the same rule the SVG route spine follows. */}
       <div className="overflow-x-auto">
-      <div className="relative flex min-w-[600px] items-start justify-between">
-        <div className="absolute left-0 right-0 top-4 h-px bg-[var(--ink-2)]">
-          <div
-            className="h-full bg-[var(--forest)] transition-[width] duration-500"
-            style={{ width: `${steps.length > 1 ? (Math.max(0, filledCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
-          />
-        </div>
-        {steps.map((step, i) => {
-          const done = step.at !== null;
-          const active = i === activeIdx;
-          return (
-            <div key={step.label} className="relative z-10 flex flex-1 flex-col items-center gap-1.5">
-              <div
-                className={`serial flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] text-xs font-bold ${
-                  done
-                    ? 'border-[var(--forest)] bg-[var(--forest)] text-[var(--paper)]'
-                    : active
-                      ? 'ember border-[var(--gold)] bg-[var(--gold-wash)] text-[var(--gold-deep)]'
-                      : 'border-[var(--ink-3)] bg-[var(--paper)] text-[var(--ink-4)]'
-                }`}
+        <ol className="relative flex min-w-[600px] items-start justify-between">
+          <li aria-hidden="true" className="absolute left-0 right-0 top-4 h-px bg-[var(--ink-2)]">
+            <div
+              className="h-full bg-[var(--forest)] transition-[width] duration-[var(--dur-base)]"
+              style={{ width: `${steps.length > 1 ? (Math.max(0, filledCount - 1) / (steps.length - 1)) * 100 : 0}%` }}
+            />
+          </li>
+          {steps.map((step, i) => {
+            const done = step.at !== null;
+            const active = i === activeIdx;
+            return (
+              <li
+                key={step.key}
+                aria-current={active ? 'step' : undefined}
+                className="relative z-10 flex flex-1 flex-col items-center gap-1.5"
               >
-                {done ? <Glyph name="check" className="h-3.5 w-3.5" /> : i + 1}
-              </div>
-              <div className="text-center">
                 <div
-                  className={`smallcaps ${done ? 'text-[var(--ink)]' : active ? 'text-[var(--gold-deep)]' : 'text-[var(--ink-4)]'}`}
+                  aria-hidden="true"
+                  className={`serial flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] text-xs font-bold ${
+                    done
+                      ? 'border-[var(--forest)] bg-[var(--forest)] text-[var(--paper)]'
+                      : active
+                        ? 'ember border-[var(--gold)] bg-[var(--gold-wash)] text-[var(--gold-deep)]'
+                        : 'border-[var(--ink-3)] bg-[var(--paper)] text-[var(--ink-6)]'
+                  }`}
                 >
-                  {step.label}
+                  {done ? <Glyph name="check" className="h-3.5 w-3.5" /> : i + 1}
                 </div>
-                <div className="serial mt-0.5 max-w-[84px] text-[11px] leading-tight text-[var(--ink-6)]">
-                  {step.at ? dateTime(step.at) : step.sublabel}
+                <div className="text-center">
+                  <div
+                    className={`smallcaps ${done ? 'text-[var(--ink)]' : active ? 'text-[var(--gold-ink)]' : 'text-[var(--ink-6)]'}`}
+                  >
+                    {step.label}
+                    <span className="sr-only">
+                      {done
+                        ? `, ${t('web.contract.stepStateDone', 'done')}`
+                        : active
+                          ? `, ${t('web.contract.stepStateNow', 'next')}`
+                          : `, ${t('web.contract.stepStateLater', 'still to come')}`}
+                    </span>
+                  </div>
+                  <div className="serial mt-0.5 max-w-[84px] text-[11px] leading-tight text-[var(--ink-6)]">
+                    {step.at ? dateTime(step.at) : step.sublabel}
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              </li>
+            );
+          })}
+        </ol>
       </div>
 
       {payout && (
         <div className="certificate seal-land mt-4 overflow-hidden bg-[var(--paper)]">
-          <div className="plate flex items-center gap-3 px-4 py-3">
+          <div className="plate on-dark flex flex-wrap items-center gap-3 px-5 py-4">
             <div>
-              <div className="display text-sm font-semibold tracking-[0.1em]">MOBILE MONEY PAYOUT</div>
-              <div className="smallcaps text-[var(--ink-3)]">escrow released to {farmer?.name ?? 'the farmer'}</div>
+              <p className="headline text-xl">{t('web.contract.payoutTitle', 'Mobile money payment')}</p>
+              <p className="mt-0.5 text-sm text-[var(--ink-2)]">
+                {t('web.contract.payoutEyebrow', 'Sent to {name}', { name: farmer?.name ?? t('web.contract.theFarmer', 'the farmer') })}
+              </p>
             </div>
-            <span
-              className={`stamp ml-auto px-2 py-0.5 text-[11px] ${
-                payout.status === 'successful' ? 'text-[var(--paper)]' : 'text-[var(--ink-3)]'
-              }`}
-            >
-              {payout.status === 'successful' ? 'Confirmed' : payout.status}
+            <span className="ml-auto">
+              {payout.status === 'successful' ? (
+                <span className="stamp flex items-center gap-1 px-2 py-0.5 text-[11px] text-[var(--paper)]">
+                  <Glyph name="check" className="h-3 w-3" />
+                  {t('web.contract.confirmed', 'Confirmed')}
+                </span>
+              ) : (
+                <StateBadge state={payout.status} />
+              )}
             </span>
           </div>
           <div className="grid gap-5 p-4 md:grid-cols-2">
             <div>
-              <p className="rule-double smallcaps mb-2.5 pb-1.5 text-[var(--ink-6)]">Payment Channel</p>
-              <div className="flex items-center justify-between border border-[var(--ink-2)] bg-[var(--paper-lift)] p-3">
+              <p className="rule-double smallcaps mb-2.5 pb-1.5 text-[var(--ink-6)]">{t('web.contract.paidTo', 'Paid to')}</p>
+              <div className="flex items-center justify-between rounded-2xl border border-[var(--ink-2)] bg-[var(--paper-lift)] p-3">
                 <div>
                   <div className="stamp inline-block px-1.5 py-0.5 text-[11px] text-[var(--ink)]">MTN MoMo</div>
                   <div className="serial mt-1.5 text-xs text-[var(--ink-6)]">+{payout.counterpartyMsisdn}</div>
@@ -96,30 +165,35 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
                 <div className="text-right">
                   <div className="serial text-lg font-bold text-[var(--gold-deep)]">{ghs(payout.amount)}</div>
                   <div className="smallcaps text-[var(--ink-6)]">
-                    {payout.provider === 'mock' ? 'mock provider (demo)' : 'primary channel'}
+                    {payout.provider === 'mock'
+                      ? t('web.contract.mockProvider', 'practice payment')
+                      : t('web.contract.mainChannel', 'main account')}
                   </div>
                 </div>
               </div>
             </div>
             <div>
-              <p className="rule-double smallcaps mb-2.5 pb-1.5 text-[var(--ink-6)]">Transaction Record</p>
-              <div className="flex flex-col gap-1.5">
+              <p className="rule-double smallcaps mb-2.5 pb-1.5 text-[var(--ink-6)]">{t('web.contract.paymentDetails', 'Payment details')}</p>
+              <dl className="flex flex-col gap-1.5">
                 {(
                   [
-                    ['Lot', lot.lotCode],
-                    ['Escrow held', ghs(contract.holdAmount)],
-                    ['Farmer payout', contract.finalAmount !== null ? ghs(contract.finalAmount) : ghs(payout.amount)],
-                    ['Refund to buyer', refund !== null ? ghs(refund) : '—'],
-                    ['Timestamp', dateTime(payout.createdAt)],
-                    ['Payment ref', `${payout.providerRef.slice(0, 13)}…`],
+                    [t('web.contract.recLot', 'Lot'), lot.lotCode],
+                    [t('web.contract.recHeld', 'Held from you'), ghs(contract.holdAmount)],
+                    [
+                      t('web.contract.recFarmer', 'Paid to farmer'),
+                      contract.finalAmount !== null ? ghs(contract.finalAmount) : ghs(payout.amount),
+                    ],
+                    [t('web.contract.recRefund', 'Returned to you'), refund !== null ? ghs(refund) : '—'],
+                    [t('web.contract.recTime', 'Time'), dateTime(payout.createdAt)],
+                    [t('web.contract.recRef', 'Reference'), `${payout.providerRef.slice(0, 13)}…`],
                   ] as const
                 ).map(([label, value]) => (
                   <div key={label} className="flex items-start justify-between gap-3">
-                    <span className="smallcaps flex-shrink-0 text-[var(--ink-6)]">{label}</span>
-                    <span className="serial text-right text-xs font-semibold text-[var(--ink)]">{value}</span>
+                    <dt className="smallcaps flex-shrink-0 text-[var(--ink-6)]">{label}</dt>
+                    <dd className="serial text-right text-xs font-semibold text-[var(--ink)]">{value}</dd>
                   </div>
                 ))}
-              </div>
+              </dl>
             </div>
           </div>
         </div>
@@ -128,10 +202,17 @@ function TransactionFlow({ data }: { data: ContractDetail }) {
   );
 }
 
+/** "broken_kernels" → "Broken kernels". */
+function criterionLabel(code: string): string {
+  const words = code.replace(/[_-]+/g, ' ').trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function ContractDetailPage() {
+  const { t } = useT();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const { data, isError, refetch } = useQuery({
+  const { data, isError, isFetching, refetch } = useQuery({
     queryKey: ['contract', id],
     queryFn: () => api<ContractDetail>(`/api/contracts/${id}`),
     refetchInterval: POLL.live, // payments + grading move live during a demo
@@ -150,7 +231,8 @@ export function ContractDetailPage() {
   useEffect(() => () => void (copiedTimer.current && window.clearTimeout(copiedTimer.current)), []);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['contract', id] });
-  const onError = (err: unknown) => setError(err instanceof Error ? err.message : 'Action failed');
+  const onError = (err: unknown) =>
+    setError(err instanceof Error ? err.message : t('web.contract.actionFailed', 'That did not work. Please try again.'));
 
   const confirmPickup = useMutation({
     mutationFn: () => api(`/api/contracts/${id}/confirm-pickup`, { method: 'POST' }),
@@ -176,27 +258,31 @@ export function ContractDetailPage() {
     onError,
   });
 
-  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="this contract" />;
+  if (!data) return <LoadGate isError={isError} retrying={isFetching} onRetry={() => void refetch()} label={t('web.contract.loadLabel', 'this contract')} />;
   const { contract, lot, farmer, commodity, payments, ledger, photos, gradings, match } = data;
   const canPhoto = ['FUNDS_HELD', 'PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state);
   const canGrade = ['PICKUP_CONFIRMED', 'DISPUTED'].includes(contract.state) && photos.length > 0;
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function' && window.matchMedia('(pointer: coarse)').matches;
   const publicUrl = `${window.location.origin}/t/${lot.id}`;
+  const farmerName = farmer?.name ?? t('web.contract.theFarmerCap', 'The farmer');
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">
-          {contract.quantityKg}kg {commodity.name}
+      <Link
+        to="/contracts"
+        className={backLinkCls}
+      >
+        <span aria-hidden="true">←&nbsp;</span>
+        {t('web.contract.back', 'All contracts')}
+      </Link>
+      <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="headline text-3xl text-[var(--ink)] sm:text-4xl">
+          {contract.quantityKg.toLocaleString()} kg {commodity.name.toLowerCase()}
         </h1>
-        <span className="serial text-sm text-[var(--ink-6)]">№ {lot.lotCode}</span>
+        <span className="serial text-sm text-[var(--ink-6)]">{t('web.contract.lotCode', 'Lot {code}', { code: lot.lotCode })}</span>
         <StateBadge state={contract.state} />
-        <Link to="/contracts" className="smallcaps ml-auto text-[var(--ink-6)] hover:text-[var(--ink)]">
-          ← All contracts
-        </Link>
       </div>
-      {error && (
-        <ErrorStamp message={error} onDismiss={() => setError(null)} className="mb-4" />
-      )}
+      {error && <ErrorStamp message={error} onDismiss={() => setError(null)} className="mb-4" />}
 
       <div className="flex flex-col gap-4 xl:flex-row">
         {/* ── Main column ─────────────────────────────────────── */}
@@ -204,67 +290,61 @@ export function ContractDetailPage() {
           <TransactionFlow data={data} />
 
           {gradings.length > 0 && (
-            <Card title="AI Grading — every grade explains itself">
+            <Card title={`${t('web.contract.gradeTitle', 'Quality check')} — ${t('web.contract.gradeSub', 'the AI explains every grade')}`}>
               {gradings.map((g) => (
                 <div key={g.id} className="certificate mb-4 bg-[var(--paper)] p-3 last:mb-0">
                   <div className="flex flex-wrap items-center gap-4">
-                    <span className="seal-land inline-flex scale-[1.9] px-3 py-3">
+                    <span className="stamp-land inline-flex scale-[1.9] px-3 py-3">
                       <GradeBadge grade={g.gradeBand ?? '…'} />
                     </span>
                     <div className="min-w-44 flex-1">
                       {g.confidence !== null && (
                         <>
                           <div className="mb-1 flex items-baseline justify-between text-xs">
-                            <span className="smallcaps text-[var(--ink-6)]">Confidence</span>
+                            <span className="smallcaps text-[var(--ink-6)]">{t('web.contract.howSure', 'How sure')}</span>
                             <span className="serial text-sm font-bold text-[var(--ink)]">
                               {(g.confidence * 100).toFixed(0)}%
                             </span>
                           </div>
-                          <div className="h-[7px] border border-[var(--ink-3)] bg-[var(--paper-lift)] p-[1.5px]">
-                            <div className="h-full bg-[var(--ink)]" style={{ width: `${Math.round(g.confidence * 100)}%` }} />
+                          <div aria-hidden="true" className="h-[7px] rounded-full border border-[var(--ink-3)] bg-[var(--paper-lift)] p-[1.5px]">
+                            <div className="h-full rounded-full bg-[var(--ink)]" style={{ width: `${Math.round(g.confidence * 100)}%` }} />
                           </div>
                         </>
                       )}
-                      <p className="serial mt-1.5 text-[11px] text-[var(--ink-6)]">
-                        attempt {g.attempt} · {g.provider}
-                        {g.model ? ` · ${g.model}` : ''} · {dateTime(g.createdAt)}
+                      <p className="serial mt-1.5 text-[11px] text-[var(--ink-6)]" title={[g.provider, g.model].filter(Boolean).join(' · ')}>
+                        {t('web.contract.checkNo', 'Check {n}', { n: g.attempt })}
+                        {g.provider === 'mock' ? ` · ${t('web.contract.mockGrade', 'practice grade')}` : ''} · {dateTime(g.createdAt)}
                       </p>
                     </div>
                     <StateBadge state={g.status} />
                   </div>
-                  <TableScroll minWidth={420}>
-                  <table className="mt-3 w-full text-left text-sm">
-                    <thead>
-                      <tr>
-                        <th className={thCls}>Criterion</th>
-                        <th className={thCls}>Observation</th>
-                        <th className={`${thCls} text-right`}>Band</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  {g.reasons.length > 0 && (
+                    // A list, not a table: each check reads as a line on a phone,
+                    // and the grader's codes are written as words.
+                    <ul className="mt-3 divide-y divide-[var(--ink-2)] border-y border-[var(--ink-2)]">
                       {g.reasons.map((r, i) => (
-                        <tr key={i}>
-                          <td className="border-b border-[var(--ink-2)] px-3 py-2 font-semibold text-[var(--ink-7)]">
-                            {r.criterion}
-                          </td>
-                          <td className="border-b border-[var(--ink-2)] px-3 py-2 text-[var(--ink-6)]">{r.observation}</td>
-                          <td className="border-b border-[var(--ink-2)] px-3 py-2 text-right">
+                        <li key={i} className="py-2.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm font-semibold text-[var(--ink)]">{criterionLabel(r.criterion)}</span>
                             <GradeBadge grade={r.bandForCriterion} />
-                          </td>
-                        </tr>
+                          </div>
+                          <p className="mt-0.5 text-[13px] leading-relaxed text-[var(--ink-6)]">{r.observation}</p>
+                        </li>
                       ))}
-                    </tbody>
-                  </table>
-                  </TableScroll>
+                    </ul>
+                  )}
                   {contract.disputeNote && g.status === 'resolved' && (
-                    <p className="stamp mt-3 px-3 py-2 text-[11px] normal-case tracking-normal text-[var(--stamp)]">
-                      Farmer dispute: “{contract.disputeNote}”
+                    <p className="mt-3 rounded-2xl bg-[var(--stamp-wash)] px-3 py-2 text-[11px] text-[var(--stamp-deep)]">
+                      {t('web.contract.disputeNote', 'The farmer questioned the grade: “{note}”', { note: contract.disputeNote })}
                     </p>
                   )}
                 </div>
               ))}
               <p className="text-[11px] text-[var(--ink-6)]">
-                The farmer sees this grade, its payout, and the top reason on her phone — and can dispute it within the window.
+                {t(
+                  'web.contract.gradeExplain',
+                  'The farmer gets this grade, the amount and the main reason on their phone. They have a set time to question it.',
+                )}
               </p>
             </Card>
           )}
@@ -278,13 +358,17 @@ export function ContractDetailPage() {
                 const request = [...data.trace].reverse().find((e) => e.type === 'TRANSPORT_REQUESTED');
                 return !!suggest && (!request || suggest.seq > request.seq);
               })()}
-              farmerName={farmer?.name ?? 'The farmer'}
+              farmerName={farmerName}
               onError={onError}
             />
           )}
 
           <Card
-            title={`Pickup Photos (${photos.length})`}
+            title={`${t('web.contract.photosTitle', 'Pickup photos')}${
+              photos.length
+                ? ` — ${photos.length === 1 ? t('web.contract.photoOne', '1 photo') : t('web.contract.photoMany', '{n} photos', { n: photos.length })}`
+                : ''
+            }`}
             actions={
               canPhoto ? (
                 <div className="flex flex-wrap gap-2">
@@ -299,17 +383,43 @@ export function ContractDetailPage() {
                       e.target.value = '';
                     }}
                   />
-                  <button className={btnGhostCls} onClick={() => fileRef.current?.click()} disabled={uploadPhoto.isPending}>
-                    {uploadPhoto.isPending ? 'Uploading…' : 'Upload photo'}
+                  <button
+                    type="button"
+                    className={btnGhostCls}
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploadPhoto.isPending}
+                    aria-busy={uploadPhoto.isPending || undefined}
+                  >
+                    <BusyLabel busy={uploadPhoto.isPending} label={t('web.contract.upload', 'Add a photo')} busyLabel={t('web.contract.uploading', 'Uploading…')} />
                   </button>
                   {contract.state === 'FUNDS_HELD' && (
-                    <button className={btnCls} onClick={() => confirmPickup.mutate()} disabled={confirmPickup.isPending}>
-                      Confirm pickup
+                    <button
+                      type="button"
+                      className={btnCls}
+                      onClick={() => confirmPickup.mutate()}
+                      disabled={confirmPickup.isPending}
+                      aria-busy={confirmPickup.isPending || undefined}
+                    >
+                      <BusyLabel busy={confirmPickup.isPending} label={t('web.contract.confirmPickup', 'Confirm goods collected')} />
                     </button>
                   )}
                   {canGrade && (
-                    <button className={btnCls} onClick={() => runGrading.mutate()} disabled={runGrading.isPending}>
-                      {runGrading.isPending ? 'Grading…' : contract.state === 'DISPUTED' ? 'Run re-grade' : 'Run AI grading'}
+                    <button
+                      type="button"
+                      className={btnCls}
+                      onClick={() => runGrading.mutate()}
+                      disabled={runGrading.isPending}
+                      aria-busy={runGrading.isPending || undefined}
+                    >
+                      <BusyLabel
+                        busy={runGrading.isPending}
+                        label={
+                          contract.state === 'DISPUTED'
+                            ? t('web.contract.regrade', 'Check the grade again')
+                            : t('web.contract.grade', 'Check quality with AI')
+                        }
+                        busyLabel={t('web.contract.grading', 'Checking…')}
+                      />
                     </button>
                   )}
                 </div>
@@ -317,102 +427,152 @@ export function ContractDetailPage() {
             }
           >
             {photos.length === 0 ? (
-              <p className="text-sm text-[var(--ink-6)]">
-                No photos yet. {canPhoto ? 'Upload pickup photos — grading needs at least one.' : ''}
-              </p>
+              <EmptyState
+                compact
+                icon={<Glyph name="camera" className="h-5 w-5" />}
+                title={t('web.contract.noPhotosTitle', 'No photos yet')}
+                body={
+                  canPhoto
+                    ? t('web.contract.noPhotosBody', 'Add a photo of the produce at pickup. The AI needs at least one to grade it.')
+                    : t('web.contract.noPhotosLater', 'Photos taken at pickup show here.')
+                }
+              />
             ) : (
-              <div className="flex flex-wrap gap-3">
-                {photos.map((p) => (
-                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="border border-[var(--ink-3)] p-1">
-                    <img src={p.url} alt="Pickup photo" loading="lazy" decoding="async" className="h-24 w-24 object-cover" />
-                  </a>
+              <ul className="flex flex-wrap gap-3">
+                {photos.map((p, i) => (
+                  <li key={p.id}>
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block overflow-hidden rounded-2xl border border-[var(--ink-3)] p-1 transition-[border-color,opacity] hover:border-[var(--ink-6)] active:opacity-80"
+                    >
+                      <img
+                        src={p.url}
+                        alt={t('web.contract.photoAlt', 'Pickup photo {n}, opens in a new tab', { n: i + 1 })}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-24 w-24 rounded-xl object-cover"
+                      />
+                    </a>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </Card>
         </div>
 
         {/* ── Right rail ──────────────────────────────────────── */}
-        <aside className="w-full flex-shrink-0 xl:w-80">
+        <aside className="w-full flex-shrink-0 xl:w-80" aria-label={t('web.contract.railLabel', 'Deal details')}>
           <div className="xl:sticky xl:top-4">
-            <Card title="Parties & Terms">
+            <Card title={`${t('web.contract.dealTitle', 'The deal')} — ${t('web.contract.dealSub', 'farmer, money and prices')}`}>
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-bold text-[var(--ink)]">{farmer?.name}</p>
                     <p className="serial text-[11px] text-[var(--ink-6)]">
-                      {farmer?.phone} · {farmer?.regionCode}
+                      {farmer?.phone}
+                      {farmer?.regionCode ? ` · ${regionLabel(farmer.regionCode)}` : ''}
                     </p>
                   </div>
                   <button
-                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+                    type="button"
+                    className={`${pillCls} flex-shrink-0`}
                     onClick={() => callFarmer.mutate()}
                     disabled={callFarmer.isPending}
+                    aria-busy={callFarmer.isPending || undefined}
+                    aria-label={
+                      callFarmer.isSuccess
+                        ? t('web.contract.callBookedLabel', 'Call to {name} booked', { name: farmerName })
+                        : t('web.contract.callLabel', 'Call {name} through F2M', { name: farmerName })
+                    }
                   >
-                    <Glyph name="phone" className="h-3 w-3" />
-                    {callFarmer.isSuccess ? 'Queued' : 'Call'}
+                    {callFarmer.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Glyph name="phone" className="h-3.5 w-3.5" />}
+                    {callFarmer.isSuccess ? t('web.contract.callBooked', 'Call booked') : t('web.contract.call', 'Call')}
                   </button>
                 </div>
-                <div className="flex items-baseline justify-between text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-sm">
                   <span className="serial text-xs text-[var(--ink-6)]">{lot.lotCode}</span>
                   <span className="text-[11px] text-[var(--ink-6)]">
-                    declared {lot.declaredBand} · score{' '}
+                    {t('web.contract.declared', 'farmer said grade {g}', { g: lot.declaredBand })} ·{' '}
+                    {t('web.contract.fit', 'fit')}{' '}
                     <span className="serial font-bold text-[var(--gold-deep)]">{match.score.toFixed(2)}</span>
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="border border-[var(--ink-2)] bg-[var(--paper)] p-2 text-center">
+                  <div className="rounded-2xl border border-[var(--ink-2)] bg-[var(--paper)] p-2 text-center">
                     <div className="serial text-sm font-bold text-[var(--ink)]">{ghs(contract.holdAmount)}</div>
-                    <div className="smallcaps text-[11px] text-[var(--ink-6)]">escrow hold</div>
+                    <div className="smallcaps text-[11px] text-[var(--ink-6)]">{t('web.contract.held', 'held for the farmer')}</div>
                   </div>
-                  <div className="border border-[var(--ink-2)] bg-[var(--paper)] p-2 text-center">
+                  <div className="rounded-2xl border border-[var(--ink-2)] bg-[var(--paper)] p-2 text-center">
                     <div className="serial text-sm font-bold text-[var(--gold-deep)]">
                       {contract.finalAmount !== null ? ghs(contract.finalAmount) : '—'}
                     </div>
                     <div className="smallcaps text-[11px] text-[var(--ink-6)]">
-                      {contract.finalGrade ? `final · grade ${contract.finalGrade}` : 'awaiting grade'}
+                      {contract.finalGrade
+                        ? t('web.contract.finalAt', 'final, grade {g}', { g: contract.finalGrade })
+                        : t('web.contract.awaitingGrade', 'waiting for the grade')}
                     </div>
                   </div>
                 </div>
                 <div>
-                  <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">Price per grade (frozen at offer)</p>
-                  <div className="flex gap-1.5">
+                  <p className="rule-double smallcaps mb-2 pb-1.5 text-[var(--ink-6)]">
+                    {t('web.contract.priceGrid', 'GHS per kg, by grade (fixed at the offer)')}
+                  </p>
+                  <ul className="flex gap-1.5">
                     {(['A', 'B', 'C', 'REJECT'] as const).map((band) => (
-                      <div
+                      <li
                         key={band}
-                        className={`flex flex-1 flex-col items-center gap-1 border py-1.5 ${
-                          contract.finalGrade === band ? 'border-[var(--gold)] bg-[var(--gold-wash)]' : 'border-[var(--ink-2)]'
+                        className={`flex flex-1 flex-col items-center gap-1 rounded-xl border py-1.5 ${
+                          contract.finalGrade === band ? 'border-[var(--gold)] bg-[var(--gold-wash)] ring-1 ring-[var(--gold)]' : 'border-[var(--ink-2)]'
                         }`}
                       >
                         <GradeBadge grade={band} />
                         <span className="serial text-[11px] font-semibold text-[var(--ink-7)]">
                           {(contract.priceTerms[band] / 100).toFixed(2)}
                         </span>
-                      </div>
+                        {contract.finalGrade === band && (
+                          <span className="sr-only">{t('web.contract.finalGradeSr', 'final grade')}</span>
+                        )}
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
               </div>
             </Card>
 
-            <Card title="Traceability QR">
+            <Card title={`${t('web.contract.qrTitle', 'QR code')} — ${t('web.contract.qrSub', 'the public record of this lot')}`}>
               <div className="flex items-center gap-3">
-                <div className="h-24 w-24 flex-shrink-0 border-2 border-[var(--ink)] p-1.5">
+                <div className="h-24 w-24 flex-shrink-0 rounded-xl border-2 border-[var(--ink)] bg-white p-1.5">
                   <QrImage url={publicUrl} />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <p className="text-[11px] leading-snug text-[var(--ink-6)]">
-                    Scans to the public, append-only chain of custody — no login, no money details.
+                    {t(
+                      'web.contract.qrExplain',
+                      'Anyone who scans it sees where this lot came from and every step since. No login, and no money details.',
+                    )}
                   </p>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-2">
                     <button
-                      className="rounded-lg border border-[var(--ink-4)] px-2 py-1 text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
+                      type="button"
+                      className={pillCls}
                       onClick={() => {
                         // navigator.clipboard is undefined on any non-secure
                         // origin — which is exactly how this gets demoed, off a
                         // laptop at http://192.168.x.x. Unguarded, that throws
                         // synchronously and the button silently does nothing.
                         void (async () => {
+                          // Phones hand the link to their own share sheet
+                          // (WhatsApp, SMS), which is how a link gets passed on.
+                          if (canShare) {
+                            try {
+                              await navigator.share({ title: document.title, url: publicUrl });
+                              return;
+                            } catch (err) {
+                              if (err instanceof DOMException && err.name === 'AbortError') return;
+                            }
+                          }
                           try {
                             if (!navigator.clipboard) throw new Error('clipboard unavailable');
                             await navigator.clipboard.writeText(publicUrl);
@@ -424,26 +584,28 @@ export function ContractDetailPage() {
                         })();
                       }}
                     >
-                      {copied ? 'Copied' : 'Copy link'}
+                      {copied
+                        ? t('web.contract.copied', 'Copied')
+                        : canShare
+                          ? t('web.contract.share', 'Share link')
+                          : t('web.contract.copy', 'Copy link')}
                     </button>
+                    <span className="sr-only" aria-live="polite">
+                      {copied ? t('web.contract.copiedSr', 'Link copied') : ''}
+                    </span>
                     {copyFailed && (
-                      <p className="text-[10px] leading-snug text-[var(--stamp)]">
-                        Copying needs a secure page — select the link below instead.
-                      </p>
+                      <div role="status" className="text-[11px] leading-snug text-[var(--stamp-deep)]">
+                        <p>{t('web.contract.copyFailed', 'This page cannot copy for you. Select the link and copy it:')}</p>
+                        <p className="serial mt-0.5 select-all break-all text-[var(--ink)]">{publicUrl}</p>
+                      </div>
                     )}
-                    <div className="flex gap-1">
-                      <Link
-                        to={`/t/${lot.id}`}
-                        target="_blank"
-                        className="flex-1 rounded-lg bg-[var(--forest)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--paper)] hover:bg-[var(--forest-deep)]"
-                      >
-                        Public page
+                    <div className="flex flex-col gap-2">
+                      <Link to={`/t/${lot.id}`} target="_blank" className={pillSolidCls}>
+                        {t('web.contract.publicPage', 'Public page')}
+                        <span className="sr-only">{t('web.contract.newTab', ' (opens in a new tab)')}</span>
                       </Link>
-                      <Link
-                        to={`/lots/${lot.id}/trace`}
-                        className="flex-1 rounded-lg border border-[var(--ink-4)] px-2 py-1 text-center text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
-                      >
-                        Full trace
+                      <Link to={`/lots/${lot.id}/trace`} className={pillCls}>
+                        {t('web.contract.fullTrace', 'Full history')}
                       </Link>
                     </div>
                   </div>
@@ -451,16 +613,31 @@ export function ContractDetailPage() {
               </div>
             </Card>
 
-            <Card title={`Payments (${payments.length})`}>
+            <Card
+              title={`${t('web.contract.paymentsTitle', 'Payments')}${
+                payments.length
+                  ? ` — ${payments.length === 1 ? t('web.contract.paymentOne', '1 payment') : t('web.contract.paymentMany', '{n} payments', { n: payments.length })}`
+                  : ''
+              }`}
+            >
               {payments.length === 0 ? (
-                <p className="text-sm text-[var(--ink-6)]">The hold fires when the farmer accepts.</p>
+                <EmptyState
+                  compact
+                  icon={<Glyph name="scale" className="h-5 w-5" />}
+                  title={t('web.contract.noPaymentsTitle', 'No payments yet')}
+                  body={t('web.contract.noPaymentsBody', 'Your money is taken and held as soon as the farmer accepts.')}
+                />
               ) : (
-                <div>
+                <ul>
                   {payments.map((p) => (
-                    <div key={p.id} className="border-b border-[var(--ink-2)] py-2 text-sm last:border-b-0">
+                    <li key={p.id} className="border-b border-[var(--ink-2)] py-2 text-sm last:border-b-0">
                       <div className="flex items-baseline justify-between gap-2">
                         <p className="font-semibold text-[var(--ink)]">
-                          {p.direction === 'collection' ? 'Hold (buyer)' : p.jobId ? 'Driver payout' : 'Farmer payout'}
+                          {p.direction === 'collection'
+                            ? t('web.contract.payHeld', 'Held from you')
+                            : p.jobId
+                              ? t('web.contract.payDriver', 'Paid to driver')
+                              : t('web.contract.payFarmer', 'Paid to farmer')}
                         </p>
                         <span className={`${numCls} flex-shrink-0 font-bold text-[var(--gold-deep)]`}>{ghs(p.amount)}</span>
                       </div>
@@ -468,28 +645,47 @@ export function ContractDetailPage() {
                         <p className="serial text-[11px] text-[var(--ink-6)]">{dateTime(p.createdAt)}</p>
                         <StateBadge state={p.status} />
                       </div>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
               {ledger.length > 0 && (
-                <details className="mt-3 border-t border-[var(--ink-2)] pt-2">
-                  <summary className="smallcaps cursor-pointer text-[var(--ink-6)] hover:text-[var(--ink)]">
-                    Ledger — every journal sums to zero
+                <details className="group mt-3 border-t border-[var(--ink-2)] pt-2">
+                  <summary className="smallcaps -mx-2 flex min-h-11 items-center justify-between gap-2 rounded-xl px-2 text-[var(--ink-6)] transition-colors hover:bg-[var(--paper)] hover:text-[var(--ink)] active:bg-[var(--paper-deep)] lg:min-h-9">
+                    {t('web.contract.ledger', 'Accounts: money in always equals money out')}
+                    <Glyph
+                      name="chevron"
+                      className="h-4 w-4 shrink-0 transition-[rotate] duration-[var(--dur-base)] group-open:rotate-180 motion-reduce:transition-none"
+                    />
                   </summary>
-                  <div className="mt-2 border border-[var(--ink-2)]">
-                    <TableScroll minWidth={430}>
-                    <table className="w-full text-left text-[11px]">
-                      <tbody>
-                        {ledger.map((l) => (
-                          <tr key={l.id} className="border-b border-[var(--ink-2)] last:border-b-0">
-                            <td className="serial max-w-32 truncate px-2 py-1 text-[var(--ink-7)]">{l.account}</td>
-                            <td className="serial px-2 py-1 text-right text-[var(--stamp)]">{l.debit ? `DR ${ghs(l.debit)}` : ''}</td>
-                            <td className="serial px-2 py-1 text-right text-[var(--ink)]">{l.credit ? `CR ${ghs(l.credit)}` : ''}</td>
+                  <div className="mt-2 overflow-hidden rounded-xl border border-[var(--ink-2)]">
+                    <TableScroll minWidth={300}>
+                      <table className="w-full text-left text-[11px]">
+                        <thead>
+                          <tr className="border-b border-[var(--ink-2)]">
+                            <th scope="col" className="smallcaps px-2 py-1 text-[var(--ink-6)]">
+                              {t('web.contract.colAccount', 'Account')}
+                            </th>
+                            <th scope="col" className="smallcaps px-2 py-1 text-right text-[var(--ink-6)]">
+                              {t('web.contract.colOut', 'Out')}
+                            </th>
+                            <th scope="col" className="smallcaps px-2 py-1 text-right text-[var(--ink-6)]">
+                              {t('web.contract.colIn', 'In')}
+                            </th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {ledger.map((l) => (
+                            <tr key={l.id} className="border-b border-[var(--ink-2)] last:border-b-0">
+                              <td className="px-2 py-1 text-[var(--ink-7)]" title={l.account}>
+                                {accountLabel(l.account, t)}
+                              </td>
+                              <td className="serial px-2 py-1 text-right text-[var(--stamp-deep)]">{l.debit ? ghs(l.debit) : ''}</td>
+                              <td className="serial px-2 py-1 text-right text-[var(--ink)]">{l.credit ? ghs(l.credit) : ''}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </TableScroll>
                   </div>
                 </details>
@@ -516,6 +712,7 @@ function TransportSection({
   farmerName: string;
   onError: (err: unknown) => void;
 }) {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [showDrivers, setShowDrivers] = useState(false);
   const { data: jobData } = useQuery({
@@ -532,6 +729,7 @@ function TransportSection({
     data: quoteData,
     isLoading: quoteLoading,
     isError: quoteError,
+    isFetching: quoteFetching,
     refetch: refetchQuote,
   } = useQuery({
     queryKey: ['transport-quote', contractId],
@@ -564,9 +762,9 @@ function TransportSection({
   });
 
   return (
-    <Card title="Transport — the middle-mile bridge">
+    <Card title={`${t('web.contract.transportTitle', 'Transport')} — ${t('web.contract.transportSub', 'a driver brings it from the farm to you')}`}>
       {job && !['CANCELLED', 'CANCELLED_REFUNDED'].includes(job.state) ? (
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border border-[var(--ink-2)] bg-[var(--paper)] p-3">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-[var(--ink-2)] bg-[var(--paper)] p-3">
           <span className="serial text-sm font-bold text-[var(--ink)]">{job.jobCode}</span>
           <StateBadge state={job.state} />
           <span className="flex items-center gap-2 text-sm text-[var(--ink-7)]">
@@ -583,142 +781,222 @@ function TransportSection({
           )}
           <div className="ml-auto">
             {job.state === 'NO_DRIVER' && (
-              <button className={btnGhostCls} onClick={() => retry.mutate(job.id)} disabled={retry.isPending}>
-                Retry dispatch
+              <button
+                type="button"
+                className={btnGhostCls}
+                onClick={() => retry.mutate(job.id)}
+                disabled={retry.isPending}
+                aria-busy={retry.isPending || undefined}
+              >
+                <BusyLabel busy={retry.isPending} label={t('web.contract.retryDispatch', 'Look for a driver again')} />
               </button>
             )}
             {job.state === 'PICKED_UP' && (
-              <button className={btnCls} onClick={() => deliver.mutate(job.id)} disabled={deliver.isPending}>
-                Confirm delivery received
+              <button
+                type="button"
+                className={btnCls}
+                onClick={() => deliver.mutate(job.id)}
+                disabled={deliver.isPending}
+                aria-busy={deliver.isPending || undefined}
+              >
+                <BusyLabel busy={deliver.isPending} label={t('web.contract.confirmDelivery', 'I have received the goods')} />
               </button>
             )}
             {job.state === 'DELIVERED' && (
-              <span className="text-sm font-semibold text-[var(--ink-6)]">Driver payout on the way…</span>
+              <span className="text-sm font-semibold text-[var(--ink-6)]">{t('web.contract.payingDriver', 'Paying the driver…')}</span>
             )}
-            {job.state === 'PAID' && <span className="text-sm font-bold text-[var(--ink)]">Driver paid</span>}
+            {job.state === 'PAID' && (
+              <span className="flex items-center gap-1.5 text-sm font-bold text-[var(--success)]">
+                <Glyph name="check" className="h-4 w-4" />
+                {t('web.contract.driverPaid', 'Driver paid')}
+              </span>
+            )}
           </div>
         </div>
       ) : canRequest && quoteData ? (
         <div>
           {farmerSuggested && (
-            <div className="mb-3 flex flex-wrap items-center gap-2 border border-[var(--gold)] bg-[var(--gold-wash)] px-3 py-2.5">
-              <span className="ember inline-block h-2 w-2 rounded-full bg-[var(--gold-deep)]" />
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--gold)] bg-[var(--gold-wash)] px-3 py-2.5">
+              <span aria-hidden="true" className="ember inline-block h-2 w-2 rounded-full bg-[var(--gold-deep)]" />
               <p className="text-sm font-semibold text-[var(--ink)]">
-                {farmerName} has asked for a driver — approve by requesting one below; the fee escrows from your account.
+                {t(
+                  'web.contract.farmerAsked',
+                  '{name} has asked for a driver. To agree, request one below. The fee comes from your account and is held until delivery.',
+                  { name: farmerName },
+                )}
               </p>
             </div>
           )}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-[var(--ink-6)]">
-              Instant quotes for every vehicle that fits the load. The fee is held in escrow when a driver accepts and
-              released on your delivery confirmation.
+            <p className="max-w-xl text-sm text-[var(--ink-6)]">
+              {t(
+                'web.contract.quotesExplain',
+                'Prices for every vehicle that can carry this load. When a driver accepts, the fee is held. They are paid when you confirm delivery.',
+              )}
             </p>
             <button
-              className="rounded-lg border border-[var(--ink-4)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+              type="button"
+              className={pillCls}
+              aria-expanded={showDrivers}
+              aria-controls="contract-drivers"
               onClick={() => setShowDrivers((v) => !v)}
             >
-              {showDrivers ? 'Hide drivers' : 'Choose a driver'}
+              {showDrivers ? t('web.contract.hideDrivers', 'Hide drivers') : t('web.contract.chooseDriver', 'Choose a driver')}
+              <Glyph
+                name="chevron"
+                className={`h-3.5 w-3.5 transition-[rotate] duration-[var(--dur-base)] motion-reduce:transition-none ${showDrivers ? 'rotate-180' : ''}`}
+              />
             </button>
           </div>
           {showDrivers && (
-            <div className="mb-3 space-y-2 border border-[var(--ink-2)] bg-[var(--paper)] p-3">
+            <div id="contract-drivers" className="mb-3 space-y-2 rounded-2xl border border-[var(--ink-2)] bg-[var(--paper)] p-3">
               {!driverData ? (
-                <p className="text-sm text-[var(--ink-6)]">Loading drivers…</p>
+                <Skeleton lines={2} label={t('web.contract.loadingDrivers', 'Loading drivers')} />
               ) : driverData.drivers.length === 0 ? (
-                <p className="text-sm text-[var(--ink-6)]">No drivers are online right now — auto-dispatch below still works.</p>
+                <p className="text-sm text-[var(--ink-6)]">
+                  {t('web.contract.noDrivers', 'No drivers are online right now. You can still request a vehicle below and we will find the nearest driver.')}
+                </p>
               ) : (
-                driverData.drivers.map((d) => (
-                  <div key={d.id} className="flex flex-wrap items-center gap-3 border-b border-[var(--ink-2)] pb-2 last:border-b-0 last:pb-0">
-                    <VehicleMark code={d.vehicleClassCode} className="h-7 w-7 text-[var(--ink)]" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-[var(--ink)]">
-                        {d.name}
-                        {d.busy && <span className="stamp ml-2 px-1.5 py-0.5 text-[11px] text-[var(--ink-6)]">on a job</span>}
-                      </p>
-                      <p className="text-[11px] text-[var(--ink-6)]">
-                        {d.vehicleClassName} · ≤{d.capacityKg}kg ·{' '}
-                        {d.routeRegions.length
-                          ? `${d.routeRegions.length} route region${d.routeRegions.length > 1 ? 's' : ''}`
-                          : 'serves anywhere'}
-                      </p>
-                    </div>
-                    <a
-                      href={`tel:${d.phone}`}
-                      className="flex items-center gap-1 rounded-lg border border-[var(--ink-4)] px-2.5 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--paper-deep)]"
-                    >
-                      <Glyph name="phone" className="h-3 w-3" /> Call
-                    </a>
-                    <button
-                      className="rounded-lg bg-[var(--forest)] px-3 py-1 text-xs font-semibold text-[var(--paper)] transition-colors hover:bg-[var(--forest-deep)] disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={d.busy || request.isPending}
-                      onClick={() => request.mutate({ preferredDriverId: d.id })}
-                    >
-                      Hire
-                    </button>
-                  </div>
-                ))
+                <ul className="space-y-2">
+                  {driverData.drivers.map((d) => (
+                    <li key={d.id} className="flex flex-wrap items-center gap-3 border-b border-[var(--ink-2)] pb-2 last:border-b-0 last:pb-0">
+                      <VehicleMark code={d.vehicleClassCode} className="h-7 w-7 text-[var(--ink)]" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-[var(--ink)]">
+                          {d.name}
+                          {d.busy && (
+                            <span className="stamp ml-2 px-1.5 py-0.5 text-[11px] text-[var(--ink-6)]">
+                              {t('web.contract.onAJob', 'on a job')}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-[var(--ink-6)]">
+                          {d.vehicleClassName} · {t('web.contract.upTo', 'up to {kg} kg', { kg: d.capacityKg.toLocaleString() })} ·{' '}
+                          {d.routeRegions.length === 0
+                            ? t('web.contract.drivesAnywhere', 'drives anywhere')
+                            : d.routeRegions.length === 1
+                              ? t('web.contract.regionOne', 'drives in 1 region')
+                              : t('web.contract.regionMany', 'drives in {n} regions', { n: d.routeRegions.length })}
+                        </p>
+                      </div>
+                      <a
+                        href={`tel:${d.phone}`}
+                        className={pillCls}
+                        aria-label={t('web.contract.callDriver', 'Call {name}', { name: d.name })}
+                      >
+                        <Glyph name="phone" className="h-3.5 w-3.5" /> {t('web.contract.call', 'Call')}
+                      </a>
+                      <button
+                        type="button"
+                        className={pillSolidCls}
+                        disabled={d.busy || request.isPending}
+                        aria-busy={(request.isPending && request.variables?.preferredDriverId === d.id) || undefined}
+                        onClick={() => request.mutate({ preferredDriverId: d.id })}
+                        aria-label={t('web.contract.hireLabel', 'Hire {name}', { name: d.name })}
+                      >
+                        <BusyLabel
+                          busy={request.isPending && request.variables?.preferredDriverId === d.id}
+                          label={t('web.contract.hire', 'Hire')}
+                        />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
               <p className="text-[11px] text-[var(--ink-6)]">
-                Hiring offers the job to your chosen driver first at their vehicle's rate — if they decline, dispatch
-                falls back to nearest-first.
+                {t(
+                  'web.contract.hireExplain',
+                  'Hiring offers the job to that driver first, at their vehicle’s price. If they say no, we offer it to the nearest driver.',
+                )}
               </p>
             </div>
           )}
-          <TableScroll minWidth={520}>
-          <table className={tableCls}>
-            <thead>
-              <tr>
-                <th className={thCls}>Vehicle</th>
-                <th className={thCls}>Capacity</th>
-                <th className={thCls}>Distance</th>
-                <th className={thCls}>Rate</th>
-                <th className={thCls}>Quote</th>
-                <th className={thCls} />
-              </tr>
-            </thead>
-            <tbody>
-              {quoteData.quotes.map((q, i) => (
-                <tr key={q.vehicleClassCode} className="hover:bg-[var(--paper)]">
-                  <td className={`${tdCls} font-bold`}>
-                    <span className="flex items-center gap-2">
-                      <VehicleMark code={q.vehicleClassCode} className="h-6 w-6 flex-shrink-0 text-[var(--ink-7)]" />
-                      {q.vehicleClassName}
-                      {i === 0 && <span className="stamp px-1.5 py-0.5 text-[11px] text-[var(--ink)]">cheapest</span>}
-                    </span>
-                  </td>
-                  <td className={`${tdCls} ${numCls} text-xs`}>{q.capacityKg} kg</td>
-                  <td className={`${tdCls} ${numCls} text-xs`}>{q.distanceKm} km</td>
-                  <td className={`${tdCls} serial text-[11px] text-[var(--ink-6)]`}>
-                    {ghs(q.baseFee)} + {ghs(q.perKmRate)}/km
-                  </td>
-                  <td className={`${tdCls} serial font-bold text-[var(--gold-deep)]`}>{ghs(q.quoteAmount)}</td>
-                  <td className={`${tdCls} text-right`}>
-                    <button
-                      className={btnCls}
-                      onClick={() => request.mutate({ vehicleClassCode: q.vehicleClassCode })}
-                      disabled={request.isPending}
-                    >
-                      {request.isPending ? 'Requesting…' : 'Request Driver'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </TableScroll>
+          {quoteData.quotes.length === 0 ? (
+            <EmptyState
+              compact
+              icon={<VehicleMark code="light_truck" className="h-6 w-6" />}
+              title={t('web.contract.noQuotesTitle', 'No vehicle fits this load')}
+              body={t('web.contract.noQuotesBody', 'None of our vehicles can carry this much in one trip.')}
+            />
+          ) : (
+            <TableScroll minWidth={520}>
+              <table className={tableCls}>
+                <caption className="sr-only">{t('web.contract.quotesCaption', 'Transport prices by vehicle')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col" className={thCls}>{t('web.contract.colVehicle', 'Vehicle')}</th>
+                    <th scope="col" className={thCls}>{t('web.contract.colCarries', 'Carries')}</th>
+                    <th scope="col" className={thCls}>{t('web.contract.colDistance', 'Distance')}</th>
+                    <th scope="col" className={thCls}>{t('web.contract.colRate', 'How it is priced')}</th>
+                    <th scope="col" className={thCls}>{t('web.contract.colTotal', 'Total')}</th>
+                    <th scope="col" className={thCls}>
+                      <span className="sr-only">{t('web.contract.colAction', 'Request')}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quoteData.quotes.map((q, i) => (
+                    <tr key={q.vehicleClassCode} className="hover:bg-[var(--paper)]">
+                      <th scope="row" className={`${tdCls} text-left font-bold`}>
+                        <span className="flex items-center gap-2">
+                          <VehicleMark code={q.vehicleClassCode} className="h-6 w-6 flex-shrink-0 text-[var(--ink-7)]" />
+                          {q.vehicleClassName}
+                          {i === 0 && (
+                            <span className="stamp px-1.5 py-0.5 text-[11px] text-[var(--ink)]">{t('web.contract.cheapest', 'cheapest')}</span>
+                          )}
+                        </span>
+                      </th>
+                      <td className={`${tdCls} ${numCls} text-xs`}>{q.capacityKg.toLocaleString()} kg</td>
+                      <td className={`${tdCls} ${numCls} text-xs`}>{q.distanceKm} km</td>
+                      <td className={`${tdCls} serial text-[11px] text-[var(--ink-6)]`}>
+                        {t('web.contract.rate', '{base} + {perKm} per km', { base: ghs(q.baseFee), perKm: ghs(q.perKmRate) })}
+                      </td>
+                      <td className={`${tdCls} serial font-bold text-[var(--gold-deep)]`}>{ghs(q.quoteAmount)}</td>
+                      <td className={`${tdCls} text-right`}>
+                        <button
+                          type="button"
+                          className={btnCls}
+                          onClick={() => request.mutate({ vehicleClassCode: q.vehicleClassCode })}
+                          disabled={request.isPending}
+                          aria-busy={(request.isPending && request.variables?.vehicleClassCode === q.vehicleClassCode) || undefined}
+                          aria-label={t('web.contract.requestLabel', 'Request a driver with a {vehicle}', { vehicle: q.vehicleClassName })}
+                        >
+                          <BusyLabel
+                            busy={request.isPending && request.variables?.vehicleClassCode === q.vehicleClassCode}
+                            label={t('web.contract.request', 'Request driver')}
+                            busyLabel={t('web.contract.requesting', 'Requesting…')}
+                          />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableScroll>
+          )}
         </div>
       ) : canRequest && quoteLoading ? (
-        <p className="text-sm text-[var(--ink-6)]">Fetching transport quotes…</p>
+        <Skeleton lines={3} label={t('web.contract.loadingQuotes', 'Loading transport prices')} />
       ) : canRequest && quoteError ? (
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-sm text-[var(--ink-6)]">Could not load transport quotes.</p>
-          <button type="button" className={btnGhostCls} onClick={() => void refetchQuote()}>
-            Retry
+          <p className="text-sm text-[var(--ink-6)]">
+            {t('web.contract.quotesFailed', 'We could not load transport prices. Check your connection and try again.')}
+          </p>
+          <button
+            type="button"
+            className={btnGhostCls}
+            onClick={() => void refetchQuote()}
+            disabled={quoteFetching}
+            aria-busy={quoteFetching || undefined}
+          >
+            <BusyLabel busy={quoteFetching} label={t('web.contract.tryAgain', 'Try again')} />
           </button>
         </div>
       ) : (
         <p className="text-sm text-[var(--ink-6)]">
-          {job ? 'Previous transport was cancelled.' : 'No transport requested for this contract.'}
+          {job
+            ? t('web.contract.transportCancelled', 'The last driver booking was cancelled.')
+            : t('web.contract.noTransport', 'No driver booked for this contract.')}
         </p>
       )}
     </Card>

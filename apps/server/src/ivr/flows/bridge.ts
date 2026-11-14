@@ -1,7 +1,7 @@
 import type { I18nText } from '@ftm/core';
 import type { IvrFlow, IvrResult } from '../machine';
 
-// Call-bridge stub: when Khaya translation + AT Voice bridging land, this flow
+// Call-bridge stub: when live translation + AT Voice bridging land, this flow
 // becomes "hold while we connect you to the buyer, translated". For now it
 // speaks the promise and completes — the queue, provider, and trace plumbing
 // around it are the real deliverable.

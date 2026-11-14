@@ -1,4 +1,4 @@
-import { listNotificationsForPhone, listVoiceCallsForPhone, normalizePhone } from '@ftm/core';
+import { listClaimsForReview, listNotificationsForPhone, listVoiceCallsForPhone, normalizePhone, resolveClaim } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { sweepOnce } from '../../jobs/sweep';
@@ -8,6 +8,17 @@ const sweepSchema = z.object({ now: z.number().optional() }).default({});
 
 /** Dev/test-only helpers — deterministic clock control + the tester's SMS inbox. */
 export async function devRoutes(app: FastifyInstance): Promise<void> {
+  // Phase 3: F2M's decision on a claim (a deduction from 0 to what the buyer
+  // asked), standing in for the Phase 4 reviewer screen. Simulator only, like
+  // every /api/dev route.
+  app.post('/dev/claims/:id/resolve', async (req) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as { deduction?: number; note?: string };
+    return { claim: await resolveClaim(id, { deduction: body.deduction, note: body.note, reviewer: 'simulator' }) };
+  });
+
+  app.get('/dev/claims', async () => ({ claims: listClaimsForReview() }));
+
   app.post('/dev/sweep', async (req) => {
     const { now } = sweepSchema.parse(req.body ?? {});
     return sweepOnce(now ?? Date.now());

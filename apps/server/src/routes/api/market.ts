@@ -5,6 +5,7 @@ import {
   getRegion,
   haversineKm,
   listListingPhotos,
+  listOpenOffersForLot,
   listMarketPrices,
   resolvePoint,
   schema,
@@ -44,6 +45,8 @@ export async function marketRoutes(app: FastifyInstance): Promise<void> {
           ? Math.round(prices.reduce((s, p) => s + p.pricePerKg, 0) / prices.length)
           : null;
         const pricePerKg = l.askingPricePerKg ?? marketAvgPerKg;
+        const threads = listOpenOffersForLot(l.id);
+        const mine = threads.find((o) => o.buyerId === req.user.sub);
 
         return {
           id: l.id,
@@ -61,7 +64,15 @@ export async function marketRoutes(app: FastifyInstance): Promise<void> {
           kgPerUnit,
           unitsRemaining: kgPerUnit > 0 ? Math.max(1, Math.round(l.remainingKg / kgPerUnit)) : null,
           pricePerKg,
-          pricePerUnit: pricePerKg !== null && kgPerUnit > 0 ? Math.round(pricePerKg * kgPerUnit) : null,
+          pricePerUnit: l.askingPricePerUnit ?? (pricePerKg !== null && kgPerUnit > 0 ? Math.round(pricePerKg * kgPerUnit) : null),
+          // Phase 1: the farmer's own price per unit, where the produce is, and the live negotiation.
+          askingPricePerUnit: l.askingPricePerUnit,
+          harvestedAt: l.harvestedAt,
+          community: l.community,
+          landmark: l.landmark,
+          expiresAt: l.expiresAt,
+          openBids: threads.length,
+          myOffer: mine ? { id: mine.id, status: mine.status, turn: mine.turn } : null,
           priceSource: l.askingPricePerKg !== null ? 'asking' : marketAvgPerKg !== null ? 'market' : null,
           fairPrice: pricePerKg !== null && marketAvgPerKg !== null && pricePerKg <= marketAvgPerKg,
           farmerName: farmer?.name ?? null,

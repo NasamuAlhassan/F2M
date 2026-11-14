@@ -2,7 +2,7 @@ import type { PaymentParams, PaymentProvider, PaymentStatusResult } from './type
 
 /**
  * Deterministic offline payment rail (dev default — D-013).
- * Magic MSISDNs mirror MoMo's sandbox test numbers so failure paths are
+ * Magic MSISDNs mirror mobile-money sandbox test numbers so failure paths are
  * testable offline: ...0000 fails, ...0001 stays pending forever.
  */
 export class MockPaymentProvider implements PaymentProvider {

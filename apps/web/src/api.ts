@@ -1,4 +1,5 @@
 // Thin fetch client. All calls ride the Vite proxy to the Fastify API.
+import { accessToken } from './lib/session';
 
 export interface PriceTerms {
   A: number;
@@ -208,75 +209,6 @@ export interface PublicTrace {
   events: TraceEvent[];
 }
 
-// Identity is keyed per role, not held in one global slot. Tabs on the same
-// origin share localStorage, so a single key meant logging in as the driver
-// silently logged out the buyer tab — every demo runs several surfaces side by
-// side, and the roles must not evict one another.
-export const ROLES: readonly Role[] = ['buyer', 'farmer', 'driver'];
-
-const tokenKey = (role: Role): string => `ftm_token:${role}`;
-
-export function getToken(role: Role): string | null {
-  return localStorage.getItem(tokenKey(role));
-}
-export function setToken(token: string | null, role: Role): void {
-  if (token) localStorage.setItem(tokenKey(role), token);
-  else localStorage.removeItem(tokenKey(role));
-}
-
-// sessionStorage is scoped to a single tab, which makes it the right place to
-// record which identity THIS tab has been wearing. Without it, a farmer tab
-// opening /prices — a surface both roles reach — would resolve to whichever
-// token sorts first and snap to buyer chrome mid-demo.
-const TAB_ROLE_KEY = 'ftm_tab_role';
-
-export function rememberTabRole(role: Role): void {
-  try {
-    sessionStorage.setItem(TAB_ROLE_KEY, role);
-  } catch {
-    // Private windows and blocked site data throw; the fallback below still works.
-  }
-}
-
-function tabRole(): Role | null {
-  try {
-    return (sessionStorage.getItem(TAB_ROLE_KEY) as Role | null) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The identity this tab is acting as. A route that names its role wins; failing
- * that we use the role this tab last wore, and only then fall back to whichever
- * token happens to exist.
- */
-export function activeRole(preferred?: Role): Role | null {
-  if (preferred && getToken(preferred)) return preferred;
-  const remembered = tabRole();
-  if (remembered && getToken(remembered)) return remembered;
-  return ROLES.find((r) => getToken(r)) ?? null;
-}
-
-const LOGIN_PATH: Record<Role, string> = {
-  buyer: '/login',
-  driver: '/driver/login',
-  farmer: '/farmer/login',
-};
-export const loginPathFor = (role: Role): string => LOGIN_PATH[role];
-
-/**
- * Which identity a request belongs to. Prefixes settle almost everything; the
- * exception is /api/jobs/:id/* — accept, decline and pickup are the driver's,
- * while deliver and retry-dispatch are the buyer's — so those callers pass
- * `role` explicitly rather than relying on the path.
- */
-function roleForPath(path: string): Role {
-  if (path.startsWith('/api/driver/') || path.startsWith('/api/auth/driver-')) return 'driver';
-  if (path.startsWith('/api/farmer/') || path.startsWith('/api/auth/farmer-')) return 'farmer';
-  return 'buyer';
-}
-
 export interface JobView {
   id: string;
   jobCode: string;
@@ -327,13 +259,6 @@ export interface MarketLot {
   createdAt: number;
 }
 
-export interface Me {
-  buyerId: string;
-  name: string | null;
-  company: string | null;
-  regionCode: string | null;
-}
-
 export interface AvailableDriver {
   id: string;
   name: string;
@@ -366,25 +291,20 @@ export class ApiError extends Error {
   }
 }
 
-export interface ApiOptions extends RequestInit {
-  /** Act as this identity instead of the one inferred from the path. */
-  role?: Role;
-}
-
-export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
-  const { role: roleOverride, ...init } = opts;
-  const role = roleOverride ?? roleForPath(path);
+/**
+ * Call the F2M API as the signed-in person (D-047): the Supabase access token
+ * goes along as a bearer token, and the server maps it to their farmer, buyer
+ * or driver profile. A 401 means the login is gone — back to the login screen.
+ */
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
-  const token = getToken(role);
+  const token = await accessToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   if (init.body && !(init.body instanceof FormData)) headers['Content-Type'] = 'application/json';
 
   const res = await fetch(path, { ...init, headers });
   if (res.status === 401) {
-    // Clear only the identity that was refused — a stale driver token must not
-    // sign the buyer out of the tab next to it.
-    setToken(null, role);
-    window.location.href = LOGIN_PATH[role];
+    window.location.href = '/login';
     throw new ApiError('Login required', 401);
   }
   const body = await res.json().catch(() => null);

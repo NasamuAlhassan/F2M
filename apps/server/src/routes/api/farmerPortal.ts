@@ -19,11 +19,20 @@ import {
   schema,
   suggestTransport,
   t,
+  markLotSold,
   updateFarmerProfile,
+  updateLot,
+  withdrawLot,
+  listOffersForFarmer,
+  listOpenOffersForLot,
+  answerClaim,
+  getClaim,
+  listClaimsForFarmer,
 } from '@ftm/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { offerView } from './offers';
 
 const listLotSchema = z.object({
   commodityCode: z.string(),
@@ -31,8 +40,22 @@ const listLotSchema = z.object({
   unitQty: z.number().positive(),
   declaredBand: gradeBandSchema,
   askingPricePerKg: z.number().int().positive().optional(), // pesewas
+  askingPricePerUnit: z.number().int().positive().optional(), // pesewas per unit (bag…) — preferred (Phase 1)
   readyDate: z.number().optional(),
+  harvestedAt: z.number().optional(),
+  community: z.string().max(80).optional(),
+  landmark: z.string().max(120).optional(),
 });
+
+const updateLotSchema = z
+  .object({
+    units: z.number().positive().optional(),
+    askingPricePerUnit: z.number().int().positive().nullable().optional(),
+    readyDate: z.number().optional(),
+    community: z.string().max(80).optional(),
+    landmark: z.string().max(120).optional(),
+  })
+  .strict();
 
 /**
  * The farmer's web portal (prototype Frame 07): the same actions the USSD tree
@@ -47,7 +70,8 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
     const lots = listLotsByFarmer(farmer.id).map((l) => {
       const commodity = getCommodityById(l.commodityId);
       const unit = db.select().from(schema.units).where(eq(schema.units.id, l.unitId)).get();
-      const bids = db.select().from(schema.matches).where(eq(schema.matches.lotId, l.id)).all().length;
+      // Open negotiations on it (Phase 1). Matches only exist once a deal is agreed.
+      const bids = listOpenOffersForLot(l.id).length;
       const photo = listListingPhotos(l.id)[0];
       return {
         id: l.id,
@@ -59,6 +83,11 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
         unitName: unit ? t('en', unit.nameKey) : 'unit',
         declaredBand: l.declaredBand,
         askingPricePerKg: l.askingPricePerKg,
+        askingPricePerUnit: l.askingPricePerUnit,
+        harvestedAt: l.harvestedAt,
+        community: l.community,
+        landmark: l.landmark,
+        expiresAt: l.expiresAt,
         status: l.status,
         channel: l.channel,
         photoUrl: photo ? `/${photo.path}` : null,
@@ -119,7 +148,8 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
         matchedContracts: contracts.filter((c) => activeStates.includes(c.state)).length,
         totalEarned: payouts.filter((p) => p.status === 'successful').reduce((s, p) => s + p.amount, 0),
       },
-      offers: contracts.filter((c) => c.state === 'OFFERED'),
+      offers: contracts.filter((c) => c.state === 'OFFERED'), // legacy system offers — superseded by offerThreads (Phase 1)
+      offerThreads: listOffersForFarmer(farmer.id, 'open').map(offerView),
       contracts: contracts.filter((c) => c.state !== 'OFFERED').slice(0, 15),
       lots,
       payouts,
@@ -140,6 +170,27 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send({ lot });
   });
 
+  // Change a listing (Phase 1): quantity, asking price per unit, ready date, place. Renews it too.
+  app.patch('/farmer/lots/:id', { preHandler: [app.authFarmer] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const lot = updateLot(id, req.user.sub, updateLotSchema.parse(req.body ?? {}));
+    return { lot };
+  });
+
+  // Sold elsewhere: off the market, open offers on it closed and their buyers told.
+  app.post('/farmer/lots/:id/sold', { preHandler: [app.authFarmer] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const lot = markLotSold(id, req.user.sub);
+    return { lot: { id: lot.id, lotCode: lot.lotCode, status: lot.status } };
+  });
+
+  // Take a listing off the market — the same withdrawLot the USSD "My lots" menu calls.
+  app.post('/farmer/lots/:id/withdraw', { preHandler: [app.authFarmer] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const lot = withdrawLot(id, req.user.sub);
+    return { lot: { id: lot.id, lotCode: lot.lotCode, status: lot.status } };
+  });
+
   // Listing photos (D-036): the smartphone seller's card art.
   app.post('/farmer/lots/:id/photos', { preHandler: [app.authFarmer] }, async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -150,6 +201,18 @@ export async function farmerPortalRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Accept/decline an incoming bid — the exact calls USSD "My offers" makes.
+  // Phase 3: a buyer's claims on this farmer's orders, and the answer (same move as USSD My lots).
+  app.get('/farmer/claims', { preHandler: [app.authFarmer] }, async (req) => ({
+    claims: listClaimsForFarmer(req.user.sub).map(({ contract, ...claim }) => ({ ...claim, lotId: contract.lotId, contractState: contract.state })),
+  }));
+
+  app.post('/farmer/claims/:id/answer', { preHandler: [app.authFarmer] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const { accept } = z.object({ accept: z.boolean() }).parse(req.body ?? {});
+    getClaim(id); // 404 before 403
+    return { claim: await answerClaim(id, req.user.sub, accept) };
+  });
+
   app.post('/farmer/contracts/:id/accept', { preHandler: [app.authFarmer] }, async (req) => {
     const { id } = req.params as { id: string };
     const contract = await acceptOfferAndHold(id, req.user.sub);

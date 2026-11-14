@@ -28,6 +28,11 @@ COPY . .
 
 # The portal builds to apps/web/dist, then moves in beside the USSD and IVR
 # tester pages so a single @fastify/static root serves the entire origin.
+# The portal's Supabase settings are baked in when Vite builds it, so they come
+# in as build args (both are public by design — the anon/publishable key):
+#   fly deploy --build-arg VITE_SUPABASE_URL=… --build-arg VITE_SUPABASE_ANON_KEY=…
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
 RUN npm run build -w @ftm/web \
  && cp -r apps/web/dist/. apps/server/public/
 

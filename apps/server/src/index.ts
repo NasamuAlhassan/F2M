@@ -1,8 +1,11 @@
-import { config, runMigrations } from '@ftm/core';
+import { config, runMigrations, seed } from '@ftm/core';
 import { buildServer } from './app';
 import { startSweepJobs } from './jobs/sweep';
 
 runMigrations(); // idempotent — brings a fresh checkout up without a manual db step
+// Reference data too, insert-only: a crop added to the seed reaches an existing
+// database (and production) on the next start, and nothing already there changes.
+await seed({ refresh: false });
 
 const app = await buildServer();
 startSweepJobs(app.log);

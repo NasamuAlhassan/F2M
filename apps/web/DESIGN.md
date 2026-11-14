@@ -1,248 +1,172 @@
 ---
-name: Farm to Market — The Market World
-description: A confident agritech marketplace — deep brand green, white cards on a soft green ground, true-to-produce color per crop.
+name: Farm to Market — The Harvest Journal
+description: An editorial agritech marketplace. Warm cream ground, plain serif headlines, deep-green feature sections, F2M green on every action.
 colors:
-  paper: "#f5f8f3"
-  paper-deep: "#eaf0e6"
-  paper-lift: "#ffffff"
-  ink: "#16241e"
-  ink-8: "#2a3d34"
-  ink-7: "#3e544a"
-  ink-6: "#58705f"
-  ink-5: "#748b7a"
-  ink-4: "#93a696"
-  ink-3: "#b3c2b3"
-  ink-2: "#d2ddcf"
-  ink-1: "#e6ede3"
-  forest: "#158a4a"
+  paper: "#efe9df"
+  paper-deep: "#e5ddcf"
+  paper-lift: "#fbf8f3"
+  ink: "#14231b"
+  ink-8: "#26352c"
+  ink-7: "#3d4a41"
+  ink-6: "#56625a"
+  ink-5: "#7a8279"
+  ink-4: "#9a9f95"
+  ink-3: "#bcbdb1"
+  ink-2: "#d9d3c6"
+  ink-1: "#e8e2d6"
+  forest: "#147f44"
   forest-deep: "#0f6d3a"
-  forest-wash: "#e2f5e8"
+  forest-night: "#0c3d24"
+  forest-wash: "#dcebd9"
   gold: "#d97a1f"
   gold-deep: "#b3620f"
   gold-ink: "#8a4c0c"
-  gold-wash: "#fbe9d3"
+  gold-wash: "#f6e2c6"
   stamp: "#c0392b"
   stamp-deep: "#962c21"
-  stamp-wash: "#f8dcd7"
-  info: "#1d5fd9"
-  info-wash: "#dbe7fb"
+  stamp-wash: "#f5d8d1"
+  info: "#1a55c4"
+  info-wash: "#dbe5f6"
   transit: "#6d3fc4"
-  transit-wash: "#e7ddf7"
-  success: "#1f8a4c"
-  success-wash: "#dcf0e2"
+  transit-wash: "#e6ddf2"
+  success: "#18753f"
+  success-wash: "#d8ecd8"
 typography:
-  display:
-    fontFamily: "Hanken Grotesk, Segoe UI, system-ui, sans-serif"
-    fontSize: "20px"
-    fontWeight: 800
-    lineHeight: 1.2
-    letterSpacing: "-0.01em"
+  headline:
+    fontFamily: "Newsreader, Georgia, serif"
+    fontWeight: 400
+    lineHeight: 1.08
+    letterSpacing: "-0.015em"
   body:
     fontFamily: "Hanken Grotesk, Segoe UI, system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.45
-  serial:
-    fontFamily: "Hanken Grotesk, Segoe UI, system-ui, sans-serif"
-    fontSize: "14px"
-    fontWeight: 600
+  eyebrow:
+    fontFamily: "Hanken Grotesk"
+    fontSize: "11px"
+    fontWeight: 700
+    letterSpacing: "0.24em"
   label:
-    fontFamily: "Hanken Grotesk, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Hanken Grotesk"
     fontSize: "11px"
     fontWeight: 700
     letterSpacing: "0.08em"
 rounded:
-  control: "8px"
+  control: "12px"
   card: "20px"
+  feature: "28px"
   pill: "9999px"
-spacing:
-  xs: "4px"
-  sm: "8px"
-  md: "12px"
-  lg: "16px"
-  xl: "24px"
-components:
-  button-primary:
-    backgroundColor: "{colors.forest}"
-    textColor: "{colors.paper-lift}"
-    rounded: "{rounded.pill}"
-    padding: "8px 16px"
-  button-primary-hover:
-    backgroundColor: "{colors.forest-deep}"
-  button-ghost:
-    textColor: "{colors.ink}"
-    rounded: "{rounded.pill}"
-    padding: "8px 16px"
-  input:
-    backgroundColor: "{colors.paper-lift}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-    padding: "8px 12px"
-  card:
-    backgroundColor: "{colors.paper-lift}"
-    rounded: "{rounded.card}"
-    padding: "16px"
-  stamp-live:
-    backgroundColor: "{colors.gold-wash}"
-    textColor: "{colors.gold-ink}"
-    rounded: "{rounded.pill}"
-    padding: "2px 6px"
 ---
 
-# Design System: Farm to Market — The Market World
+# Design System: Farm to Market — The Harvest Journal (D-048)
 
 ## Overview
 
-**Creative North Star: "The Market World"**
+F2M reads like a well-made journal about the harvest: a warm cream page, large plain serif headlines, and deep-green sections that carry the story. The brand green is unchanged and still marks every action. The look follows a reference the owner chose (innofemme.org) in structure and type, not in colour or content.
 
-Farm to Market's buyer, farmer, and driver portals read as a confident, modern agritech product: white cards lifted off a soft green-tinted ground, a bold brand green carrying identity and every primary action, and true-to-produce color on every commodity — a market stall of maize, tomato, and pepper isn't monochrome, and neither is a lot grid. This retired **The Trade Instrument** (D-039's cedi-banknote security-print world: tinted paper, engraved line-art, square corners, no drop shadows), which the owner judged too austere and "basic"-reading against the product's actual energy — a live marketplace, not a printed certificate.
+The product is used by farmers on cheap phones in strong sunlight, buyers at desks, and drivers on the road. So the editorial look sits on top of hard floors: 11px minimum for functional text, `--ink-6` as the lightest functional ink, 44px tap targets, and plain words.
 
-The world keeps what worked from the instrument metaphor — line-drawn crop and vehicle iconography, the F2M rosette seal, stamped state pills, a six-station transaction spine — and drops the printed-depth discipline for real elevation: soft cast shadows, generous rounding, and a saturated palette that commits at page scale (the masthead is a solid green plate, not a neutral bar with a green accent). Legibility floors carry over unchanged: 11px minimum for functional text, sunlight-legible on a market-stall Android phone.
+## Colour
 
-**Key Characteristics:**
-- Deep brand green (`--forest` #158a4a) as a bold, page-scale color — masthead, every primary button, "live"/positive states — not diluted into a neutral ramp.
-- White cards (`--paper-lift`) on a soft green-tinted ground (`--paper` #f5f8f3), lifted with real soft shadows, not printed frames.
-- **True-to-produce color per commodity**: each crop gets its own accent wash + ink (maize gold, tomato red-orange, yam terracotta, pepper red, onion plum, plantain yellow-green, …) — see Crop Accents below. Applied to hero media wells and category icon chips; left neutral in dense ledger rows so tables stay scannable.
-- Bronze-gold (`--gold`) for money, live-state pulses, and small brand flourishes; a five-color state vocabulary (gold/info/transit/success/stamp) for lifecycle badges.
-- Generous rounding: `rounded-full` pill buttons and segmented controls, 20px cards. No square security-print corners.
-- One typeface, one family: Hanken Grotesk (variable, 400–800), self-hosted. Hierarchy comes from weight and size, not a font switch — display and money are both Hanken Grotesk, at 800 and 600 respectively, with tabular figures throughout.
+- **Cream ground** (`--paper`), **warm-white cards** (`--paper-lift`), **recessed zones** (`--paper-deep`).
+- **Forest** (`--forest` #147f44): every primary button, positive and done states. **Forest deep** for hover.
+- **Forest night** (`--forest-night`): the deep field. Panel and modal headers (`.plate`), the active nav pill, the landing's story sections, the footer, the toast. Put `.on-dark` on the container so eyebrows and italic words turn gold.
+- **Gold**: the italic accent word (`--gold-deep` on cream, `--gold-bright` on dark), money figures and live pulses. Small gold text on a wash is `--gold-ink`; gold text on the dark field is `--gold-bright`.
+- **State tones** (`StateBadge`): gold live, info assigned, transit en route, success settled, stamp disputed.
+- **Crop accents** (`cropAccent()` in `engrave.tsx`) colour hero media and filter chips only, never dense ledger rows. A new commodity needs a line icon in `CROP_PATHS`, an accent whose ink is at least 3:1 on its wash, and a representative photo (about 900px wide, under 270KB, credited in `public/images/CREDITS.md`). Prefer photos from Ghana or West Africa of the produce as it is sold.
+- Native checkboxes, radios and sliders use `accent-color: var(--forest)`.
 
-## Colors
+## Type
 
-A green brand identity on white, with true produce color doing the work a printed-paper texture used to do.
+- **Headline** (`.headline`): Newsreader, weight 400, tight tracking, balanced line breaks. Page titles 36–48px; card titles 20–24px; landing up to 60px. Plain text. The gold italic accent (`<em>`) is used **once on the whole site**, in the landing hero ("Sell your harvest from *any phone*"). Repeating it on every heading is a template tell.
+- **Eyebrow** (`.eyebrow`): 11px, bold, uppercase, tracked. Reserved; not used on pages today. Context that used to sit in an eyebrow goes in a plain line under the heading ("One vehicle, many farmers").
+- **Body**: Hanken Grotesk 14–17px. Secondary lines `--ink-6`.
+- **Label** (`.smallcaps`): 11px uppercase for field labels and table heads.
+- **Money and counts** (`.serial`): tabular figures, bold, large money in `--gold-deep`. The cedi is written **GHS**: Hanken Grotesk has no ₵ glyph, and GHS is what MoMo messages show.
+- Fonts are self-hosted in `public/fonts`; both are preloaded in `index.html`.
 
-### Primary
-- **Forest** (`--forest` #158a4a): the brand. Masthead plate, every primary button (`btnCls`), segmented-control active states, "done"/positive indicators (transaction-spine steps, on-duty toggles, "good load"). Distinct from `--ink`: this is a deliberate saturated brand color, not a neutral.
-- **Forest Deep** (`--forest-deep` #0f6d3a): hover/pressed state for every forest-filled control.
-- **Forest Wash** (`--forest-wash` #e2f5e8): fallback media-well tint for a commodity with no dedicated crop accent (see below).
+## Layout and chrome
 
-### Secondary
-- **Gold** (`--gold` #d97a1f): money figures, live-state ember pulses, focus caret, small brand flourishes (the 3px accent bar under login seals and plate headers).
-- **Gold Deep** (`--gold-deep` #b3620f): large money figures, grade-B seals.
-- **Gold Ink** (`--gold-ink` #8a4c0c): small gold text on washes.
-- **Gold Wash** (`--gold-wash` #fbe9d3): tint behind live-state stamps and selected filter rows.
+- **Signed-in header**: cream, sticky, blurred, one row. From `lg`: seal, the floating **pill nav** centred (active tab a filled forest-night pill), search, alerts, the person chip and Log out. The wordmark and the person's name return at `xl`, where they fit.
+- **Phones and tablets (below `lg`)**: a **bottom tab bar** replaces the pill nav when a role has more than one section (buyer 4, farmer 2; a driver has one, so no bar). Icon plus label, 64px cells, safe-area padding, hidden while a text field has focus so it never rides on the keyboard. Toasts sit above it (`--tabbar-h`). A sideways-scrolling row of tabs is not used: people miss the tabs they cannot see.
 
-### State vocabulary (five tones, `StateBadge`)
-Contracts and delivery jobs move through more states than a simple "settled vs. refused" binary, so state pills get five distinct tones instead of the four-stamp system the paper world used: **gold** (live/pending, ember dot), **info** (`--info` #1d5fd9, assigned/in-progress), **transit** (`--transit` #6d3fc4, en route/picked up), **success** (`--success` #1f8a4c, settled/delivered/paid — distinct from brand `--forest` so "the money landed" reads unambiguously), **stamp/alert** (`--stamp` #c0392b, disputed/declined/cancelled). Faded/expired states drop to `--ink-6` on paper.
+## Phones first (360px is the baseline)
 
-### Neutral
-- **Paper** (`--paper` #f5f8f3): page ground — a soft green-white, not tinted banknote paper.
-- **Paper Deep** (`--paper-deep` #eaf0e6): tint zones, alternating rows, ghost-button hover.
-- **Paper Lift** (`--paper-lift` #ffffff): cards, inputs — true white, literally raised off the green-tinted ground.
-- **The ink ramp** (`--ink-8` #2a3d34 → `--ink-1` #e6ede3): body text and structural neutrals, recalibrated for white cards with a faint green bias. `--ink-6` is the lightest ink permitted on functional small text (the 11px floor rule, unchanged from the prior world).
+Measured in a 360×780 audit of every role. The rules that came out of it:
 
-### Crop Accents (`cropAccent()`, `src/components/engrave.tsx`)
-Every commodity carries its own `{ wash, ink }` pair instead of one uniform green, used for card media wells and filter category chips — never for dense ledger rows, which stay in the neutral ink ramp for scannability:
+- **Lead with the task.** On a phone, a page reads in the order the person acts: the farmer's offers to answer, then totals, the form, sales, payouts, and settings last; the driver's jobs before vehicle and routes. Desktop columns are flattened with `contents` and `order-*` so the desktop layout is untouched.
+- **No tables on phones.** Below `sm`, a table becomes a list of cards or rows: the one number that matters, a status chip, and a tap target to the detail. Tables return from `sm` up. Short reference tables (three columns or fewer) become lists at every size.
+- **No scroll boxes inside the page** on phones (the driver's routes are two columns instead).
+- **Dialogs are bottom sheets on phones**: pinned to the bottom, rising in, scrolling when tall. Centred from `sm` up.
+- **Hand links to the phone.** Where a link is meant to be passed on (the QR record), use the share sheet (`navigator.share`) on touch devices and copy elsewhere.
+- **Keyboards**: money and quantities `inputMode="decimal"`, phones `type="tel" autoComplete="tel"`, search `enterKeyHint="search"`. The viewport sets `interactive-widget=resizes-content` so the layout shrinks above the keyboard (Chrome, Firefox).
+- **Data costs money.** The sign-in library loads only when someone has a saved login or signs in (`getSupabase()`), so the landing page, QR record and phone simulator skip it. The app's main script is about 100 KB gzipped; keep a page's own code under about 20 KB.
+- **Words, not codes**: "500 kg maize", "Broken kernels", never `MAIZE` or `broken_kernels`.
+- **Footer**: live lot count, the "payments are simulated" note, and the language switcher.
+- **Landing** (`/`): header with plain section links; a hero with one sentence of promise, one paragraph, a primary button and a text link to the phone simulator, beside a photo with the real USSD menu; "How a sale works" told as one numbered example (Ama near Garu, labelled as an example); "Who it is for" as ruled rows, not cards; a short plain "why" on the dark field; the language list from the live registry; a quiet footer.
+- **Login**: split screen. Story panel on the left (desktop only), form on the right. `?mode=signup` opens Create account.
+- Content width 1400px (portal), 1100–1280px (landing).
 
-| Crop | Wash | Ink |
-|---|---|---|
-| Maize | `#fdf1d3` | `#a3690c` |
-| Tomato | `#ffe1da` | `#c8482d` |
-| Yam | `#f5e3d1` | `#96602c` |
-| Rice | `#f7ecd4` | `#a8862c` |
-| Groundnut | `#f2e0cd` | `#8a5a34` |
-| Pepper | `#fde1e1` | `#c23434` |
-| Onion | `#f4e2f2` | `#8a3f82` |
-| Plantain | `#eef4d3` | `#6d8a1f` |
+## Components (`src/components/ui.tsx`)
 
-A commodity outside this table falls back to `forest-wash` / `forest`. Adding a crop to the registry should add it here too.
+- **Buttons**: `btnCls` (forest pill) and `btnGhostCls` (outlined pill). Both sink to 97% on press. Every clickable thing is a pill. A button waiting on the network keeps its label, shows a spinner and sets `aria-busy`; only the pressed row shows it, and a busy button never fades. The smaller shared controls (`pillCls`, `quietBtnCls`, `iconBtnCls`, `backLinkCls`, `textLinkCls`, `rowLinkCls`, `choiceCls`) live in the same file; reuse them instead of writing a new class string.
+- **Card** (`.certificate`): 20px radius, warm soft shadow. A title with " — " splits into a serif title and a small subtitle.
+- **Greeting**: "Good afternoon, Prince" as the page heading and one sentence that leads with what is waiting (an offer to answer, a job on the road). Every home screen starts with it.
+- **EmptyState**: icon in a green circle, a serif line, one sentence, at most one action. Never a bare "No data".
+- **Skeleton**: shimmering bars in place of "Loading…".
+- **toast(message)**: confirms an action ("Your maize is on the market"). Mounted once as `<Toaster />` in `main.tsx`.
+- **ErrorStamp**: a rounded red-wash notice with a dismiss cross.
+- **Not found**: unknown links land on a friendly page with the way back.
 
-### Crop Photography (`cropPhoto()`, D-043)
-Each commodity also has a real, self-hosted representative photo (`public/images/crops/`, credited in `public/images/CREDITS.md`) — pure iconography on filter chips and farmer-dashboard thumbnails, but on a **Marketplace lot card** it stands in only when a lot has no seller-submitted photo, and always carries a "Representative photo" label overlaid on the image. It is never used on `PublicTrace.tsx` (the public chain-of-custody page), where a stock photo would read as verified evidence rather than illustration — that surface keeps the `cropAccent()` icon-only treatment.
+## Words
 
-### Named Rules
-**The Brand-Green Rule.** `--forest` is reserved for the masthead, primary actions, and positive/live/done states. It is never diluted into the neutral ink ramp and never used for a merely-decorative fill.
+Write for a farmer reading in their second language:
 
-**The Produce-Color Rule.** A commodity's own accent (wash + ink) applies to hero media wells and category icon chips — the surfaces where "what is this" matters at a glance. Dense list/table rows keep neutral `--ink-7` icons so a ledger of many rows stays calm and scannable, not a wall of clashing color.
+- Say what happens, not the system's name for it: "Offers waiting for you", not "Incoming Bids"; "held for you", not "escrow hold"; "Ready now", not "Same-day".
+- No raw codes on screen (`UPPER_EAST` → "Upper East"), no decision numbers, no Title Case on buttons ("Place a bid").
+- Count words agree with their number ("1 offer", "2 offers").
+- New strings go through `t('web.<page>.<name>', 'English')` (D-050) so they can be translated.
 
-**The Gold-Ink Rule.** Gold text at small sizes on tinted washes is set in `--gold-ink`, never raw `--gold`. Raw `--gold` is reserved for money figures, carets, focus rings, and accent flourishes.
+## Accessibility and interaction floors (WCAG 2.2 AA)
 
-## Typography
+Measured, not assumed. Ratios below are computed against the actual tokens.
 
-**Face:** Hanken Grotesk, one variable file (weight 400–800), self-hosted woff2, no network fonts.
+- **Contrast.** Body and label text at least 4.5:1, large text (24px+, or 18.66px bold) at least 3:1, control borders and focus rings at least 3:1. Brand green `--forest` #147f44 gives white button text 4.78:1. On the dark field, gold text uses `--gold-bright` #e8953f (5.15:1); plain `--gold` there is only 3.95:1. Input borders use `--field-border` #80857b (3.57:1 on cards). Placeholders are #6b7369 (4.6:1). `--success` #18753f and `--info` #1a55c4 pass on their washes.
+- **Focus.** One global `:focus-visible` ring: 2px `--forest-night` with a 2px offset on light grounds, `--gold-bright` inside `.plate`/`.on-dark`. Never `outline-none` on a control. `scroll-padding-top: 96px` keeps focused things out from under the sticky header (2.4.11).
+- **Skip link.** `<SkipLink />` is the first element on every page shell; each `<main>` has `id="main" tabIndex={-1}`.
+- **Targets.** 44px minimum on phones (`min-h-11`), 24px absolute minimum anywhere (2.5.8). Icon-only buttons carry an `aria-label`.
+- **Live regions.** One polite live region (the Toaster); toasts inside it are plain elements so each is announced once.
+- **Dialogs.** `Modal`/`useDialog`: focus moves in, Tab is trapped, Escape closes, focus returns to the opener, the page behind does not scroll (`overscroll-contain`), and a click on the veil closes it.
+- **User settings honoured.** `prefers-reduced-motion` (every animation has an off switch), `prefers-contrast: more` (darker inks and borders), `forced-colors` (shapes keep borders, focus uses `Highlight`).
+- **Touch.** `touch-action: manipulation` (no double-tap-zoom delay), no grey tap flash, 16px inputs on phones so iOS never zooms, `viewport-fit=cover` with `env(safe-area-inset-*)` for toasts.
+- **State in the URL.** Marketplace filters and sort live in the query string (`?crop=MAIZE&grade=A&km=300&type=perishable&sort=nearest`), so refresh, Back and shared links keep the view.
+- **Small polish.** The sticky header grows a hairline shadow only when content scrolls under it. Skeletons appear only after 150ms so fast loads never flash. Photos show a cream block while loading. Sideways-scrolling rows fade at the edge. Printing gives a clean page with no chrome.
 
-**Character:** One confident grotesque doing every job — mastheads, body copy, money, labels — differentiated by weight and tracking rather than a family switch. `font-variant-numeric: tabular-nums` is set globally so money and counts always align.
+## Motion
 
-### Hierarchy
-- **Display** (`.display`, weight 800, tracking -0.01em): mastheads, plate headers, page titles, big brand moments.
-- **Body** (weight 400/600, 14px): document text, table cells, form controls. Secondary prose drops to 12–13px in `--ink-6`.
-- **Serial** (`.serial`, tabular figures, weight 600): money, lot codes, timestamps, phone numbers, distances. Large money is 24px bold in `--gold-deep`.
-- **Label** (`.smallcaps`, weight 700, 11px, tracking 0.08em, uppercase): column heads, field labels, nav items, captions.
+Three durations and two curves, set in `index.css` `:root`. Use them instead of Tailwind's numbered durations.
 
-### Named Rules
-**The 11px Floor Rule.** Functional text never drops below 11px, and `--ink-6` is the lightest ink permitted on functional small text and placeholders — unchanged from the prior world; still sunlight-legibility-driven and still detector-enforced.
+| Token | Value | Used for |
+| --- | --- | --- |
+| `--dur-fast` | 120ms | the default for any `transition-*` class: hover colour, press sink |
+| `--dur-base` | 200ms | segmented items, the dialog veil, toast exit |
+| `--dur-slow` | 320ms | the sliding pill, dialog and drawer entrance, toast entrance, confirmations |
+| `--ease-out` | `cubic-bezier(0.16,1,0.3,1)` | everything that arrives or answers a touch |
+| `--ease-in-out` | `cubic-bezier(0.65,0,0.35,1)` | things that move from one place to another on screen |
 
-## Layout
+- **Sliding pill** (`SlidingPillGroup`): the highlight slides to the new choice while the content swaps at once. Used for the main nav, Login tabs, Browse/Pool, the phone persona switch and the pool crop filter. It does not slide on first paint.
+- **Arrivals**: dialogs grow from the top, the Voice & SMS drawer slides in from the right, toasts grow from the bottom. Confirmation cards (offer, match, payout) rise 6px and fade in. Only the grade badge keeps a stamp.
+- **Live**: the ember pulse marks something happening now (recording, live matching). Static content never pulses.
+- **Nothing shifts**: hover, focus and selection change colour or a ring, never border width, font weight or size. Wave bars animate `scaleY`, not height.
+- Every keyframe sits in one section of `index.css`, and one `prefers-reduced-motion` block switches them all off.
 
-A centered document sheet, unchanged in structure from the prior world: content capped at **1400px**, main content padded 24px. The masthead is a solid forest-green plate in two bands — an identity row (F2M seal, wordmark, search, verified-identity chip, language legend) and a nav strip below a 3px gold accent line, with gold-underlined active tabs.
+## Don't
 
-The marketplace composes as a **filter sidebar + card grid**: a 208px (`w-52`) left aside of grouped filters (crop-type checkboxes now carry a colored icon chip per commodity), and a responsive card grid — 1 column on phones, 2 at `md`, 3 at `xl`, 16px gaps. Responsive behavior is parity, not degradation: on phones the filter sidebar folds behind a "Filters" summary toggle; wide tables scroll inside their own frame rather than the page.
-
-## Elevation & Depth
-
-**Real cast shadows**, the clearest reversal of the paper world's "depth is printed" rule: `.certificate` cards carry a soft two-layer shadow (`0 1px 2px rgba(22,36,30,.05), 0 12px 28px -14px rgba(22,36,30,.18)`) and a 20px radius. Buttons and filter chips carry a light `shadow-sm`. Modal scrims stay ink at 70% opacity.
-
-## Shapes
-
-Rounded, not square. Three radius steps: **control** (8–12px: inputs, small row chips), **card** (20px: `.certificate`), **pill** (`rounded-full`: every button — primary, ghost, segmented controls, the call-to-negotiate action, category icon chips, the small brand accent bar). Full circles remain reserved for seals, grade badges, avatars, and crop-icon chips.
-
-### Named Rules
-**The Pill Rule.** Every clickable action — primary, ghost, or segmented — is `rounded-full`. Structural containers (cards, panels) use the 20px card radius. Nothing in between; a stray `rounded-lg`/`rounded-xl` control reads as a regression to the retired world, not a new intentional step.
-
-## Components
-
-Component APIs live in `src/components/ui.tsx`; pages own layout only. Icons live in `src/components/engrave.tsx`.
-
-### Buttons
-- **Primary** (`btnCls`): solid `--forest`, pill radius, `shadow-sm`, white text; hover deepens to `--forest-deep`; disabled 40% opacity.
-- **Ghost** (`btnGhostCls`): pill radius, 1px `--ink-5` border, ink text; hover tints `--paper-deep`.
-- **Call-to-negotiate** (channel lots): pill, oxide-red bordered, red text, phone glyph + typed number.
-- **Focus:** global `:focus-visible` — 2px `--gold` outline, 1px offset.
-
-### Cards / Containers
-- **The Certificate** (`.certificate`, `Card`): white interior, 20px radius, soft cast shadow, thin `--ink-1` border. `Card` titles are smallcaps `--ink-6` over a hairline rule. Market lot cards compose: crop-accented media well (real photo, or the crop's own wash + line icon) with grade seal and ready-date pill overlaid, subject line, ruled value line (serial-bold gold money), then a ghost "View Trace" + primary "Place Bid" pill pair.
-- **The Plate** (`.plate`): solid forest field with white text — masthead, modal and payout headers.
-
-### Inputs / Fields
-- **Style** (`inputCls`): 1px `--ink-3` border on white, 12px radius, 14px ink text; caret gold.
-- **Search fields** (masthead, filter): pill radius, not the 12px control radius — a search box is closer to a button in affordance.
-- **Field:** every input labeled by a smallcaps `--ink-6` caption above it.
-
-### State Stamps (`StateBadge`, `.stamp`)
-- Pill-radius chip, bold uppercase 11px, wash background per the five-tone state vocabulary above. Live states carry a 6px `ember`-pulsing dot.
-
-### Grade Seals (`GradeBadge`)
-- 24px filled circle (not an outline ring): A = `--forest`, B = `--gold-deep`, C = `--stamp`, REJECT = `--ink`, white letter, `shadow-sm`. A small stamp of color, legible at a glance across a whole grid of cards.
-
-### Crop & Category Icons
-- Filter-sidebar rows and hero media wells wrap the existing line-art `CropMark` in a `cropAccent()`-colored circle/panel (wash background, ink-colored stroke via `currentColor`). Dense ledger rows (Orders, Contracts, Prices tables) keep the icon in neutral `--ink-7` — color is reserved for surfaces where identifying the crop at a glance is the point.
-
-### Ledger Tables (`tableCls` family)
-- Unchanged from the prior world: smallcaps `--ink-6` column heads over a hairline rule, 12×10px cells, numerics in `.serial`. Selectable rows: on = `--gold-wash` + semibold ink, off = `--ink-6` with `--paper-deep` hover.
-
-### The Engraving Plate (icon system, `engrave.tsx`)
-Unchanged: 24-unit viewBox line art, `stroke="currentColor"`, strokeWidth 1.4, `fill="none"`. **CropMark** (8 crop vignettes, now paired with `cropAccent()` for color), **VehicleMark**, **Glyph** (document glyphs), **Rosette**/**F2MSeal**. No emoji, no icon fonts.
-
-### The Route Spine (`RouteSpine`, `ContractDetail`'s stepper)
-Six stations (Register → Match → Contract → Grade → Pay → Trace): done legs and stations are solid `--forest` (was `--ink`) — a completed step reads as a positive green checkmark, not a neutral mark; the active station burns a gold `ember` ring; pending stays `--ink-2`/`--ink-3`.
-
-### Motion
-Unchanged three families, all `prefers-reduced-motion`-guarded: **seal-land** (a confirmation lands with scale-overshoot), **route-ink** (spine legs draw themselves in), **ember** (damped gold pulse on live states).
-
-## Do's and Don'ts
-
-### Do:
-- **Do** use `--forest` for the masthead, every primary action, and positive/done/live states — and only those.
-- **Do** give every commodity its own `cropAccent()` wash+ink on hero media wells and category chips; keep dense table rows neutral.
-- **Do** make every clickable action `rounded-full`; keep structural containers at the 20px card radius.
-- **Do** set money and counts in `.serial` (tabular figures); large money is serial bold `--gold-deep`.
-- **Do** render seller/place identity through the `sellerName()` / `placeName()` guards in `src/api.ts`.
-- **Do** keep Hanken Grotesk self-hosted from `public/fonts` with a real fallback stack.
-
-### Don't:
-- **Don't** reintroduce the retired paper world's square corners, printed-only depth, or Cinzel/Courier Prime multi-font voice — that world is evidence of what this product isn't, not a fallback to blend with.
-- **Don't** fill a primary action or a positive/done state with neutral `--ink` — that reads as the retired world's flat charcoal, not this one's brand green.
-- **Don't** color every small inline icon in a dense list — crop color is for hero surfaces, not ledger noise.
-- **Don't** set functional text below 11px or lighter than `--ink-6`.
-- **Don't** use emoji, icon fonts, or filled glyphs — new icons are drawn on the existing engraved plate at stroke 1.4.
-- **Don't** add a fourth motion family or any animation that ignores `prefers-reduced-motion`.
+- Don't use the reference's aubergine or coral, or its artwork.
+- Don't fill a primary action with ink; actions are forest.
+- Don't repeat a formula: no italic accent outside the landing hero, no kicker label over every heading, no scroll-triggered fade on every section, no word ticker, no giant watermark text, no grid of identical feature cards with three ticks each.
+- Don't write slogans. "Every harvest deserves a market" says nothing; "Dial *384*7247# from any phone" says what to do. Prefer concrete places, numbers and steps.
+- Don't use em dashes, "not X but Y", or lists of three by habit in visible copy.
+- Don't drop functional text below 11px or lighter than `--ink-6`.
+- Don't use emoji or icon fonts; icons are the line-drawn set in `engrave.tsx`.

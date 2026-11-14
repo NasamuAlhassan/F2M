@@ -8,10 +8,13 @@ export {
   LOT_EVENT_TYPES,
   type DeliveryJob,
   type DeliveryJobOffer,
+  type Offer,
+  type OfferEvent,
   type DeliveryJobState,
   type Driver,
   type VehicleClass,
   type VoiceCall,
+  type Account,
   type Buyer,
   type Commodity,
   type Contract,
@@ -38,7 +41,9 @@ export { DomainError, notFound } from './domain/errors';
 export { appendLotEvent, getTrace, type DbLike, type LotEventInput, type TraceEvent } from './domain/trace';
 export * from './domain/registries';
 export * from './domain/farmers';
-export * from './domain/farmerAuth';
+export * from './domain/accounts';
+export { carrierCallbackUrl, carrierRequestAllowed } from './domain/carrier';
+export { verifyAccessToken, setTokenVerifier, type TokenVerifier, type VerifiedLogin } from './auth/tokens';
 export * from './domain/lots';
 export * from './domain/demands';
 export * from './domain/buyers';
@@ -48,13 +53,24 @@ export * from './domain/matching';
 export * from './domain/geo';
 export * from './domain/ledger';
 export * from './domain/paymentFlow';
+export * from './domain/settlement';
+export * from './domain/deals';
 export * from './domain/photos';
 export * from './domain/gradingFlow';
 export * from './domain/marketPrices';
+export * from './domain/priceIntel';
+export * from './domain/priceFeeds';
+export * from './domain/events';
+export * from './domain/alerts';
+export * from './domain/supply';
+export * from './domain/aiAssist';
+export { setLlmProvider, getLlmProvider, llmEnabled, scrubPii, AnthropicLlmProvider, LlmError, type LlmProvider, type LlmRequest } from './providers/llm/index';
 export * from './domain/notifications';
 export * from './domain/buyerNotifications';
 export * from './domain/voiceCalls';
 export * from './domain/voiceListings';
+export * from './domain/voiceParse';
+export * from './domain/offers';
 export * from './providers/voice/index';
 export * from './domain/drivers';
 export * from './domain/logistics';
@@ -62,7 +78,7 @@ export { transitionJob, type JobActor, type JobTransitionExtra } from './state/d
 export * from './providers/asr/index';
 export * from './providers/mt/index';
 export * from './providers/tts/index';
-export { LOCALE_TO_KHAYA, khayaLang } from './providers/khaya';
+export { LOCALE_TO_SPACE, spaceLang, spaceCall } from './providers/space';
 export * from './providers/notify/index';
 export * from './providers/payment/index';
 export * from './providers/grading/index';
@@ -77,7 +93,8 @@ export {
   isLocaleLive,
   liveLocales,
   speechLocale,
+  webMessages,
   setDraftLocalesLive,
   type I18nText,
 } from './i18n';
-export { seed, DEMO_BUYER } from './db/seed';
+export { seed } from './db/seed';

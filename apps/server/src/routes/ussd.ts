@@ -1,3 +1,4 @@
+import { carrierRequestAllowed } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { handleUssdRequest } from '../ussd/index';
@@ -14,6 +15,11 @@ const ussdBodySchema = z.object({
 
 export async function ussdRoutes(app: FastifyInstance): Promise<void> {
   app.post('/ussd', async (req, reply) => {
+    // The phone number below is whatever the caller claims; only the carrier
+    // (or, while it is on, the simulator) may make that claim (D-047).
+    if (!carrierRequestAllowed((req.query as { token?: unknown }).token)) {
+      return reply.code(403).type('text/plain').send('END Unknown caller.');
+    }
     const body = ussdBodySchema.parse(req.body);
     let response: string;
     try {

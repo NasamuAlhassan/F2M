@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <!-- The F2M seal as a tab mark: intaglio-green disc, paper rosette (D-039 tokens). -->
-  <circle cx="24" cy="24" r="24" fill="#14322b"/>
+  <!-- The F2M seal as a tab mark: deep-green disc, cream rosette (D-048 tokens). -->
+  <circle cx="24" cy="24" r="24" fill="#0c3d24"/>
   <g fill="none" stroke="#efebdd">
     <circle cx="24" cy="24" r="20.5" stroke-width="1.6"/>
     <circle cx="24" cy="24" r="17.5" stroke-width="0.8"/>

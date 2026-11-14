@@ -2,9 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { api, dateTime, ghs, type JobView, type Registries } from '../api';
 import { POLL } from '../poll';
-import { CropMark, VehicleMark } from '../components/engrave';
+import { CropMark, Glyph, VehicleMark } from '../components/engrave';
 import { LanguageSection } from '../components/LanguageSection';
-import { btnCls, btnGhostCls, Card, ErrorStamp, LoadGate, numCls, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, btnGhostCls, BusyLabel, Card, choiceCls, Spinner, EmptyState, ErrorStamp, Greeting, LoadGate, numCls, greetingFor, rowOffCls, rowOnCls, Stat, StateBadge, tableCls, TableScroll, tdCls, thCls, toast, pillCls } from '../components/ui';
+import { Link } from 'react-router-dom';
+import { useT } from '../lib/i18n';
+import { useAccount } from '../lib/session';
 
 interface OfferView extends JobView {
   jobId: string;
@@ -24,13 +27,12 @@ interface DriverProfile {
 /** The sidebar's own footprint while the profile loads — the board must not jump. */
 function ProfileSkeleton() {
   return (
-    <aside className="w-full flex-shrink-0 lg:w-72" aria-busy="true" aria-label="Loading driver profile">
+    <aside className="order-last w-full flex-shrink-0 lg:order-none lg:w-72" aria-busy="true" aria-label="Loading driver profile">
       <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
         <div className="plate h-[68px]" />
-        <div className="h-[3px] w-full bg-[var(--gold)]" />
-        <div className="animate-pulse space-y-3 p-5">
+        <div className="space-y-3 p-5">
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-9 rounded-lg bg-[var(--paper-deep)]" />
+            <div key={i} className="skeleton h-9 rounded-lg" />
           ))}
         </div>
       </div>
@@ -41,6 +43,7 @@ function ProfileSkeleton() {
 /** The driver's book: identity, availability lever, vehicle, route checklist. */
 function ProfileSidebar() {
   const queryClient = useQueryClient();
+  const { t } = useT();
   const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
   const { data } = useQuery({
     queryKey: ['driver-profile'],
@@ -88,16 +91,15 @@ function ProfileSidebar() {
   const vehicleClasses = registries?.vehicleClasses ?? [];
 
   return (
-    <aside className="w-full flex-shrink-0 lg:w-72">
+    <aside className="order-last w-full flex-shrink-0 lg:order-none lg:w-72" aria-label={t('web.driver.settings', 'Your vehicle and routes')}>
       <div className="certificate overflow-hidden bg-[var(--paper-lift)]">
         <div className="plate flex items-center gap-3 px-5 py-4">
           <VehicleMark code={profile.vehicleClassCode} className="h-9 w-9 flex-shrink-0 text-[var(--paper)]" />
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-[var(--paper)]">{profile.name}</p>
-            <p className="serial text-[11px] text-[var(--ink-3)]">{profile.phone}</p>
+            <p className="serial text-[11px] text-[var(--ink-2)]">{profile.phone}</p>
           </div>
         </div>
-        <div className="h-[3px] w-full bg-[var(--gold)]" />
 
         <div className="space-y-5 p-5">
           <div className="flex items-center justify-between">
@@ -111,15 +113,16 @@ function ProfileSidebar() {
               role="switch"
               aria-checked={profile.active}
               aria-label="Toggle availability"
-              className={`relative h-7 rounded-full border transition-colors disabled:opacity-40 ${
-                profile.active ? 'border-[var(--forest)] bg-[var(--forest)]' : 'border-[var(--ink-4)] bg-[var(--paper)]'
+              className={`relative h-7 rounded-full border transition-[background-color,border-color,scale] before:absolute before:-inset-x-1 before:-inset-y-2 active:scale-[0.97] ${
+                profile.active ? 'border-[var(--forest)] bg-[var(--forest)]' : 'border-[var(--ink-4)] bg-[var(--paper)] hover:border-[var(--ink-6)]'
               }`}
               style={{ width: 52 }}
               disabled={save.isPending}
+              aria-busy={(save.isPending && save.variables?.active !== undefined) || undefined}
               onClick={() => save.mutate({ active: !profile.active })}
             >
               <span
-                className={`absolute left-1 top-[3px] h-5 w-5 rounded-full transition-[transform,background-color] ${
+                className={`absolute left-1 top-[3px] h-5 w-5 rounded-full transition-[transform,background-color] duration-[var(--dur-base)] ${
                   profile.active ? 'bg-[var(--gold)]' : 'bg-[var(--ink-4)]'
                 }`}
                 style={{ transform: profile.active ? 'translateX(23px)' : 'translateX(0)' }}
@@ -136,10 +139,9 @@ function ProfileSidebar() {
                   <button
                     key={v.code}
                     aria-pressed={on}
-                    className={`flex w-full items-center gap-3 border px-3 py-2 text-left transition-colors disabled:opacity-40 ${
-                      on ? 'border-[var(--ink)] bg-[var(--gold-wash)]' : 'border-[var(--ink-2)] hover:border-[var(--ink-5)]'
-                    }`}
+                    className={`${choiceCls(on)} ${save.isPending ? 'cursor-wait' : ''}`}
                     disabled={save.isPending}
+                    aria-busy={(save.isPending && save.variables?.vehicleClassCode === v.code) || undefined}
                     onClick={() => save.mutate({ vehicleClassCode: v.code })}
                   >
                     <VehicleMark code={v.code} className="h-8 w-8 flex-shrink-0 text-[var(--ink)]" />
@@ -149,7 +151,11 @@ function ProfileSidebar() {
                         ≤{v.capacityKg}kg · {ghs(v.baseFee)} + {ghs(v.perKmRate)}/km
                       </span>
                     </span>
-                    {on && <span className="serial text-sm font-bold text-[var(--ink)]">✓</span>}
+                    {save.isPending && save.variables?.vehicleClassCode === v.code ? (
+                      <Spinner className="h-4 w-4 text-[var(--ink-6)]" />
+                    ) : (
+                      on && <span className="serial text-sm font-bold text-[var(--ink)]">✓</span>
+                    )}
                   </button>
                 );
               })}
@@ -161,19 +167,19 @@ function ProfileSidebar() {
               Regional Routes
               <span className="serial text-[var(--gold-deep)]">{routes.length || 'all'}</span>
             </p>
-            <div className="max-h-52 space-y-0.5 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-0.5 lg:block lg:max-h-52 lg:space-y-0.5 lg:overflow-y-auto lg:pr-1">
               {(registries?.regions ?? []).map((r) => {
                 const on = routes.includes(r.code);
                 return (
                   <label
                     key={r.code}
-                    className={`flex items-center gap-2 px-2 py-1.5 text-sm transition-colors ${
-                      save.isPending ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                    className={`flex min-h-11 items-center gap-2 rounded-xl px-2 py-1.5 text-sm transition-colors lg:min-h-9 ${
+                      save.isPending ? 'cursor-wait' : ''
                     } ${on ? rowOnCls : rowOffCls}`}
                   >
                     <input
                       type="checkbox"
-                      className="h-3.5 w-3.5 accent-[var(--ink)]"
+                      className="h-5 w-5 flex-shrink-0 accent-[var(--ink)] lg:h-3.5 lg:w-3.5"
                       checked={on}
                       disabled={save.isPending}
                       onChange={() => {
@@ -201,7 +207,7 @@ function ProfileSidebar() {
 }
 
 /** Waybill row: crop vignette, serial, typed figures. */
-function JobStats({ job }: { job: JobView }) {
+function JobStats({ job, crop }: { job: JobView; crop: string }) {
   return (
     <>
       <span className="hatch flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg">
@@ -209,7 +215,7 @@ function JobStats({ job }: { job: JobView }) {
       </span>
       <div className="w-24 min-w-0">
         <p className="serial truncate text-xs font-bold text-[var(--ink)]">{job.jobCode}</p>
-        <p className="smallcaps text-[var(--ink-6)]">{job.commodityCode}</p>
+        <p className="truncate text-xs text-[var(--ink-6)]">{crop}</p>
       </div>
       <Stat value={`${job.quantityKg} kg`} caption="cargo" />
       <Stat value={`${job.distanceKm} km`} caption="distance" />
@@ -220,11 +226,16 @@ function JobStats({ job }: { job: JobView }) {
 
 export function DriverJobsPage() {
   const queryClient = useQueryClient();
-  const { data, isError, refetch } = useQuery({
+  const { t } = useT();
+  const { account } = useAccount();
+  const { data, isError, isFetching, refetch } = useQuery({
     queryKey: ['driver-jobs'],
     queryFn: () => api<{ offers: OfferView[]; openRequests: JobView[]; jobs: JobView[] }>('/api/driver/jobs'),
     refetchInterval: POLL.active,
   });
+  const { data: registries } = useQuery({ queryKey: ['registries'], queryFn: () => api<Registries>('/api/registries') });
+  const cropName = (code: string): string =>
+    registries?.commodities.find((c) => c.code === code)?.name ?? code.charAt(0) + code.slice(1).toLowerCase().replace(/_/g, ' ');
   const [error, setError] = useState<string | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['driver-jobs'] });
   const onError = (err: unknown) => setError(err instanceof Error ? err.message : 'Action failed');
@@ -233,24 +244,30 @@ export function DriverJobsPage() {
     // /api/jobs/:id/* is split between roles — accept, decline and pickup are
     // the driver's, while deliver and retry-dispatch belong to the buyer — so
     // the path cannot imply the identity and these three name it outright.
-    mutationFn: (id: string) => api(`/api/jobs/${id}/accept`, { method: 'POST', role: 'driver' }),
-    onSuccess: invalidate,
+    mutationFn: (id: string) => api(`/api/jobs/${id}/accept`, { method: 'POST' }),
+    onSuccess: () => {
+      toast(t('web.driver.acceptedToast', 'Job accepted. The fee is locked in for you before you load.'));
+      return invalidate();
+    },
     onError,
   });
   const decline = useMutation({
-    mutationFn: (id: string) => api(`/api/jobs/${id}/decline`, { method: 'POST', role: 'driver' }),
+    mutationFn: (id: string) => api(`/api/jobs/${id}/decline`, { method: 'POST' }),
     onSuccess: invalidate,
     onError,
   });
   const pickup = useMutation({
-    mutationFn: (id: string) => api(`/api/jobs/${id}/pickup`, { method: 'POST', role: 'driver' }),
-    onSuccess: invalidate,
+    mutationFn: (id: string) => api(`/api/jobs/${id}/pickup`, { method: 'POST' }),
+    onSuccess: () => {
+      toast(t('web.driver.loadedToast', 'Marked as loaded. We have told the buyer you are on the way.'));
+      return invalidate();
+    },
     onError,
   });
 
   // Gated on !data, not isError: once offers are on screen a failed poll must
   // not blank the board — the next tick retries on its own.
-  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="the dispatch board" />;
+  if (!data) return <LoadGate isError={isError} retrying={isFetching} onRetry={() => void refetch()} label="the dispatch board" />;
   const active = data.jobs.filter((j) => ['ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'DELIVERED'].includes(j.state));
   const history = data.jobs.filter((j) => !active.some((a) => a.id === j.id));
 
@@ -259,35 +276,58 @@ export function DriverJobsPage() {
       <ProfileSidebar />
 
       <div className="min-w-0 flex-1">
-        <div className="mb-4">
-          <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">Dispatch Board</h1>
-          <p className="mt-1 text-sm text-[var(--ink-6)]">
-            Escrowed pickups on your routes — the fee is locked before you load and released when the buyer confirms
-            delivery
-          </p>
-        </div>
+        <Greeting
+          greeting={greetingFor(t)}
+          name={account?.name ?? ''}
+          summary={
+            data.offers.length > 0
+              ? data.offers.length === 1
+                ? t('web.driver.summaryOffer', 'A pickup on your routes is waiting for your answer.')
+                : t('web.driver.summaryOffers', '{n} pickups on your routes are waiting for your answer.', { n: data.offers.length })
+              : active.length > 0
+                ? t('web.driver.summaryActive', 'You have a job in progress. Your fee is locked in and paid when the buyer confirms delivery.')
+                : t('web.driver.summaryQuiet', 'No pickups waiting right now. We will text you when a load comes up on your routes.')
+          }
+        />
         {error && (
           <ErrorStamp message={error} onDismiss={() => setError(null)} className="mb-4" />
         )}
 
-        <Card title={`Pickup Offers for You (${data.offers.length})`}>
+        <Card title={t('web.driver.offersTitle', 'Pickups offered to you')}>
           {data.offers.length === 0 ? (
-            <p className="text-sm text-[var(--ink-6)]">No offers right now. Offers arrive by SMS and appear here.</p>
+            <EmptyState
+              compact
+              icon={<Glyph name="route" className="h-5 w-5" />}
+              title={t('web.driver.noOffersTitle', 'No pickups offered yet')}
+              body={t('web.driver.noOffersBody', 'When a load on your routes needs a driver, it appears here and we send you an SMS.')}
+            />
           ) : (
             <div className="space-y-3">
               {data.offers.map((o) => (
                 <div key={o.jobId} className="certificate seal-land flex flex-wrap items-center gap-5 bg-[var(--gold-wash)] p-4">
-                  <JobStats job={o} />
+                  <JobStats job={o} crop={cropName(o.commodityCode)} />
                   <div className="min-w-0">
-                    <p className="smallcaps text-[var(--ink-6)]">Expires</p>
+                    <p className="smallcaps text-[var(--ink-6)]">{t('web.driver.expires', 'Answer by')}</p>
                     <p className="serial text-xs font-bold text-[var(--stamp)]">{dateTime(o.expiresAt)}</p>
                   </div>
                   <div className="ml-auto flex gap-2">
-                    <button className={btnCls} onClick={() => accept.mutate(o.jobId)} disabled={accept.isPending}>
-                      Accept Pickup
+                    <button
+                      type="button"
+                      className={btnCls}
+                      onClick={() => accept.mutate(o.jobId)}
+                      disabled={accept.isPending || decline.isPending}
+                      aria-busy={(accept.isPending && accept.variables === o.jobId) || undefined}
+                    >
+                      <BusyLabel busy={accept.isPending && accept.variables === o.jobId} label={t('web.driver.accept', 'Accept pickup')} />
                     </button>
-                    <button className={btnGhostCls} onClick={() => decline.mutate(o.jobId)} disabled={decline.isPending}>
-                      Decline
+                    <button
+                      type="button"
+                      className={btnGhostCls}
+                      onClick={() => decline.mutate(o.jobId)}
+                      disabled={accept.isPending || decline.isPending}
+                      aria-busy={(decline.isPending && decline.variables === o.jobId) || undefined}
+                    >
+                      <BusyLabel busy={decline.isPending && decline.variables === o.jobId} label="Decline" />
                     </button>
                   </div>
                 </div>
@@ -296,25 +336,37 @@ export function DriverJobsPage() {
           )}
         </Card>
 
-        <Card title="Active Job">
+        <Card title={t('web.driver.activeTitle', 'Your job now')}>
           {active.length === 0 ? (
-            <p className="text-sm text-[var(--ink-6)]">No active job.</p>
+            <p className="text-sm text-[var(--ink-6)]">{t('web.driver.noActive', 'Nothing on the road right now.')}</p>
           ) : (
             active.map((j) => (
-              <div key={j.id} className="flex flex-wrap items-center gap-5 border border-[var(--ink-2)] bg-[var(--paper)] p-3.5">
-                <JobStats job={j} />
+              <div key={j.id} className="flex flex-wrap items-center gap-5 rounded-2xl border border-[var(--ink-2)] bg-[var(--paper)] p-4">
+                <JobStats job={j} crop={cropName(j.commodityCode)} />
                 <StateBadge state={j.state} />
+                <Link to={`/deals/${j.contractId}`} className={pillCls}>
+                  {t('web.driver.openJob', 'Open')}
+                </Link>
                 <div className="ml-auto">
                   {j.state === 'FUNDS_HELD' && (
-                    <button className={btnCls} onClick={() => pickup.mutate(j.id)} disabled={pickup.isPending}>
-                      Confirm goods loaded
+                    <button
+                      type="button"
+                      className={btnCls}
+                      onClick={() => pickup.mutate(j.id)}
+                      disabled={pickup.isPending}
+                      aria-busy={(pickup.isPending && pickup.variables === j.id) || undefined}
+                    >
+                      <BusyLabel busy={pickup.isPending && pickup.variables === j.id} label="Confirm goods loaded" />
                     </button>
                   )}
                   {j.state === 'PICKED_UP' && (
-                    <span className="text-sm font-bold text-[var(--gold-deep)]">Awaiting buyer delivery confirmation…</span>
+                    <span className="flex items-center gap-2 text-sm font-semibold text-[var(--gold-deep)]">
+                      <span className="ember inline-block h-2 w-2 rounded-full bg-[var(--gold)]" />
+                      {t('web.driver.awaitingBuyer', 'On the way. Waiting for the buyer to confirm delivery.')}
+                    </span>
                   )}
                   {j.state === 'DELIVERED' && (
-                    <span className="text-sm font-semibold text-[var(--ink-6)]">Payout on the way…</span>
+                    <span className="text-sm font-semibold text-[var(--success)]">{t('web.driver.payoutComing', 'Delivered. Your fee is on its way.')}</span>
                   )}
                 </div>
               </div>
@@ -322,31 +374,55 @@ export function DriverJobsPage() {
           )}
         </Card>
 
-        <Card title="Dispatch Queue — open requests on your routes">
+        <Card title={t('web.driver.queueTitle', 'Coming up — other loads on your routes')}>
           {data.openRequests.length === 0 ? (
-            <p className="text-sm text-[var(--ink-6)]">No other open pickup requests match your vehicle and routes.</p>
+            <p className="text-sm text-[var(--ink-6)]">{t('web.driver.noQueue', 'No other loads waiting on your routes.')}</p>
           ) : (
             <>
               <div className="space-y-2">
                 {data.openRequests.map((j) => (
-                  <div key={j.id} className="flex flex-wrap items-center gap-5 border border-[var(--ink-2)] p-3 opacity-60">
-                    <JobStats job={j} />
-                    <span className="smallcaps ml-auto text-[var(--ink-6)]">queued for dispatch</span>
+                  <div key={j.id} className="flex flex-wrap items-center gap-5 rounded-2xl border border-dashed border-[var(--ink-2)] p-3.5 opacity-75">
+                    <JobStats job={j} crop={cropName(j.commodityCode)} />
+                    <span className="ml-auto text-xs text-[var(--ink-6)]">{t('web.driver.queued', 'offered to the nearest driver first')}</span>
                   </div>
                 ))}
               </div>
               <p className="mt-3 text-[11px] text-[var(--ink-6)]">
-                Dispatch is sequential nearest-first — these reach you automatically if drivers ahead of you decline or
-                time out.
+                {t(
+                  'web.driver.queueExplain',
+                  'Each load goes to the nearest driver first. If they pass, it comes to you automatically.',
+                )}
               </p>
             </>
           )}
         </Card>
 
-        <Card title="History">
+        <Card title={t('web.driver.historyTitle', 'Past jobs')}>
           {history.length === 0 ? (
-            <p className="text-sm text-[var(--ink-6)]">No completed jobs yet.</p>
+            <p className="text-sm text-[var(--ink-6)]">{t('web.driver.noHistory', 'Your finished jobs and fees will be listed here.')}</p>
           ) : (
+            <>
+            <ul className="divide-y divide-[var(--ink-1)] sm:hidden">
+              {history.map((j) => (
+                <li key={j.id} className="flex items-center gap-3 py-3">
+                  <CropMark code={j.commodityCode} className="h-6 w-6 flex-shrink-0 text-[var(--ink-7)]" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-[var(--ink)]">
+                      {j.quantityKg} kg {cropName(j.commodityCode).toLowerCase()}
+                    </div>
+                    <div className="serial mt-0.5 truncate text-[11px] text-[var(--ink-6)]">
+                      {j.jobCode}
+                      {j.paidAt ? ` · ${dateTime(j.paidAt)}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="serial text-sm font-bold text-[var(--gold-deep)]">{ghs(j.quoteAmount)}</span>
+                    <StateBadge state={j.state} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden sm:block">
             <TableScroll minWidth={520}>
             <table className={tableCls}>
               <thead>
@@ -365,7 +441,7 @@ export function DriverJobsPage() {
                     <td className={tdCls}>
                       <span className="flex items-center gap-2">
                         <CropMark code={j.commodityCode} className="h-5 w-5 flex-shrink-0 text-[var(--ink-7)]" />
-                        {j.quantityKg}kg {j.commodityCode}
+                        {j.quantityKg} kg {cropName(j.commodityCode).toLowerCase()}
                       </span>
                     </td>
                     <td className={`${tdCls} ${numCls} font-bold text-[var(--gold-deep)]`}>{ghs(j.quoteAmount)}</td>
@@ -378,6 +454,8 @@ export function DriverJobsPage() {
               </tbody>
             </table>
             </TableScroll>
+            </div>
+            </>
           )}
         </Card>
       </div>

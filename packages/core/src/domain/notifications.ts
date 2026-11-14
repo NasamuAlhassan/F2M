@@ -2,6 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { notifications, type Notification } from '../db/schema';
 import { t } from '../i18n';
+import { publishLive } from './events';
 import { getNotifyProvider } from '../providers/notify/index';
 
 export interface QueueSmsInput {
@@ -19,7 +20,7 @@ export interface QueueSmsInput {
  * catalogs change later. Delivery happens on the sweep.
  */
 export function queueSms(input: QueueSmsInput): Notification {
-  return db
+  const row = db
     .insert(notifications)
     .values({
       phone: input.phone,
@@ -30,6 +31,8 @@ export function queueSms(input: QueueSmsInput): Notification {
     })
     .returning()
     .get();
+  publishLive({ topic: 'notifications', audience: [`phone:${input.phone}`] });
+  return row;
 }
 
 /** Deliver pending outbox entries via the configured provider. Sweep-driven. */

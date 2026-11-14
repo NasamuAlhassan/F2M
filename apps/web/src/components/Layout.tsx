@@ -1,20 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  activeRole,
-  api,
-  dateTime,
-  loginPathFor,
-  rememberTabRole,
-  setToken,
-  type LocaleInfo,
-  type MarketLot,
-  type Me,
-  type Role,
-} from '../api';
+import { Link, NavLink, Outlet, useLocation, useNavigate, useNavigation, useSearchParams } from 'react-router-dom';
+import { api, dateTime, type LocaleInfo, type MarketLot, type Role } from '../api';
+import { useT } from '../lib/i18n';
+import { useLiveUpdates } from '../lib/live';
+import { signOut, useAccount } from '../lib/session';
 import { POLL } from '../poll';
 import { F2MSeal, Glyph } from './engrave';
+import { SkipLink } from './SkipLink';
+import { pillItemCls, SlidingPillGroup } from './SlidingPill';
+import { BusyLabel, hitAreaCls, plateBtnCls, quietBtnCls, textLinkCls } from './ui';
+import { useScrolled } from '../lib/useScrolled';
 
 interface NotificationRow {
   id: string;
@@ -24,30 +20,44 @@ interface NotificationRow {
   createdAt: number;
 }
 
-// The language legend, driven by the server's locale registry (D-040): a
-// language lights up the moment its catalog is reviewed (or the owner's
-// draft-live flag is on); the rest stay visibly present but disabled — the
-// D-029 convention. The buyer product itself remains English.
+// The language switch, driven by the server's locale registry (D-040): a live
+// language can be picked for these screens (D-050); the rest stay visibly
+// present but disabled — the D-029 convention.
 function LangLegend() {
+  const { code, setCode, t } = useT();
   const { data } = useQuery({
     queryKey: ['locales'],
     queryFn: () => api<{ locales: LocaleInfo[] }>('/api/i18n/locales'),
     staleTime: 60_000,
   });
   return (
-    <div className="hidden items-center gap-3 lg:flex">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1" role="group" aria-label={t('web.language.switch', 'Language')}>
       {(data?.locales ?? [{ code: 'en', label: 'English', endonym: 'English', reviewed: true, live: true }]).map((l) =>
         l.live ? (
-          <span key={l.code} className="smallcaps border-b-2 border-[var(--gold)] pb-0.5 text-[var(--paper)]">
-            {l.label}
-          </span>
+          <button
+            key={l.code}
+            type="button"
+            aria-pressed={code === l.code}
+            onClick={() => setCode(l.code)}
+            className={`smallcaps inline-flex min-h-11 items-center underline decoration-2 underline-offset-[6px] transition-[color,text-decoration-color] active:opacity-70 lg:min-h-8 ${
+              code === l.code
+                ? 'text-[var(--ink)] decoration-[var(--gold)]'
+                : 'text-[var(--ink-6)] decoration-transparent hover:text-[var(--ink)] hover:decoration-[var(--ink-3)]'
+            }`}
+          >
+            {l.endonym}
+          </button>
         ) : (
+          // Not switched on: dimmed and dotted so it can't be mistaken for an
+          // unselected language, and the reason is read out, not only hovered.
           <span
             key={l.code}
-            className="smallcaps cursor-not-allowed text-[var(--ink-4)]"
-            title="Machine-drafted only — awaiting native-speaker review (Khaya AI)"
+            aria-disabled="true"
+            className="smallcaps cursor-not-allowed text-[var(--ink-6)] underline decoration-dotted underline-offset-4 opacity-50"
+            title={t('web.language.lockedHint', 'Not switched on yet. It is waiting for a native speaker to check it.')}
           >
             {l.label}
+            <span className="sr-only"> {t('web.language.lockedShort', '(not switched on yet)')}</span>
           </span>
         ),
       )}
@@ -57,6 +67,7 @@ function LangLegend() {
 
 /** The engine's alerts, filed like incoming correspondence. */
 function NotificationBell() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -92,32 +103,36 @@ function NotificationBell() {
       <button
         aria-expanded={open}
         aria-haspopup="true"
-        className={`smallcaps flex min-h-11 items-center gap-1.5 transition-colors lg:min-h-0 ${
-          open ? 'text-[var(--paper)]' : 'text-[var(--ink-3)] hover:text-[var(--paper)]'
+        aria-label={`Alerts${unread > 0 ? `, ${unread} unread` : ''}`}
+        className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full border transition-[background-color,color,scale] active:scale-[0.97] lg:h-10 lg:w-10 ${
+          open
+            ? 'border-[var(--forest-night)] bg-[var(--forest-night)] text-[var(--paper-lift)]'
+            : 'border-[var(--ink-2)] bg-[var(--paper-lift)] text-[var(--ink-7)] hover:bg-[var(--paper-deep)] hover:text-[var(--ink)] active:bg-[var(--paper-deep)]'
         }`}
         onClick={() => setOpen((v) => !v)}
       >
-        <Glyph name="bell" className="h-3.5 w-3.5" />
-        Alerts
+        <Glyph name="bell" className="h-4 w-4" />
         {unread > 0 && (
-          <span className="serial flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--gold)] px-1 text-[11px] font-bold text-[var(--ink)]">
+          <span className="serial absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--gold)] px-1 text-[11px] font-bold text-[var(--ink)]">
             {unread}
           </span>
         )}
       </button>
       {open && (
-        <div className="certificate absolute right-0 z-30 mt-3 w-96 overflow-hidden bg-[var(--paper-lift)] text-[var(--ink)]">
-          <div className="plate flex items-center justify-between px-5 py-3">
+        <div className="certificate absolute right-0 z-30 mt-3 w-[min(24rem,calc(100vw-2rem))] overflow-hidden bg-[var(--paper-lift)] text-[var(--ink)]">
+          <div className="plate on-dark flex items-center justify-between px-5 py-4">
             <div>
-              <div className="display text-sm font-semibold tracking-[0.06em]">NOTICES</div>
-              <div className="smallcaps text-[var(--ink-3)]">the engine, reporting in</div>
+              <div className="headline text-xl">{t('web.alerts.title', 'Alerts')}</div>
             </div>
             {unread > 0 && (
               <button
-                className="stamp px-2 py-0.5 text-[11px] text-[var(--paper)] hover:bg-[var(--ink-8)]"
+                type="button"
+                className={plateBtnCls}
                 onClick={() => markRead.mutate()}
+                disabled={markRead.isPending}
+                aria-busy={markRead.isPending || undefined}
               >
-                Mark all read
+                <BusyLabel busy={markRead.isPending} label={t('web.alerts.markRead', 'Mark all read')} />
               </button>
             )}
           </div>
@@ -137,8 +152,8 @@ function NotificationBell() {
                     <span className="serial text-[11px] text-[var(--ink-6)]">{dateTime(n.createdAt)}</span>
                     {n.contractId && (
                       <Link
-                        to={`/contracts/${n.contractId}`}
-                        className="text-xs font-semibold text-[var(--gold-deep)] underline decoration-[var(--gold)] decoration-1 underline-offset-2 hover:text-[var(--gold)]"
+                        to={`/deals/${n.contractId}`}
+                        className={`${textLinkCls} ${hitAreaCls} text-xs font-semibold text-[var(--gold-deep)]`}
                         onClick={() => setOpen(false)}
                       >
                         View contract
@@ -155,14 +170,33 @@ function NotificationBell() {
   );
 }
 
+// The floating pill nav (D-048): the active tab is a filled deep-green pill.
 function navCls({ isActive }: { isActive: boolean }): string {
-  // pt-3 below lg grows the tap target toward 44px without moving the gold
-  // underline away from the letterforms.
-  return `smallcaps pt-3 pb-1 transition-colors border-b-2 lg:pt-0 ${
-    isActive
-      ? 'border-[var(--gold)] text-[var(--paper)]'
-      : 'border-transparent text-[var(--ink-3)] hover:text-[var(--paper)]'
-  }`;
+  // The filled pill behind the active tab is SlidingPillGroup's indicator,
+  // which slides between tabs; the link itself only changes its text colour.
+  return pillItemCls(isActive);
+}
+
+/** True while a text field has focus, which on a phone means the keyboard is
+ *  up. The tab bar steps aside then, so it never rides on top of the keyboard
+ *  or covers the field being typed in. */
+function useTyping(): boolean {
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const isTextEntry = (el: EventTarget | null) =>
+      el instanceof HTMLTextAreaElement ||
+      (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'].includes(el.type)) ||
+      (el instanceof HTMLElement && el.isContentEditable);
+    const onIn = (e: FocusEvent) => setTyping(isTextEntry(e.target));
+    const onOut = () => setTyping(false);
+    document.addEventListener('focusin', onIn);
+    document.addEventListener('focusout', onOut);
+    return () => {
+      document.removeEventListener('focusin', onIn);
+      document.removeEventListener('focusout', onOut);
+    };
+  }, []);
+  return typing;
 }
 
 const initials = (name: string): string =>
@@ -190,34 +224,12 @@ export function Layout({ role: routeRole }: { role?: Role }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  // The route declares which identity this tab is wearing. Only the shared
-  // surfaces (/prices) leave it open, falling back to the token actually held.
-  const role = activeRole(routeRole) ?? 'buyer';
-
-  // Remember it, so navigating on to a shared surface keeps this tab's chrome
-  // instead of resolving to whichever role sorts first.
-  useEffect(() => {
-    if (routeRole) rememberTabRole(routeRole);
-  }, [routeRole]);
-
-  const { data: me } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => api<Me>('/api/auth/me'),
-    enabled: role === 'buyer',
-    staleTime: 5 * 60 * 1000,
-  });
-  const { data: driverProfile } = useQuery({
-    queryKey: ['driver-profile'],
-    queryFn: () => api<{ profile: { name: string; phone: string } }>('/api/driver/profile'),
-    enabled: role === 'driver',
-    staleTime: 5 * 60 * 1000,
-  });
-  const { data: farmerDash } = useQuery({
-    queryKey: ['farmer-dashboard'],
-    queryFn: () => api<{ profile: { name: string } }>('/api/farmer/dashboard'),
-    enabled: role === 'farmer',
-    staleTime: 60 * 1000,
-  });
+  // One signed-in person per browser (D-047); the route's role is only a
+  // fallback while the account loads (RequireAuth has already checked it).
+  const { account } = useAccount();
+  const role: Role = account?.role ?? routeRole ?? 'buyer';
+  // Screens refresh the moment the market changes, not on the next poll (D-054).
+  const live = useLiveUpdates(Boolean(account));
   const { data: market } = useQuery({
     queryKey: ['market-lots'],
     queryFn: () => api<{ lots: MarketLot[] }>('/api/market/lots'),
@@ -225,135 +237,254 @@ export function Layout({ role: routeRole }: { role?: Role }) {
     refetchInterval: POLL.slow,
   });
 
-  const displayName =
-    role === 'driver'
-      ? (driverProfile?.profile.name ?? 'Driver')
-      : role === 'farmer'
-        ? (farmerDash?.profile.name ?? 'Farmer')
-        : (me?.name ?? 'Buyer');
+  const displayName = account?.name || (role === 'driver' ? 'Driver' : role === 'farmer' ? 'Farmer' : 'Buyer');
   const lotCount = market?.lots.length ?? null;
+
+  // The browser tab names the page, so a buyer with three tabs open can tell
+  // Orders from Contracts at a glance; live offers/alerts lead the title.
+  const { pathname } = useLocation();
+  // A page whose code is still arriving: show a hairline, not a blank page.
+  const navigating = useNavigation().state !== 'idle';
+  const scrolled = useScrolled();
+  const { t } = useT();
+  const [signingOut, setSigningOut] = useState(false);
+  useEffect(() => {
+    const titles: Array<[RegExp, string]> = [
+      [/^\/market/, t('web.tab.market', 'Marketplace')],
+      [/^\/orders/, t('web.tab.orders', 'Orders')],
+      [/^\/contracts\/./, t('web.tab.contract', 'Contract')],
+      [/^\/contracts/, t('web.tab.contracts', 'Contracts')],
+      [/^\/demands\//, t('web.tab.demand', 'Demand')],
+      [/^\/lots\/.+\/trace/, t('web.tab.trace', 'Lot trace')],
+      [/^\/prices/, t('web.tab.prices', 'Prices')],
+      [/^\/farmer/, t('web.tab.sellerDesk', 'Seller desk')],
+      [/^\/driver/, t('web.tab.dispatch', 'Dispatch board')],
+    ];
+    const name = titles.find(([re]) => re.test(pathname))?.[1];
+    document.title = name ? `${name} · Farm to Market` : 'Farm to Market';
+  }, [pathname, t]);
   const homePath = role === 'driver' ? '/driver/jobs' : role === 'farmer' ? '/farmer/dashboard' : '/market';
 
+  const sections: Array<{ to: string; label: string; icon: string }> =
+    role === 'driver'
+      ? [{ to: '/driver/jobs', label: t('web.tab.dispatch', 'Dispatch board'), icon: 'route' }]
+      : role === 'farmer'
+        ? [
+            { to: '/farmer/dashboard', label: t('web.tab.sellerDesk', 'Seller desk'), icon: 'home' },
+            { to: '/prices', label: t('web.tab.prices', 'Prices'), icon: 'chart' },
+          ]
+        : [
+            { to: '/market', label: t('web.tab.market', 'Marketplace'), icon: 'basket' },
+            { to: '/orders', label: t('web.tab.orders', 'Orders'), icon: 'list' },
+            { to: '/contracts', label: t('web.tab.contracts', 'Contracts'), icon: 'document' },
+            { to: '/prices', label: t('web.tab.prices', 'Prices'), icon: 'chart' },
+          ];
+  // Phones get a bottom tab bar when there is more than one place to go: every
+  // section stays in view and in reach (a sideways-scrolling row hid Prices).
+  const tabBar = sections.length > 1;
+  const typing = useTyping();
+  // Toasts sit above the tab bar instead of on it (ui.tsx reads this).
+  useEffect(() => {
+    if (!tabBar) return;
+    const root = document.documentElement;
+    const mq = window.matchMedia('(min-width: 64rem)');
+    const apply = () => root.style.setProperty('--tabbar-h', mq.matches ? '0px' : '4rem');
+    apply();
+    mq.addEventListener('change', apply);
+    return () => {
+      mq.removeEventListener('change', apply);
+      root.style.removeProperty('--tabbar-h');
+    };
+  }, [tabBar]);
+  const nav = sections.map((s) => (
+    <NavLink key={s.to} to={s.to} className={navCls}>
+      {s.label}
+    </NavLink>
+  ));
+
+  const setQuery = (q: string) => {
+    // Carry the other params through: rebuilding the URL from scratch dropped
+    // ?mode=pool, so typing one character threw the buyer out of the Pool Builder.
+    const next = new URLSearchParams(searchParams);
+    if (q) next.set('q', q);
+    else next.delete('q');
+    navigate({ pathname: '/market', search: next.toString() }, { replace: true });
+  };
+
   return (
-    <div className="min-h-screen bg-[var(--paper)]">
-      <header className="plate">
-        <div className="mx-auto flex min-h-[72px] max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 sm:px-6">
-          <Link to={homePath} className="flex flex-shrink-0 items-center gap-3">
-            <F2MSeal className="h-11 w-11" dark />
-            <div>
-              <div className="display text-lg font-semibold leading-tight tracking-[0.1em]">FARM TO MARKET</div>
-              <div className="smallcaps leading-tight text-[var(--ink-3)]">Agritech Marketplace · Ghana</div>
-            </div>
+    <div
+      className={`flex min-h-screen flex-col bg-[var(--paper)] ${tabBar ? 'pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0' : ''}`}
+    >
+      <SkipLink />
+      {navigating && <span aria-hidden className="nav-progress" />}
+      <header
+        className={`sticky top-0 z-20 border-b bg-[var(--paper)]/85 backdrop-blur-md transition-[border-color,box-shadow] duration-[var(--dur-base)] ${
+          scrolled
+            ? 'border-[var(--ink-1)] shadow-[0_1px_0_rgba(40,30,15,0.03),0_8px_24px_-18px_rgba(40,30,15,0.35)]'
+            : 'border-transparent'
+        }`}
+      >
+        <div className="mx-auto flex min-h-16 max-w-[1400px] items-center gap-x-4 px-4 py-2.5 sm:px-6 lg:min-h-[72px] lg:py-3">
+          <Link
+            to={homePath}
+            className="flex flex-shrink-0 min-h-11 items-center gap-2.5 rounded-full transition-opacity hover:opacity-85 active:opacity-70"
+            aria-label="Farm to Market, home"
+          >
+            <F2MSeal className="h-10 w-10" />
+            <span className="hidden text-lg font-extrabold uppercase leading-none tracking-[0.04em] text-[var(--forest-deep)] min-[420px]:inline lg:hidden xl:inline">
+              Farm to Market
+            </span>
           </Link>
 
-          {role === 'buyer' && (
-            <div className="relative order-last w-full basis-full md:order-none md:w-auto md:max-w-lg md:flex-1 md:basis-auto">
-              <Glyph
-                name="search"
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ink-4)]"
-              />
-              <input
-                type="search"
-                aria-label="Search crops and regions"
-                className="w-full rounded-full border border-[var(--ink-7)] bg-[var(--paper-lift)] py-2 pl-9 pr-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--gold)]"
-                placeholder="Search crops, regions…"
-                value={searchParams.get('q') ?? ''}
-                onChange={(e) => {
-                  const q = e.target.value;
-                  // Carry the other params through: rebuilding the URL from
-                  // scratch dropped ?mode=pool, so typing one character in
-                  // search threw the buyer out of the Pool Builder.
-                  const next = new URLSearchParams(searchParams);
-                  if (q) next.set('q', q);
-                  else next.delete('q');
-                  navigate({ pathname: '/market', search: next.toString() }, { replace: true });
-                }}
-              />
-            </div>
-          )}
+          {/* Desktop: the nav floats in its own pill. Phones use the tab bar
+              at the bottom instead (or, with one section, need no nav). */}
+          <SlidingPillGroup
+            as="nav"
+            watch={pathname}
+            aria-label={t('web.nav.main', 'Main')}
+            className="mx-auto hidden gap-1 rounded-full border border-[var(--ink-2)] bg-[var(--paper-lift)]/70 p-1 shadow-sm lg:flex"
+          >
+            {nav}
+          </SlidingPillGroup>
 
-          <div className="ml-auto flex flex-shrink-0 items-center gap-5">
-            {role === 'buyer' && <LangLegend />}
-            <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <div className="text-sm font-semibold text-[var(--paper)]">{displayName}</div>
-                <div className="smallcaps text-[var(--ink-3)]">
-                  {role === 'driver'
-                    ? 'Verified Driver'
-                    : role === 'farmer'
-                      ? 'Verified Farmer'
-                      : `Verified Buyer${me?.regionCode ? ` · ${prettyRegion(me.regionCode)}` : ''}`}
-                </div>
+          <div className="ml-auto flex flex-shrink-0 items-center gap-2 lg:ml-0">
+            {role === 'buyer' && (
+              <div className="relative hidden md:block">
+                <Glyph
+                  name="search"
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ink-5)]"
+                />
+                <input
+                  type="search"
+                  aria-label={t('web.nav.search', 'Search crops and regions')}
+                  enterKeyHint="search"
+                  className="h-10 w-44 rounded-full xl:w-56 border border-[var(--field-border)] bg-[var(--paper-lift)] pl-10 pr-4 text-sm text-[var(--ink)] transition-[border-color] hover:border-[var(--ink-7)] focus:border-[var(--forest)]"
+                  placeholder={t('web.nav.searchShort', 'Search crops…')}
+                  value={searchParams.get('q') ?? ''}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
               </div>
-              <span className="display flex h-10 w-10 items-center justify-center rounded-full border-[1.5px] border-[var(--gold)] text-sm font-semibold text-[var(--gold)] shadow-[inset_0_0_0_2.5px_var(--ink),inset_0_0_0_3.5px_var(--gold)]">
+            )}
+            {role === 'buyer' && <NotificationBell />}
+            <div className="flex items-center gap-2.5 rounded-full border border-[var(--ink-2)] bg-[var(--paper-lift)] p-1 xl:pr-3.5">
+              <span
+                aria-hidden
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--forest-night)] text-xs font-bold text-[var(--paper-lift)]"
+              >
                 {initials(displayName)}
               </span>
+              <div className="hidden leading-tight xl:block">
+                <div className="max-w-[10rem] truncate text-sm font-semibold text-[var(--ink)]">{displayName}</div>
+                <div className="text-[11px] text-[var(--ink-6)]">
+                  {/* No verification exists yet (D-047): say the role, not a claim. */}
+                  {`${role === 'driver' ? 'Driver' : role === 'farmer' ? 'Farmer' : 'Buyer'}${
+                    account?.regionCode ? ` · ${prettyRegion(account.regionCode)}` : ''
+                  }`}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className="h-[3px] w-full bg-[var(--gold)]" />
-
-        <div className="border-t border-[var(--ink-8)]">
-          <div className="mx-auto flex min-h-11 max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-1.5 sm:gap-x-6 sm:px-6">
-            {role === 'driver' ? (
-              <NavLink to="/driver/jobs" className={navCls}>
-                Dispatch Board
-              </NavLink>
-            ) : role === 'farmer' ? (
-              <>
-                <NavLink to="/farmer/dashboard" className={navCls}>
-                  Seller Desk
-                </NavLink>
-                <NavLink to="/prices" className={navCls}>
-                  Prices
-                </NavLink>
-              </>
-            ) : (
-              <>
-                <NavLink to="/market" className={navCls}>
-                  Marketplace
-                </NavLink>
-                <NavLink to="/orders" className={navCls}>
-                  Orders
-                </NavLink>
-                <NavLink to="/contracts" className={navCls}>
-                  Contracts
-                </NavLink>
-                <NavLink to="/prices" className={navCls}>
-                  Prices
-                </NavLink>
-                <NotificationBell />
-              </>
-            )}
-            <div className="ml-auto flex items-center gap-5">
-              {role === 'buyer' && lotCount !== null && (
-                <span className="smallcaps flex items-center gap-1.5 text-[var(--ink-3)]">
-                  <span className="ember inline-block h-1.5 w-1.5 rounded-full bg-[var(--gold)]" />
-                  {lotCount} lot{lotCount === 1 ? '' : 's'} live
-                </span>
-              )}
-              <button
-                className="smallcaps text-[var(--ink-3)] transition-colors hover:text-[var(--paper)]"
-                onClick={() => {
-                  // Sign out only this tab's identity; the other roles stay live.
-                  setToken(null, role);
-                  // navigate() is a client-side transition, so without this the
-                  // signed-out buyer's name, alerts and contracts stay on screen
-                  // for the next person to sign in until each query refetches.
-                  queryClient.clear();
-                  navigate(loginPathFor(role));
-                }}
-              >
-                Log out
-              </button>
-            </div>
+            <button
+              type="button"
+              className={quietBtnCls}
+              disabled={signingOut}
+              aria-busy={signingOut || undefined}
+              onClick={async () => {
+                setSigningOut(true);
+                try {
+                  await signOut();
+                } finally {
+                  setSigningOut(false);
+                }
+                // navigate() is a client-side transition, so without this the
+                // signed-out person's name, alerts and contracts stay on screen
+                // for the next person to sign in until each query refetches.
+                queryClient.clear();
+                navigate('/login');
+              }}
+            >
+              <BusyLabel busy={signingOut} label={t('web.nav.logout', 'Log out')} busyLabel={t('web.nav.loggingOut', 'Logging out…')} />
+            </button>
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1400px] px-6 py-6">
+
+      {role === 'buyer' && pathname.startsWith('/market') && (
+        // Phones get the market search as its own row under the header.
+        <div className="mx-auto w-full max-w-[1400px] px-4 pt-4 sm:px-6 md:hidden">
+          <input
+            type="search"
+            enterKeyHint="search"
+            aria-label={t('web.nav.search', 'Search crops and regions')}
+            className="h-11 w-full rounded-full border border-[var(--field-border)] bg-[var(--paper-lift)] px-4 text-base text-[var(--ink)] transition-[border-color] hover:border-[var(--ink-7)] focus:border-[var(--forest)]"
+            placeholder="Search crops, regions…"
+            value={searchParams.get('q') ?? ''}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      )}
+
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 lg:py-8">
         <Outlet />
       </main>
+
+      <footer className="border-t border-[var(--ink-1)]">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-5 sm:px-6">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {role === 'buyer' && lotCount !== null && (
+              <span className="smallcaps flex items-center gap-1.5 text-[var(--ink-6)]">
+                <span className="ember inline-block h-1.5 w-1.5 rounded-full bg-[var(--gold)]" />
+                {lotCount} lot{lotCount === 1 ? '' : 's'} live
+              </span>
+            )}
+            {live && (
+              <span className="smallcaps flex items-center gap-1.5 text-[var(--ink-6)]" title="This screen updates as things happen">
+                <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--forest)]" />
+                Live
+              </span>
+            )}
+            <span className="text-xs text-[var(--ink-6)]">Prototype · all payments are simulated</span>
+          </div>
+          <LangLegend />
+        </div>
+      </footer>
+
+      {tabBar && (
+        <nav
+          aria-label={t('web.nav.main', 'Main')}
+          className={`fixed inset-x-0 bottom-0 z-30 border-t border-[var(--ink-2)] bg-[var(--paper-lift)]/95 pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-8px_24px_-20px_rgba(40,30,15,0.45)] backdrop-blur-md lg:hidden ${
+            typing ? 'hidden' : ''
+          }`}
+        >
+          <ul className="mx-auto flex max-w-lg">
+            {sections.map((s) => (
+              <li key={s.to} className="flex-1">
+                <NavLink
+                  to={s.to}
+                  className={({ isActive }) =>
+                    `flex min-h-16 flex-col items-center justify-center gap-0.5 px-1 text-[12px] font-semibold leading-tight transition-colors active:bg-[var(--paper-deep)] ${
+                      isActive ? 'text-[var(--forest-night)]' : 'text-[var(--ink-6)]'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span
+                        aria-hidden
+                        className={`flex h-8 w-14 items-center justify-center rounded-full transition-[background-color] duration-[var(--dur-base)] ${
+                          isActive ? 'bg-[var(--forest-wash)]' : ''
+                        }`}
+                      >
+                        <Glyph name={s.icon} className="h-6 w-6" />
+                      </span>
+                      {s.label}
+                    </>
+                  )}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
     </div>
   );
 }

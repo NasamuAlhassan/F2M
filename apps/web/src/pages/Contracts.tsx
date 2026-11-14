@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { api, ghs, shortDate, type ContractListRow, type PriceTerms } from '../api';
 import { POLL } from '../poll';
 import { CropMark, Glyph } from '../components/engrave';
-import { GradeBadge, LoadGate, numCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { btnCls, EmptyState, GradeBadge, LoadGate, numCls, pillCls, rowLinkCls, StateBadge, tableCls, TableScroll, tdCls, thCls } from '../components/ui';
+import { useT } from '../lib/i18n';
 
 interface Row extends ContractListRow {
   quantityKg: number;
@@ -14,29 +15,38 @@ interface Row extends ContractListRow {
 
 /** Every contract in one ledger — the QR and full instrument live on each detail page. */
 export function ContractsPage() {
-  const { data, isError, refetch } = useQuery({
+  const { t } = useT();
+  const { data, isError, isFetching, refetch } = useQuery({
     queryKey: ['contracts'],
     queryFn: () => api<{ contracts: Row[] }>('/api/contracts'),
     refetchInterval: POLL.ambient,
   });
-  if (!data) return <LoadGate isError={isError} onRetry={() => void refetch()} label="contracts" />;
+  if (!data) return <LoadGate isError={isError} retrying={isFetching} onRetry={() => void refetch()} label="contracts" />;
 
   return (
     <div>
       <div className="mb-4">
-        <h1 className="display text-xl font-semibold tracking-[0.05em] text-[var(--ink)]">Contracts</h1>
+        <h1 className="headline text-3xl text-[var(--ink)] sm:text-4xl">Contracts</h1>
         <p className="mt-1 text-sm text-[var(--ink-6)]">
-          Every contract with its live state — open one for the escrow flow, grading, transport, and the traceability QR
+          {t('web.contracts.subtitle', 'Every purchase a farmer has accepted. Open one to follow the money, the grading, the truck and the trace.')}
         </p>
       </div>
 
-      <div className="certificate overflow-hidden bg-[var(--paper-lift)] p-3">
+      <div className={data.contracts.length ? 'certificate overflow-hidden bg-[var(--paper-lift)] p-3' : ''}>
         {data.contracts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14">
-            <Glyph name="scale" className="mb-3 h-11 w-11 text-[var(--ink-4)]" />
-            <div className="font-semibold text-[var(--ink-6)]">No contracts yet</div>
-            <div className="mt-1 text-sm text-[var(--ink-6)]">They appear the moment the engine matches one of your demands</div>
-          </div>
+          <EmptyState
+            icon={<Glyph name="scale" className="h-7 w-7" />}
+            title={t('web.contracts.emptyTitle', 'No purchases yet')}
+            body={t(
+              'web.contracts.emptyBody',
+              'When a farmer accepts one of your offers, the purchase appears here with every step from payment to delivery.',
+            )}
+            action={
+              <Link to="/market" className={`${btnCls} inline-flex items-center px-5`}>
+                {t('web.contracts.browse', 'Browse produce')}
+              </Link>
+            }
+          />
         ) : (
           <>
             {/* Phones read the ledger as stacked tickets — the whole ticket is the tap target. */}
@@ -44,8 +54,8 @@ export function ContractsPage() {
               {data.contracts.map((c) => (
                 <Link
                   key={c.id}
-                  to={`/contracts/${c.id}`}
-                  className="block border-b border-[var(--ink-2)] px-1 py-3 transition-colors last:border-b-0 hover:bg-[var(--paper)]"
+                  to={`/deals/${c.id}`}
+                  className={`${rowLinkCls} block border-b border-[var(--ink-2)] px-1 py-3 last:border-b-0`}
                 >
                   <span className="flex items-center gap-2">
                     <CropMark code={c.commodityCode} className="h-5 w-5 flex-shrink-0 text-[var(--ink-7)]" />
@@ -112,10 +122,7 @@ export function ContractsPage() {
                   </td>
                   <td className={`${tdCls} text-xs text-[var(--ink-6)]`}>{shortDate(c.createdAt)}</td>
                   <td className={`${tdCls} text-right`}>
-                    <Link
-                      className="rounded-lg border border-[var(--ink-5)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
-                      to={`/contracts/${c.id}`}
-                    >
+                    <Link className={pillCls} to={`/deals/${c.id}`}>
                       Open
                     </Link>
                   </td>

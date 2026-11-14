@@ -84,6 +84,60 @@ const CROP_PATHS: Record<string, ReactNode> = {
       <path d="M8 6.5 7.2 4.8c-.8-.3-1.7-.2-2.4.3L5 8" strokeWidth="1.1" />
     </>
   ),
+  // Three tapered roots hanging from one crown.
+  CASSAVA: (
+    <>
+      <path d="M12 7c1.2 0 1.7 1.3 1.5 3.4-.3 3-.8 6-1.5 8.6-.7-2.6-1.2-5.6-1.5-8.6C10.3 8.3 10.8 7 12 7Z" />
+      <path d="M12 7c1.2 0 1.7 1.3 1.5 3.4-.3 3-.8 6-1.5 8.6-.7-2.6-1.2-5.6-1.5-8.6C10.3 8.3 10.8 7 12 7Z" transform="rotate(-42 12 7)" />
+      <path d="M12 7c1.2 0 1.7 1.3 1.5 3.4-.3 3-.8 6-1.5 8.6-.7-2.6-1.2-5.6-1.5-8.6C10.3 8.3 10.8 7 12 7Z" transform="rotate(42 12 7)" />
+      <path d="M12 7V3.5M12 4.8c1.1-.9 2.4-1.1 3.6-.6" strokeWidth="1.1" />
+    </>
+  ),
+  // Pearl millet: a tall candle-shaped head on its stalk.
+  MILLET: (
+    <>
+      <rect x="10" y="3" width="4" height="10" rx="2" />
+      <path d="M11 5.5h0M13 5.5h0M12 7h0M11 8.5h0M13 8.5h0M12 10h0M11 11.5h0M13 11.5h0" strokeWidth="1.3" />
+      <path d="M12 13v8" />
+      <path d="M12 17.5c-2-.3-3.6-1.5-4.5-3.5M12 16c2-.2 3.5-1.2 4.4-3" strokeWidth="1.1" />
+    </>
+  ),
+  // Sorghum: a compact head of round grains.
+  SORGHUM: (
+    <>
+      <g strokeWidth="1">
+        <circle cx="12" cy="4.4" r="1.3" />
+        <circle cx="10.2" cy="6.6" r="1.3" />
+        <circle cx="13.8" cy="6.6" r="1.3" />
+        <circle cx="12" cy="8.6" r="1.3" />
+        <circle cx="9.8" cy="10.2" r="1.3" />
+        <circle cx="14.2" cy="10.2" r="1.3" />
+      </g>
+      <path d="M12 10v11" />
+      <path d="M12 17c-2.4-.2-4.3-1.5-5.3-3.7M12 15c2.2-.1 4-1 5-2.8" strokeWidth="1.1" />
+    </>
+  ),
+  // Soya: a short pod with three beans showing through.
+  SOYBEAN: (
+    <g transform="rotate(-35 12 12.25)">
+      <rect x="4" y="9.5" width="16" height="5.5" rx="2.75" />
+      <g strokeWidth="0.9">
+        <circle cx="8" cy="12.25" r="1.5" />
+        <circle cx="12" cy="12.25" r="1.5" />
+        <circle cx="16" cy="12.25" r="1.5" />
+      </g>
+      <path d="M20 12.25h1.6" strokeWidth="1.1" />
+    </g>
+  ),
+  // Cowpea: the long curved pod and one black-eyed bean.
+  COWPEA: (
+    <>
+      <path d="M4.5 19.5C10 17.5 15.5 12 19.5 4c1 2.4.2 5-1.8 8-3 4.3-7.5 7.3-13.2 7.5Z" />
+      <path d="M9 17.3l.5.9M12.2 15l.5.9M15 12.2l.6.8M17.3 9l.6.7" strokeWidth="0.8" />
+      <ellipse cx="7.5" cy="7.5" rx="2.8" ry="2" transform="rotate(-20 7.5 7.5)" />
+      <ellipse cx="7.5" cy="7.5" rx="0.9" ry="0.6" transform="rotate(-20 7.5 7.5)" fill="currentColor" />
+    </>
+  ),
 };
 
 export function CropMark({ code, className }: { code: string; className?: string }) {
@@ -100,11 +154,16 @@ const CROP_ACCENTS: Record<string, { wash: string; ink: string }> = {
   MAIZE: { wash: '#fdf1d3', ink: '#a3690c' },
   TOMATO: { wash: '#ffe1da', ink: '#c8482d' },
   YAM: { wash: '#f5e3d1', ink: '#96602c' },
-  RICE: { wash: '#f7ecd4', ink: '#a8862c' },
+  RICE: { wash: '#f7ecd4', ink: '#9a7a22' },
   GROUNDNUT: { wash: '#f2e0cd', ink: '#8a5a34' },
   PEPPER: { wash: '#fde1e1', ink: '#c23434' },
   ONION: { wash: '#f4e2f2', ink: '#8a3f82' },
   PLANTAIN: { wash: '#eef4d3', ink: '#6d8a1f' },
+  CASSAVA: { wash: '#f6e6dc', ink: '#8f4f3a' },
+  MILLET: { wash: '#efebdc', ink: '#76683a' },
+  SORGHUM: { wash: '#f6e0da', ink: '#8c3324' },
+  SOYBEAN: { wash: '#f0f2d8', ink: '#6e7420' },
+  COWPEA: { wash: '#eceae4', ink: '#4a4740' },
 };
 
 export function cropAccent(code: string): { wash: string; ink: string } {
@@ -128,6 +187,11 @@ const CROP_PHOTOS: Record<string, string> = {
   PEPPER: '/images/crops/pepper.jpg',
   ONION: '/images/crops/onion.jpg',
   PLANTAIN: '/images/crops/plantain.jpg',
+  CASSAVA: '/images/crops/cassava.jpg',
+  MILLET: '/images/crops/millet.jpg',
+  SORGHUM: '/images/crops/sorghum.jpg',
+  SOYBEAN: '/images/crops/soybean.jpg',
+  COWPEA: '/images/crops/cowpea.jpg',
 };
 
 export function cropPhoto(code: string): string | null {
@@ -217,6 +281,7 @@ const GLYPH_PATHS: Record<string, ReactNode> = {
   ),
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   cross: <path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" />,
+  chevron: <path d="m6.5 9.5 5.5 5.5 5.5-5.5" />,
   route: (
     <>
       <circle cx="5.5" cy="18.5" r="2" />
@@ -234,6 +299,42 @@ const GLYPH_PATHS: Record<string, ReactNode> = {
     <>
       <path d="M12 4a3.2 3.2 0 0 1 3.2 3.2v4.6a3.2 3.2 0 0 1-6.4 0V7.2A3.2 3.2 0 0 1 12 4Z" />
       <path d="M6.5 11.8a5.5 5.5 0 0 0 11 0M12 17.5V20.5M9.5 20.5h5" />
+    </>
+  ),
+  // Tab bar marks: one per section, read at 24px beside a label.
+  basket: (
+    <>
+      <path d="M4 10h16l-1.6 9.2a1.5 1.5 0 0 1-1.5 1.3H7.1a1.5 1.5 0 0 1-1.5-1.3L4 10Z" />
+      <path d="M8.5 10 11 4.5M15.5 10 13 4.5" />
+      <path d="M9 13.5v4M12 13.5v4M15 13.5v4" strokeWidth="1.1" />
+    </>
+  ),
+  list: (
+    <>
+      <rect x="5.5" y="4.5" width="13" height="16" rx="2" />
+      <path d="M9.5 4.5v-.7c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3v.7" />
+      <path d="M8.5 10h7M8.5 13.5h7M8.5 17h4.5" strokeWidth="1.2" />
+    </>
+  ),
+  document: (
+    <>
+      <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5Z" />
+      <path d="M14 3.5v4h4" />
+      <circle cx="12" cy="13.5" r="2.5" />
+      <path d="m10.9 15.7-.6 2.8 1.7-.9 1.7.9-.6-2.8" strokeWidth="1.1" />
+    </>
+  ),
+  chart: (
+    <>
+      <path d="M4 19.5h16" />
+      <path d="m5.5 15.5 4-4.5 3.5 3 5.5-6.5" />
+      <path d="M15 7.5h3.5V11" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="M4.5 11 12 4.5l7.5 6.5" />
+      <path d="M6.5 9.5V19a1 1 0 0 0 1 1h3v-5h3v5h3a1 1 0 0 0 1-1V9.5" />
     </>
   ),
 };
@@ -269,7 +370,9 @@ export function Rosette({ className }: { className?: string }) {
 /** The F2M seal — rosette with engraved initials. */
 export function F2MSeal({ className, dark }: { className?: string; dark?: boolean }) {
   return (
-    <span className={`relative inline-flex items-center justify-center ${className ?? ''}`}>
+    // Decorative everywhere: every usage sits beside its own label or inside a
+    // labelled link, and a visible "F2M" would pollute that name (WCAG 2.5.3).
+    <span aria-hidden="true" className={`relative inline-flex items-center justify-center ${className ?? ''}`}>
       <Rosette className={`h-full w-full ${dark ? 'text-[var(--paper)]' : 'text-[var(--gold)]'}`} />
       <span
         className={`display absolute text-[0.34em] font-bold tracking-[0.08em] ${

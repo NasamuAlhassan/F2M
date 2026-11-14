@@ -1,11 +1,12 @@
-import { listContractsForFarmer, type I18nText } from '@ftm/core';
+import { listOffersForFarmer, type I18nText } from '@ftm/core';
 import type { UssdScreen } from '../machine';
 import { invalid } from './common';
 
 export const home: UssdScreen = {
   key: 'home',
   render: (ctx) => {
-    const openOffers = ctx.farmer ? listContractsForFarmer(ctx.farmer.id, ['OFFERED']).length : 0;
+    // The badge counts negotiations waiting on HER answer (Phase 1).
+    const openOffers = ctx.farmer ? listOffersForFarmer(ctx.farmer.id, 'open').filter((o) => o.turn === 'farmer').length : 0;
     const lines: I18nText[] = [
       { key: 'ussd.home.title' },
       { key: 'ussd.home.hello', params: { name: ctx.farmer?.name ?? '' } },
@@ -16,6 +17,7 @@ export const home: UssdScreen = {
       { key: 'ussd.home.prices' },
       { key: 'ussd.home.help' },
       { key: 'ussd.home.language' },
+      { key: 'ussd.home.requests' },
     ];
     return lines;
   },
@@ -37,6 +39,8 @@ export const home: UssdScreen = {
         return { end: [{ key: 'ussd.help' }] };
       case '7':
         return { next: 'lang_settings' };
+      case '8':
+        return { next: 'requests_list' };
       default:
         return invalid();
     }

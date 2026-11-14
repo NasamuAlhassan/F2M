@@ -30,7 +30,7 @@ export class MockVoiceProvider implements VoiceProvider {
 /**
  * Africa's Talking Voice: places the outbound call; AT then POSTs to the voice
  * callback URL configured on the dashboard (our /voice/answer), and we answer
- * with Say/GetDigits XML. TTS in Ghanaian languages later swaps to Khaya audio.
+ * with Say/GetDigits XML. Ghanaian-language audio comes from the TTS provider (D-045).
  */
 export class AtVoiceProvider implements VoiceProvider {
   readonly name = 'at' as const;

@@ -2,6 +2,9 @@ import {
   acceptJob,
   confirmJobDelivery,
   confirmJobPickup,
+  driverArrived,
+  driverAtPickup,
+  driverDeparted,
   declineJob,
   DomainError,
   driverRouteRegions,
@@ -87,13 +90,7 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
 
   // The side-hustle directory (D-037): online drivers, browsable by buyers AND
   // sellers — call to inquire, or hire directly on a funded contract.
-  app.get('/drivers/available', async (req, reply) => {
-    try {
-      await req.jwtVerify();
-      if (req.user.kind !== 'buyer' && req.user.kind !== 'farmer') throw new Error('wrong role');
-    } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Login required' } });
-    }
+  app.get('/drivers/available', { preHandler: [app.authBuyerOrFarmer] }, async () => {
     const classes = new Map(listVehicleClasses().map((v) => [v.code, v]));
     return {
       drivers: listAvailableDrivers().map((d) => {
@@ -190,5 +187,19 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const job = confirmJobPickup(id, req.user.sub);
     return { job: jobView(job) };
+  });
+
+  // Phase 3 (vision §10.4): the driver's other milestones.
+  app.post('/jobs/:id/at-pickup', { preHandler: [app.authDriver] }, async (req) => {
+    const { id } = req.params as { id: string };
+    return { job: jobView(driverAtPickup(id, req.user.sub)) };
+  });
+  app.post('/jobs/:id/departed', { preHandler: [app.authDriver] }, async (req) => {
+    const { id } = req.params as { id: string };
+    return { job: jobView(driverDeparted(id, req.user.sub)) };
+  });
+  app.post('/jobs/:id/arrived', { preHandler: [app.authDriver] }, async (req) => {
+    const { id } = req.params as { id: string };
+    return { job: jobView(driverArrived(id, req.user.sub)) };
   });
 }

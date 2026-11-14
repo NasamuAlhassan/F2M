@@ -312,3 +312,67 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **New rail (D-041)**: `MT_PROVIDER=hf` (LLM translation on the router, `MT_MODEL` default Gemma-3-27B) and `ASR_PROVIDER=hf` (Whisper on hf-inference, `ASR_MODEL`) beside Khaya; the draft script switches engines by env and stamps its engine into each catalog. Probed and ruled out for now: NLLB + MMS-TTS on hf-inference.
 - **Bug the wire caught**: unquoted `#` in `.env` shortcodes is a comment — every SMS said "Dial *384*7247" with no `#`. Quoted in both env files; tests now pin the full code.
 - Verified: **170 tests green** (14 new HF-provider wire tests; locale tests made draft-agnostic), check clean, demo exit 0 on mocks.
+
+## 2026-11-13 · The language Space connects (D-045)
+
+- **`providers/space.ts`**: a small Gradio client (`spaceCall`) plus `LOCALE_TO_SPACE`. Timeouts, one retry for dropped connections only, and readable errors for an asleep Space, a non-2xx, a missing event id and the Space's own error events.
+- **Three providers on it**: `SpaceAsrProvider` (base64 WAV in, text out; refuses WebM), `SpaceMtProvider` (`covered:false` is an error, not a translation), `SpaceTtsProvider` (WAV cached by hash, English and failures → `<Say>`, 6 s budget with background completion). Selected with `ASR_PROVIDER` / `MT_PROVIDER` / `TTS_PROVIDER` = `space`; new `SPACE_URL`, `SPACE_TIMEOUT_MS`.
+- **Handset simulator** now encodes the recording as 16 kHz mono WAV in the browser; `/voice/upload-recording` keeps `.wav` vs `.webm` as sent.
+- **`i18n:draft`** can draft with the Space (`MT_PROVIDER=space`), the only engine that covers Kusaal.
+- Verified: typecheck clean; new wire tests (client, ASR, MT, TTS incl. the over-budget case, the upload route) green; live against the Space — a Twi sentence spoken by the Space's own voice, uploaded as WAV through the real server, was heard, translated and listed as 10 bags of maize (grade B). The heard text was not perfect ("a very good doughnut" for "good quality") — the parser's safe rules are what kept it a correct listing.
+
+## 2026-11-14 · Cleanup: unused integrations removed (D-046)
+
+- Deleted: the Khaya ASR/MT/TTS providers, the HF Whisper/LLM speech providers, `local-models/` (the Python service), the MTN MoMo provider with its callback routes and provisioning script, and the six test files that covered them.
+- `.env.example` rewritten to only the settings the code reads, grouped by what they switch on; `fly.toml` and `render.yaml` lost the removed settings.
+- README, DEMO, PRODUCT and COSTS updated to the current provider set.
+- Verified: typecheck clean, 179 tests green (the drop from 199 is the removed providers' own tests), `npm run demo` exit 0.
+
+## 2026-11-14 · Phase 0: real accounts (D-047)
+
+- **Logins:** Supabase phone + password for all three roles; server-side JWKS verification (`packages/core/src/auth/tokens.ts`); `accounts` table and `registerAccount` (links USSD farmers, one role per phone, phone from the token); `GET /api/account/me`, `POST /api/account/register`. Old buyer/farmer-OTP/driver-PIN logins, `login_otps` and the seeded demo buyer removed. Migrations 0011–0012; the migrator now disables foreign keys around a run and checks every reference after.
+- **Supabase:** `0001_invite_only_signup.sql` — invite list plus a Before-User-Created hook; `supabase/README.md` rewritten.
+- **Web:** one `/login` (sign in / create account → profile step); routes guarded by the account's role; header shows the real name and role, with no "Verified" claim; old login pages, placeholders and the mock auth deleted.
+- **Open doors closed:** anonymous farmer/lot creation and phone lookups removed; owner-only full trace; `SIMULATOR_ENABLED` and `CARRIER_WEBHOOK_TOKEN`; demo acceptance locked to simulator + simulated payments.
+- **Project health:** `better-sqlite3`'s compile step denied — a clean `npm ci` now works with no compiler (it ships prebuilt binaries); test databases cleaned up after every run; the portal image takes the Supabase settings as build args.
+- Verified: typecheck clean, 185 tests green (new: account flow, USSD-farmer linking, role clashes, wrong-role tokens, removed routes, owner-only trace, carrier token, simulator switch), `npm run demo` exit 0, web build clean, clean `npm ci` exit 0. Not yet verified live: a real signup — phone sign-in is still off in the Supabase project.
+
+## 2026-11-14 · Languages live, web interface included (D-049, D-050)
+
+- `I18N_DRAFT_LOCALES_LIVE=true` in `.env.example`, `fly.toml` and `render.yaml`. The code default stays `false` and the tests pin it.
+- All five catalogs completed by `npm run i18n:draft` with the Space. One hand fix: Dagbani `sms.paid`, where the brand name pulled the Space into Swahili.
+- Web: `useT()` / `t('web.<page>.<name>', 'English')` (`apps/web/src/lib/i18n.tsx`), `GET /api/i18n/web/:locale` (gated like `t()`, English per phrase as fallback), `npm run i18n:extract` collects the phrases into `en.json` and drops translations of changed or removed ones. The dashboard language picker and the header row both switch the screens.
+
+## 2026-11-14 · Phase 1: the two-way marketplace (D-051)
+
+- **Offer threads:** `offers` + `offer_events` (migration 0013) and `packages/core/src/domain/offers.ts`. Covers bids on a listing, a farmer's offer on a buyer request, the engine's bid from a request, counter, accept, reject, withdraw, expiry on the crop's offer clock, and one reminder after 3 h. Accepting creates the contract already ACCEPTED with an exact `agreedTotal`, takes the units off the listing and starts the hold. When a listing sells out, its other bids close at once. A lapse tells both sides, worded by whose turn it was.
+- **Money rule until Phase 3:** grading pays `agreedTotal` whatever the grade; REJECT still refunds in full.
+- **Listings:** asking price per unit, harvest date, community, landmark, `expiresAt` (`LISTING_TTL_DAYS`, 30) with a warning two days before. `updateLot`, `markLotSold`, `withdrawLot` and `sweepListings` run in the sweep job.
+- **Wires:** REST `POST /api/lots/:lotId/bids`, `/api/offers[...]`, `/api/farmer/offers[...]`, `/api/farmer/requests[...]`, `PATCH /api/farmer/lots/:id`, `POST /api/farmer/lots/:id/sold`. The request detail and the engine feed carry offer threads, and the engine preview and simulate endpoints take `offerId`. USSD gets offers with accept, counter and reject, "8. Buyer requests", a price step in the sell flow, and listing management (remove, price, quantity, sold elsewhere). The voice `bid` flow takes 1 to accept and 2 to reject. Bid calls now leave a VOICE_CALL event on the lot's trace.
+- **Crops:** cassava (sack, perishable), millet, sorghum, soya beans and cowpea (100kg and 50kg bags, olonka). Each has its own rubric and reference prices from 2025–26 market reports. The voice parser hears "soya" and "soy".
+- **Catalogs:** about 70 new SMS, alert, USSD and voice keys; five legacy USSD offer keys removed.
+- **Verified:** typecheck clean; 247 tests green (new: 27 domain negotiation tests, 7 wire tests, 4 USSD negotiation walks; about 50 earlier tests moved to offer threads); `npm run demo` exit 0. The farmer lists at her own price, the engine bids, she accepts by voice, it is graded C and paid the agreed GHS 2000.00, both escrows end at 0, and there is no grade-difference refund.
+
+## 2026-11-14 · Phase 2: the farmer on a basic phone (D-052)
+
+- **Call engine:** each step listens in one of four ways: key, number to `#`, speech, or "type it or say it". Calls keep memory between answers (`voice_calls.state`, `direction`; migration 0014). Listing-line calls get a call row. The keys mean the same everywhere: 9 again (`*` on numbers), 0 back. Silence is asked again twice, then the call ends politely. There is a "one moment" `<Redirect>` hold for a voice still being made and for a recording still being heard. Every recording and transcript is kept with the call. Flows share one node registry, so the line's menu hands over to the listing and offer steps.
+- **Listing by voice** (`ivr/flows/listing.ts`): one open sentence first, then only the missing or unclear fields are asked. After two misses a field moves to the keypad (crops read four at a time). Two yes/no quality questions are written for each of the 13 crops. Readback, then 1 publish, 2 change, 3 cancel. `saveVoiceListing` keeps the recordings beside the lot. Reached from USSD Sell → 8 (F2M calls back) or the line's menu.
+- **Parsing** (`domain/voiceParse.ts`): `parseListingDraft`, `parsePriceAnswer`, `parseCountAnswer`, `parseCounterAnswer`, `findCommodity`. The shared number reader now handles "2,000" and "thousand". A bag-size tie is asked, not guessed, and a bare "good" is no longer read as a grade.
+- **Offers by voice:** 3 counters (typed or spoken, quantity, readback), 4 hears it again. On the line, waiting offers come one after another.
+- **The listing line** (`ivr/flows/line.ts`): 1 sell, 2 my listings (quantity left, price, ready date, sold elsewhere, remove), 3 offers waiting.
+- **USSD:** "2. Ask for transport" on a secured order (farmer-suggested delivery); "5. Change ready date"; Sell → 8 now rings the farmer back.
+- **Calls that go quiet:** an answered call is judged by its last step, and a hung-up call is closed, never redialled. Before this, a long call could be reset to pending mid-call and the farmer rung back.
+- **Reference data on start:** the server now runs the seed on every start in insert-only mode, so crops added to the seed (Phase 1's five) reach existing databases, including production. Existing prices and the rate card are never overwritten; `db:reset` still refreshes them.
+- **Testers:** the server's IVR tester follows callback URLs, number steps, mid-call recordings and redirects. The web handset was updated to the same XML by the UI session.
+- **Verified:** typecheck clean; 270 tests green (new: 12 guided-call tests driving the wire, 10 parser tests, 1 start-up seed test); `npm run demo` exit 0. Live, with the Space for ASR, MT and TTS: a Twi listing published correctly (see D-052). Not verifiable without a voice number: Africa's Talking's handling of a mid-call `Record` callback, `GetDigits` then `Record`, and `Redirect`.
+
+## 2026-11-14 · Phase 3: order → delivery → payment (D-057)
+
+- **The owner's rules:** a 30% advance at grading (`FARMER_ADVANCE_PERCENT`); the balance when the buyer confirms receipt; the driver paid on receipt; a delivery confirms itself after 24 h (`RECEIPT_WINDOW_HOURS`); buyer claims with a proposed deduction that the farmer accepts or refuses, and F2M reviews every claim.
+- **Order states** `DELIVERED`, `CLAIMED`, `RECEIVED`; the job gains `ARRIVED`. Migration 0016 adds the contract money columns, `payments.kind`, and `order_claims`.
+- **`domain/settlement.ts`:** payAdvance, markDelivered, confirmReceipt, fileClaim, answerClaim, resolveClaim, sweepSettlement, retryFarmerPayouts. Each payout is posted to the ledger as it lands, with the refund at `SETTLED`. A deduction can never exceed what is still held. A REJECT re-grade after the advance refunds only the rest. Claims about the transport hold the driver's fee until F2M's review, even when the farmer accepts.
+- **Grading:** pays the advance, on a re-grade too (idempotently). An order with no transport job waits out the grade-dispute window before its receipt clock starts.
+- **Driver milestones** (at pickup, loaded, set off, arrived) on USSD and REST. The farmer is texted when the driver reaches the pickup and when the produce leaves.
+- **Wires:** `POST /api/contracts/:id/receive` and `/claims`; `GET /api/contracts/:id` adds `settlement` and `claims`; `/api/farmer/claims[/:id/answer]`; `/api/jobs/:id/at-pickup|departed|arrived`; simulator-only `/api/dev/claims[/:id/resolve]` as F2M's reviewer until Phase 4. USSD My lots shows delivered, received and claim (1 accept, 2 refuse). New voice flow `claim`. The grade call and SMS now describe the advance and the balance.
+- **The deal page** (owner's request, built with the UI session): `GET /api/deals/:id` gives one sale to its buyer, farmer and driver (404 to anyone else). It shows whose move is next (`dealNextStep`, one answer for web, USSD and voice), the money, people and transport, and one timeline that merges offer moves, order and job steps, payouts, claims, and the SMS and calls F2M sent the farmer. The driver sees no prices, money or negotiation; nobody sees a MoMo number; phones show only while the deal is live. `GET /api/deals` lists a party's deals. Covered by 5 wire tests.
+- **Verified:** typecheck clean; 392 tests green across 43 files (the price-intelligence session's included). Phase 3 adds 20 settlement domain tests and 6 wire tests. `npm run demo` exit 0: "farmer paid GHS 600.00 at pickup + GHS 1400.00 on receipt = the agreed GHS 2000.00, driver paid GHS 804.80, both escrows empty".

@@ -1,5 +1,6 @@
 import { db, getLot, listNotificationsForPhone, parseListingText, registerFarmer, schema, setTtsProvider } from '@ftm/core';
 import { eq } from 'drizzle-orm';
+import { testBuyerToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from './app';
@@ -26,6 +27,19 @@ async function callListingLine(phone: string, transcript?: string) {
   return res.body;
 }
 
+/** Answer a step at the callback URL the last response named, as the gateway does. */
+async function pressOn(xml: string, phone: string, digits: string) {
+  const url = /callbackUrl="([^"]+)"/.exec(xml)![1]!.replaceAll('&amp;', '&');
+  const res = await app.inject({
+    method: 'POST',
+    url: new URL(url).pathname + new URL(url).search,
+    payload: new URLSearchParams({ callerNumber: phone, dtmfDigits: digits }).toString(),
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  });
+  expect(res.statusCode).toBe(200);
+  return res.body;
+}
+
 describe('voice listing pipeline (M29, D-038)', () => {
   it('parses open speech against the live registries', () => {
     expect(parseListingText('I have ten bags of maize, good quality')).toMatchObject({
@@ -46,7 +60,7 @@ describe('voice listing pipeline (M29, D-038)', () => {
       declaredBand: 'C',
     });
     expect(parseListingText('some corn, three bags')).toMatchObject({ commodityCode: 'MAIZE', unitQty: 3 }); // synonym
-    expect(parseListingText('I have plenty cassava to sell')).toBeNull(); // crop we don't carry
+    expect(parseListingText('I have plenty cocoyam to sell')).toBeNull(); // crop we don't carry
     expect(parseListingText('maize, no amount said')).toBeNull(); // no quantity
   });
 
@@ -55,7 +69,9 @@ describe('voice listing pipeline (M29, D-038)', () => {
     registerFarmer({ phone, name: 'Play Farmer', regionCode: 'NORTHERN' });
     setTtsProvider({ name: 'mock', synthesize: async () => ({ url: 'http://localhost:3000/tts/en/rec.mp3' }) });
     try {
-      const xml = await callListingLine(phone);
+      // Phase 2: the line answers with its menu; 1 = sell, which records.
+      const menu = await callListingLine(phone);
+      const xml = await pressOn(menu, phone, '1');
       expect(xml).toContain('<Play url="http://localhost:3000/tts/en/rec.mp3"/>');
       expect(xml.indexOf('<Play')).toBeLessThan(xml.indexOf('<Record'));
       expect(xml).not.toContain('<Say');
@@ -74,10 +90,10 @@ describe('voice listing pipeline (M29, D-038)', () => {
     const phone = '+233207470101';
     registerFarmer({ phone, name: 'Voice Farmer', regionCode: 'NORTHERN' });
 
-    // First leg: the prompt + <Record>.
+    // First leg: the line's menu (Phase 2), keys not a recording.
     const promptXml = await callListingLine(phone);
-    expect(promptXml).toContain('tell us everything');
-    expect(promptXml).toContain('<Record');
+    expect(promptXml).toContain('Press 1 to sell produce');
+    expect(promptXml).toContain('<GetDigits');
 
     // Second leg: the "recording" arrives (typed transcript in mock mode).
     const confirmXml = await callListingLine(phone, 'Hello, I have ten bags of maize, good quality, ready now');
@@ -103,16 +119,10 @@ describe('voice listing pipeline (M29, D-038)', () => {
     expect(receipt!.message).toContain(lot.lotCode);
 
     // The marketplace shows it as a voice listing with the farmer's phone.
-    const login = await app.inject({
-      method: 'POST',
-      url: '/api/auth/login',
-      payload: JSON.stringify({ email: 'buyer@demo.ftm', password: 'demo-buyer-2026' }),
-      headers: { 'content-type': 'application/json' },
-    });
     const market = await app.inject({
       method: 'GET',
       url: '/api/market/lots',
-      headers: { authorization: `Bearer ${login.json().token}` },
+      headers: { authorization: `Bearer ${testBuyerToken()}` },
     });
     const card = (market.json().lots as Array<{ id: string; channel: string; farmerPhone: string | null }>).find(
       (l) => l.id === lot.id,
@@ -137,5 +147,26 @@ describe('voice listing pipeline (M29, D-038)', () => {
     expect(row!.lotId).toBeNull();
     const sms = listNotificationsForPhone(phone, 5).find((n) => n.templateKey === 'sms.listingFailed');
     expect(sms).toBeDefined();
+  });
+
+  it('keeps the container the client sent: a WAV upload stays .wav (the language Space cannot read WebM), anything else stays .webm', async () => {
+    async function upload(filename: string, type: string): Promise<string> {
+      const boundary = '----ftmtest';
+      const payload = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="${filename}"\r\nContent-Type: ${type}\r\n\r\n`),
+        Buffer.from([1, 2, 3, 4]),
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/voice/upload-recording',
+        payload,
+        headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      });
+      expect(res.statusCode).toBe(201);
+      return (res.json() as { recordingUrl: string }).recordingUrl;
+    }
+    expect(await upload('recording.wav', 'audio/wav')).toMatch(/\/recordings\/[0-9a-f-]+\.wav$/);
+    expect(await upload('recording', 'video/webm')).toMatch(/\/recordings\/[0-9a-f-]+\.webm$/);
   });
 });

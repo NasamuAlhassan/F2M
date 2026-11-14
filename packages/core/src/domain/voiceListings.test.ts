@@ -37,7 +37,10 @@ describe('voice listing parser (D-038)', () => {
       declaredBand: 'C',
     });
     expect(parseListingText('some corn, three bags')).toMatchObject({ commodityCode: 'MAIZE', unitQty: 3 });
-    expect(parseListingText('I have plenty cassava to sell')).toBeNull();
+    expect(parseListingText('I have plenty cocoyam to sell')).toBeNull(); // a crop we don't carry
+    expect(parseListingText('five sacks of cassava')).toMatchObject({ commodityCode: 'CASSAVA', unitQty: 5 });
+    expect(parseListingText('ten bags of soya beans')).toMatchObject({ commodityCode: 'SOYBEAN' });
+    expect(parseListingText('twenty bags of soya')).toMatchObject({ commodityCode: 'SOYBEAN', unitQty: 20 });
     expect(parseListingText('maize, no amount said')).toBeNull();
   });
 

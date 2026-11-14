@@ -21,7 +21,7 @@ export interface RegisterDriverInput {
   name: string;
   regionCode: string;
   vehicleClassCode: string;
-  pin: string; // 4 digits, set during USSD registration (D-021)
+  pin?: string; // 4 digits, set during USSD registration (D-021); web signups have none (D-047)
   gpsLat?: number;
   gpsLng?: number;
   locale?: string;
@@ -32,7 +32,7 @@ export function registerDriver(input: RegisterDriverInput): Driver {
   getRegion(input.regionCode);
   getVehicleClass(input.vehicleClassCode);
   if (!input.name.trim()) throw new DomainError('Name is required', 'INVALID_NAME');
-  if (!/^\d{4}$/.test(input.pin)) throw new DomainError('PIN must be 4 digits', 'INVALID_PIN');
+  if (input.pin !== undefined && !/^\d{4}$/.test(input.pin)) throw new DomainError('PIN must be 4 digits', 'INVALID_PIN');
   if (input.locale !== undefined) assertLocale(input.locale);
   if (getDriverByPhone(phone)) {
     throw new DomainError('This phone number is already registered as a driver', 'DRIVER_EXISTS', 409);
@@ -48,7 +48,7 @@ export function registerDriver(input: RegisterDriverInput): Driver {
       name: input.name.trim(),
       regionCode: input.regionCode,
       vehicleClassCode: input.vehicleClassCode,
-      pinHash: bcrypt.hashSync(input.pin, 8),
+      pinHash: input.pin !== undefined ? bcrypt.hashSync(input.pin, 8) : null,
       momoMsisdn: toMsisdn(phone),
       gpsLat: input.gpsLat ?? null,
       gpsLng: input.gpsLng ?? null,
@@ -70,16 +70,6 @@ export function getDriverByPhone(rawPhone: string): Driver | undefined {
 
 export function getDriverById(id: string): Driver | undefined {
   return db.select().from(drivers).where(eq(drivers.id, id)).get();
-}
-
-export function verifyDriverLogin(rawPhone: string, pin: string): Driver {
-  // `active` is the availability toggle, NOT an account lock — an offline
-  // driver can still log in (e.g. to flip themselves back online).
-  const driver = getDriverByPhone(rawPhone);
-  if (!driver || !bcrypt.compareSync(pin, driver.pinHash)) {
-    throw new DomainError('Invalid phone or PIN', 'INVALID_CREDENTIALS', 401);
-  }
-  return driver;
 }
 
 export function driverRouteRegions(driver: Driver): string[] {

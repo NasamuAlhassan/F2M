@@ -23,6 +23,10 @@ const TRANSITIONS: Record<string, { actors: Array<JobActor['type']> }> = {
   'FUNDS_HELD>PICKED_UP': { actors: ['driver'] },
   'FUNDS_HELD>CANCELLED_REFUNDED': { actors: ['system'] }, // produce contract died
   'PICKED_UP>DELIVERED': { actors: ['buyer'] }, // receipt verification — the release trigger
+  // Phase 3: the driver says they are at the destination; the buyer's receipt
+  // (or the order's 24 h clock) then makes it delivered and pays the driver.
+  'PICKED_UP>ARRIVED': { actors: ['driver'] },
+  'ARRIVED>DELIVERED': { actors: ['buyer', 'system'] },
   'DELIVERED>PAID': { actors: ['system'] }, // disbursement confirmed
 };
 
@@ -33,6 +37,7 @@ const EVENT_FOR_STATE: Record<DeliveryJobState, LotEventType | null> = {
   FUNDING_FAILED: null, // noisy — the retry/cancel outcome is what matters
   FUNDS_HELD: 'TRANSPORT_FUNDED',
   PICKED_UP: 'IN_TRANSIT',
+  ARRIVED: 'DRIVER_ARRIVED',
   DELIVERED: 'TRANSPORT_DELIVERED',
   PAID: 'DRIVER_PAID',
   CANCELLED: 'TRANSPORT_CANCELLED',

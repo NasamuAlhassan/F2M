@@ -1,12 +1,16 @@
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { getContractByMatchId, listContractsForFarmer } from './contracts';
+import { db } from '../db/client';
+import { demands } from '../db/schema';
+import { getContract, listContractsForFarmer } from './contracts';
 import { createDemand } from './demands';
 import { registerFarmer } from './farmers';
 import { getLot, registerLot } from './lots';
-import { acceptOffer, clockCompatible, declineOffer, expireOffers, scoreLotForDemand } from './matching';
+import { clockCompatible, runMatching, scoreLotForDemand } from './matching';
+import { acceptProposal, getOffer, listOfferEvents, rejectOffer, sweepOffers } from './offers';
 import { getDemand } from './demands';
 import { getTrace } from './trace';
-import { verifyBuyerLogin } from './buyers';
+import { openOfferFor, testBuyer } from '../testing/fixtures';
 import type { ClockConfig } from './types';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -17,7 +21,7 @@ const perishableClock: ClockConfig = { offerTtlMinutes: 120, distanceDecayKm: 50
 const stats = { settled: 0, defaulted: 0 };
 
 function demoBuyerId(): string {
-  return verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026').id;
+  return testBuyer().id;
 }
 
 describe('scorer (pure)', () => {
@@ -68,7 +72,7 @@ describe('scorer (pure)', () => {
 describe('offer lifecycle (yam fixtures)', () => {
   const now = Date.now();
 
-  it('offers on demand creation, accepts via the state machine, reserves quantity', () => {
+  it('bids on demand creation in whole units, creates the order on accept, keeps the rest listed', () => {
     const farmer = registerFarmer({ phone: '0261000001', name: 'Yaw Darko', regionCode: 'BONO_EAST' });
     const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'A' }); // 500kg
 
@@ -82,29 +86,43 @@ describe('offer lifecycle (yam fixtures)', () => {
       windowEnd: now + 14 * DAY,
       regionCode: 'GREATER_ACCRA',
     });
-    expect(demand.status).toBe('fulfilled');
-    expect(demand.remainingKg).toBe(0);
+    // Whole units only (Phase 1): 300kg buys one 250kg Hundred; 50kg stays wanted.
+    expect(demand.status).toBe('partially_matched');
+    expect(demand.remainingKg).toBe(50);
 
-    const offers = listContractsForFarmer(farmer.id, ['OFFERED']);
-    expect(offers).toHaveLength(1);
-    const contract = offers[0]!;
-    expect(contract.quantityKg).toBe(300);
-    // Hold sized at the best band (A) — base 350 for min band B → A ≈ 398.
-    expect(contract.holdAmount).toBe(Math.round(300 * Math.round(350 / 0.88)));
-    expect(getLot(lot.id).remainingKg).toBe(200); // reserved
+    // The engine's suggestion is a buyer bid waiting on the farmer — no contract yet.
+    const offer = openOfferFor(farmer.id, lot.id)!;
+    expect(offer).toBeDefined();
+    expect(offer.proposedBy).toBe('buyer');
+    expect(offer.units).toBe(1);
+    expect(offer.heldDemandKg).toBe(250);
+    // Priced at the request's band-A rate (base 350 for min band B → A ≈ 398/kg) per 250kg unit.
+    expect(offer.pricePerUnit).toBe(Math.round(350 / 0.88) * 250);
+    expect(listContractsForFarmer(farmer.id)).toHaveLength(0);
+    expect(getLot(lot.id).remainingKg).toBe(500); // an open bid reserves nothing on the listing
 
-    const accepted = acceptOffer(contract.id, farmer.id);
-    expect(accepted.state).toBe('ACCEPTED');
-    expect(getLot(lot.id).status).toBe('contracted');
+    const { contractId } = acceptProposal(offer.id, 'farmer', farmer.id);
+    const contract = getContract(contractId);
+    expect(contract.state).toBe('ACCEPTED');
+    expect(contract.quantityKg).toBe(250);
+    expect(contract.agreedTotal).toBe(offer.pricePerUnit);
+    expect(contract.holdAmount).toBe(offer.pricePerUnit);
+    expect(getOffer(offer.id).status).toBe('accepted');
+    // A listing with bags left stays on the market (Phase 1).
+    expect(getLot(lot.id).remainingKg).toBe(250);
+    expect(getLot(lot.id).status).toBe('registered');
 
     const types = getTrace(lot.id).map((e) => e.type);
-    expect(types).toEqual(['LOT_REGISTERED', 'MATCHED', 'CONTRACT_OFFERED', 'CONTRACT_ACCEPTED']);
+    expect(types).toEqual(['LOT_REGISTERED', 'MATCHED', 'CONTRACT_ACCEPTED']);
+
+    // Close the 50kg still wanted, or it would bid on the next test's yam listing.
+    db.update(demands).set({ status: 'cancelled' }).where(eq(demands.id, demand.id)).run();
   });
 
   it('guards the accept against the wrong farmer', () => {
     const farmer = registerFarmer({ phone: '0261000002', name: 'Efua Nyame', regionCode: 'VOLTA' });
-    registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'TUBER', unitQty: 100, declaredBand: 'B' }); // 250kg
-    createDemand({
+    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'TUBER', unitQty: 100, declaredBand: 'B' }); // 250kg
+    const demand = createDemand({
       buyerId: demoBuyerId(),
       commodityCode: 'YAM',
       quantityKg: 200,
@@ -114,14 +132,17 @@ describe('offer lifecycle (yam fixtures)', () => {
       windowEnd: now + 10 * DAY,
       regionCode: 'VOLTA',
     });
-    const offer = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
-    expect(() => acceptOffer(offer.id, 'someone-else')).toThrow(/Not your contract/);
+    const offer = openOfferFor(farmer.id, lot.id)!;
+    expect(offer.units).toBe(80); // 80 tubers × 2.5kg
+    expect(getDemand(demand.id).remainingKg).toBe(0); // held by the thread
+    expect(() => acceptProposal(offer.id, 'farmer', 'someone-else')).toThrow(/Not your offer/);
 
-    // Decline restores both sides.
-    declineOffer(offer.id, farmer.id);
-    expect(getLot(offer.lotId).remainingKg).toBe(250);
-    expect(getLot(offer.lotId).status).toBe('registered');
-    expect(getDemand(offer.demandId).remainingKg).toBe(200);
+    // Rejecting gives the request its kilograms back; the listing never lost any.
+    rejectOffer(offer.id, 'farmer', farmer.id);
+    expect(getOffer(offer.id).status).toBe('rejected');
+    expect(getLot(lot.id).remainingKg).toBe(250);
+    expect(getLot(lot.id).status).toBe('registered');
+    expect(getDemand(demand.id).remainingKg).toBe(200);
   });
 
   it('expires stale offers via the sweep without re-offering the same lot', () => {
@@ -137,19 +158,21 @@ describe('offer lifecycle (yam fixtures)', () => {
       windowEnd: now + DAY,
       regionCode: 'ASHANTI',
     });
-    const offer = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
-    expect(getLot(lot.id).remainingKg).toBe(60);
+    const offer = openOfferFor(farmer.id, lot.id)!;
+    expect(offer.units).toBe(3); // 3 × 52kg crates fit the 200kg request
+    expect(offer.heldDemandKg).toBe(156);
+    expect(getLot(lot.id).remainingKg).toBe(260);
 
     // Tomato offers live 120 minutes; three hours later the sweep expires it.
-    const expired = expireOffers(now + 3 * HOUR);
+    const { expired } = sweepOffers(now + 3 * HOUR);
     expect(expired).toBeGreaterThanOrEqual(1);
 
-    const contract = getContractByMatchId(offer.matchId)!;
-    expect(contract.state).toBe('EXPIRED');
-    expect(getLot(lot.id).remainingKg).toBe(260); // restored
-    expect(getDemand(demand.id).remainingKg).toBe(200); // restored
-    // One shot per (lot, demand): no fresh OFFERED contract reappears.
-    expect(listContractsForFarmer(farmer.id, ['OFFERED'])).toHaveLength(0);
-    expect(getTrace(lot.id).map((e) => e.type)).toContain('OFFER_EXPIRED');
+    expect(getOffer(offer.id).status).toBe('expired');
+    expect(getLot(lot.id).remainingKg).toBe(260);
+    expect(getDemand(demand.id).remainingKg).toBe(200); // held kg released
+    // One shot per (lot, demand): rematching does not open a fresh thread here.
+    runMatching({ demandId: demand.id });
+    expect(openOfferFor(farmer.id, lot.id)).toBeUndefined();
+    expect(listOfferEvents(offer.id).map((e) => e.action)).toEqual(['bid', 'expire']);
   });
 });

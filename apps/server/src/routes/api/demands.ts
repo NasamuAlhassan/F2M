@@ -9,10 +9,12 @@ import {
   gradeBandSchema,
   listDemandsByBuyer,
   listMatchesForDemand,
+  listOffersForDemand,
   priceTermsSchema,
 } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { offerView } from './offers';
 
 const createDemandSchema = z.object({
   commodityCode: z.string(),
@@ -70,6 +72,9 @@ export async function demandRoutes(app: FastifyInstance): Promise<void> {
         contractState: contract?.state ?? null,
       };
     });
-    return { demand: { ...demand, priceTerms: demandPriceTerms(demand) }, matches };
+    // Phase 1: the negotiations this request started or received, beside the
+    // older match list (which only shows how the engine scored each lot).
+    const offers = listOffersForDemand(id).map(offerView);
+    return { demand: { ...demand, priceTerms: demandPriceTerms(demand) }, matches, offers };
   });
 }

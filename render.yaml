@@ -33,15 +33,18 @@ services:
       # own public URL — QR codes, IVR <Play> audio, voice callbacks.
       - key: PUBLIC_BASE_URL
         sync: false
-      - key: JWT_SECRET
-        generateValue: true
+      # Logins (D-047): the server verifies Supabase tokens with this project URL.
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: SIMULATOR_ENABLED
+        value: 'true'
+      - key: CARRIER_WEBHOOK_TOKEN
+        sync: false
       # Every provider below defaults to mock (docs/DEPLOY.md, docs/COSTS.md
       # cover what each real flip needs and costs). Flip only what you're
       # ready to pay for and configure — a var left unset here just falls
       # back to the mock default in packages/core/src/config.ts.
       - key: GRADING_PROVIDER
-        value: mock
-      - key: PAYMENT_PROVIDER
         value: mock
       - key: NOTIFY_PROVIDER
         value: mock
@@ -53,8 +56,8 @@ services:
         value: mock
       - key: TTS_PROVIDER
         value: mock
-      - key: I18N_DRAFT_LOCALES_LIVE
-        value: 'false'
+      - key: I18N_DRAFT_LOCALES_LIVE # the five languages are live (D-049)
+        value: 'true'
       # Secrets for the providers you do flip on — set by hand in the
       # Render dashboard (Environment tab), never committed here.
       - key: HF_TOKEN
@@ -66,6 +69,4 @@ services:
       - key: AT_VOICE_NUMBER
         sync: false
       - key: USSD_SHORTCODE
-        sync: false
-      - key: KHAYA_API_KEY
         sync: false

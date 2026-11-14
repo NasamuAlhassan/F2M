@@ -3,15 +3,16 @@ import {
   db,
   getContract,
   listContractsForFarmer,
+  getFarmerByPhone,
   listNotificationsForPhone,
   MockPaymentProvider,
   registerFarmer,
   registerLot,
   schema,
   setPaymentProvider,
-  verifyBuyerLogin,
 } from '@ftm/core';
 import { and, eq, inArray } from 'drizzle-orm';
+import { acceptFor, openOfferFor, testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from './app';
@@ -23,13 +24,7 @@ let buyerToken: string;
 beforeAll(async () => {
   setPaymentProvider(new MockPaymentProvider(0));
   app = await buildServer({ logger: false });
-  const login = await app.inject({
-    method: 'POST',
-    url: '/api/auth/login',
-    payload: JSON.stringify({ email: 'buyer@demo.ftm', password: 'demo-buyer-2026' }),
-    headers: { 'content-type': 'application/json' },
-  });
-  buyerToken = login.json().token;
+  buyerToken = testBuyerToken();
 });
 afterAll(async () => {
   setPaymentProvider(null);
@@ -57,22 +52,17 @@ function yamJanitor() {
     .run();
 }
 
-async function farmerToken(phone: string): Promise<string> {
-  const otpRes = await post('/api/auth/farmer-otp', { phone });
-  expect(otpRes.statusCode).toBe(200);
-  const sms = listNotificationsForPhone(phone, 5).find((n) => n.templateKey === 'sms.loginCode');
-  expect(sms).toBeDefined();
-  const code = /code is (\d{6})/.exec(sms!.message)![1];
-  const loginRes = await post('/api/auth/farmer-login', { phone, code });
-  expect(loginRes.statusCode).toBe(200);
-  return loginRes.json().token as string;
+/** A web login acting as the farmer registered on this phone (D-047). */
+function farmerToken(phone: string): string {
+  const farmer = getFarmerByPhone(phone)!;
+  return testToken('farmer', farmer.id, farmer.phone);
 }
 
 describe('farmer web portal (M22)', () => {
-  it('logs in with an OTP from the SMS outbox and accepts an offer — full parity with USSD', async () => {
+  it('logs in and accepts a bid from the web — full parity with USSD', async () => {
     yamJanitor();
     const phone = '+233207460101';
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const farmer = registerFarmer({ phone, name: 'Portal Farmer', regionCode: 'BONO_EAST' });
     registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     createDemand({
@@ -85,25 +75,26 @@ describe('farmer web portal (M22)', () => {
       windowEnd: Date.now() + 7 * DAY,
       regionCode: 'GREATER_ACCRA',
     });
-    const offered = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
+    // Phase 1: the engine's match is an offer thread waiting on her, shown in offerThreads.
+    const waiting = openOfferFor(farmer.id)!;
 
-    // A wrong code is rejected before the right one works.
-    await post('/api/auth/farmer-otp', { phone });
-    const bad = await post('/api/auth/farmer-login', { phone, code: '000000' });
-    expect(bad.statusCode).toBe(401);
-
-    const token = await farmerToken(phone);
+    const token = farmerToken(phone);
     const dash = await app.inject({ method: 'GET', url: '/api/farmer/dashboard', headers: { authorization: `Bearer ${token}` } });
     expect(dash.statusCode).toBe(200);
     const body = dash.json();
     expect(body.profile.name).toBe('Portal Farmer');
-    const offer = body.offers.find((o: { id: string }) => o.id === offered.id);
+    const offer = body.offerThreads.find((o: { id: string }) => o.id === waiting.id);
     expect(offer).toBeDefined();
-    expect(offer.holdAmount).toBeGreaterThan(0);
+    expect(offer.turn).toBe('farmer');
+    expect(offer.current).toMatchObject({ units: 2, pricePerUnit: 100000, total: 200000 }); // 2 Hundred at GHS 4.00/kg × 250kg
 
-    const accept = await post(`/api/farmer/contracts/${offered.id}/accept`, {}, token);
+    // The same acceptOfferThread USSD "1. Accept" calls.
+    const accept = await post(`/api/farmer/offers/${waiting.id}/accept`, {}, token);
     expect(accept.statusCode).toBe(200);
-    expect(getContract(offered.id).state).toBe('ACCEPTED');
+    const contractId = accept.json().contract.id;
+    expect(getContract(contractId).state).toBe('ACCEPTED');
+    expect(getContract(contractId).holdAmount).toBe(200000);
+    expect(listContractsForFarmer(farmer.id).map((c) => c.id)).toEqual([contractId]);
   });
 
   it('lists a lot from the web with an ask price the marketplace then shows', async () => {
@@ -187,15 +178,13 @@ describe('farmer web portal (M22)', () => {
       headers: { authorization: `Bearer ${buyerToken}` },
     });
     expect(dash.statusCode).toBe(401);
-    const otp = await post('/api/auth/farmer-otp', { phone: '+233209999999' });
-    expect(otp.statusCode).toBe(404);
   });
 });
 
 describe('public trace (M24, D-033)', () => {
   it('serves the chain of custody without auth — and without phones or money', async () => {
     yamJanitor();
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     const farmer = registerFarmer({ phone: '+233207460303', name: 'Trace Farmer', regionCode: 'NORTHERN' });
     const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     createDemand({
@@ -208,6 +197,7 @@ describe('public trace (M24, D-033)', () => {
       windowEnd: Date.now() + 7 * DAY,
       regionCode: 'GREATER_ACCRA',
     });
+    await acceptFor(farmer.id); // the deal is struck, so the trace carries the order too
 
     const res = await app.inject({ method: 'GET', url: `/api/public/trace/${lot.id}` }); // no token
     expect(res.statusCode).toBe(200);
@@ -215,14 +205,19 @@ describe('public trace (M24, D-033)', () => {
     expect(body.lot.lotCode).toBe(lot.lotCode);
     expect(body.farmer.name).toBe('Trace Farmer');
     expect(body.farmer.phone).toBeUndefined();
-    expect(body.events.length).toBeGreaterThanOrEqual(3); // registered, matched, offered
+    const types = body.events.map((e: { type: string }) => e.type);
+    expect(types).toEqual(expect.arrayContaining(['LOT_REGISTERED', 'MATCHED', 'CONTRACT_ACCEPTED'])); // registered, bid on, agreed
 
     const raw = JSON.stringify(body);
     expect(raw).not.toContain('233207460303'); // no phone anywhere
     expect(raw).not.toContain('amount'); // no money fields
+    expect(raw).not.toContain('pricePerUnit'); // nor the negotiated price
     expect(raw).not.toContain('expiresAt'); // offer internals stay private
-    const offeredEvent = body.events.find((e: { type: string }) => e.type === 'CONTRACT_OFFERED');
-    expect(offeredEvent.payload).toEqual({ allocatedKg: 500 });
+    expect(raw).not.toContain('offerId');
+    // Phase 1: the engine's bid is the MATCHED event; only the kilograms are public.
+    const matchedEvent = body.events.find((e: { type: string }) => e.type === 'MATCHED');
+    expect(matchedEvent.payload).toEqual({ allocatedKg: 500 });
+    expect(body.events.find((e: { type: string }) => e.type === 'CONTRACT_ACCEPTED').payload).toBeNull();
 
     const missing = await app.inject({ method: 'GET', url: '/api/public/trace/00000000-0000-0000-0000-000000000000' });
     expect(missing.statusCode).toBe(404);

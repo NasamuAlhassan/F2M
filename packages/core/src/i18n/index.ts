@@ -7,7 +7,7 @@ import kus from './catalogs/kus.json' with { type: 'json' };
 import tw from './catalogs/tw.json' with { type: 'json' };
 
 // One flat catalog per locale; missing keys fall back to English. Non-en
-// catalogs are MACHINE-DRAFTED (Khaya MT) until a native speaker reviews one
+// catalogs are MACHINE-DRAFTED (npm run i18n:draft) until a native speaker reviews one
 // and sets its `_reviewed` metadata — the review gate (D-040) lives in t()
 // itself, so an unreviewed catalog resolves to English on every real surface
 // no matter what locale a farmer has chosen. Their choice is still persisted;
@@ -85,6 +85,22 @@ export function t(locale: string, key: string, params?: Record<string, string | 
  */
 export function tDraft(locale: string, key: string, params?: Record<string, string | number>): string {
   return resolve(catalogs[locale], locale, key, params);
+}
+
+/**
+ * The web interface's phrases (every `web.*` key) for one locale, each one
+ * falling back to English on its own — so a page is never half-blank while a
+ * catalog is still being translated. Gated exactly like t(): a locale that is
+ * not live is served entirely in English.
+ */
+export function webMessages(locale: string): Record<string, string> {
+  const english = catalogs['en'] ?? {};
+  const local = isLocaleLive(locale) ? catalogs[locale] : undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(english)) {
+    if (key.startsWith('web.')) out[key] = local?.[key] ?? value;
+  }
+  return out;
 }
 
 export function resolveText(locale: string, text: I18nText): string {

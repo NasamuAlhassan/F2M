@@ -1,8 +1,22 @@
-import { config, getCommodityByCode, listCommodities, listUnits, registerLot, t, type GradeBand } from '@ftm/core';
+import {
+  formatGhs,
+  getCommodityByCode,
+  guidanceParams,
+  listCommodities,
+  listUnits,
+  priceGuidance,
+  queueVoiceCall,
+  registerLot,
+  t,
+  type GradeBand,
+} from '@ftm/core';
 import type { UssdCtx, UssdScreen } from '../machine';
 import { DAY_MS, invalid, listLines, paginate, parseSelection } from './common';
+import { parseGhs } from './offers';
 
-// '8' calls out to the open voice line (D-038) instead of the step-by-step
+// '8' hands over to a voice call (Phase 2): F2M rings the farmer back and the
+// call asks, reads back and publishes the listing, at no cost to the farmer —
+// instead of the step-by-step
 // menu below — only offered on page 0, since a farmer who has already paged
 // through commodities is mid-flow, not looking for the shortcut. Kept clear
 // of '9' (this screen's own Next-page key) and '0' (Back), the two digits
@@ -30,7 +44,9 @@ export const sellCommodity: UssdScreen = {
       return { next: 'sell_commodity' };
     }
     if (input === '8' && page === 0) {
-      return { end: [{ key: 'ussd.sell.callNumber', params: { number: config.AT_VOICE_NUMBER || t(ctx.locale, 'ussd.sell.callNumberDemo') } }] };
+      if (!ctx.farmer) return invalid();
+      queueVoiceCall({ phone: ctx.farmer.phone, locale: ctx.farmer.locale, flow: 'listing' });
+      return { end: [{ key: 'ussd.sell.callingYou' }] };
     }
     const idx = parseSelection(input, pageItems.length, start);
     if (idx === null) return invalid();
@@ -128,20 +144,66 @@ export const sellReady: UssdScreen = {
     const idx = parseSelection(input, choices.length, 0);
     if (idx === null) return invalid();
     ctx.data.sellReadyDays = choices[idx]!.days;
+    return { next: 'sell_price' };
+  },
+};
+
+/** The farmer's own asking price per unit (Phase 1) — or 0 to let buyers make offers. */
+export const sellPrice: UssdScreen = {
+  key: 'sell_price',
+  render: (ctx) => {
+    const lines: Array<{ key: string; params?: Record<string, string | number> }> = [
+      { key: 'ussd.sell.price', params: { unit: t(ctx.locale, `unit.${String(ctx.data.sellUnit)}`) } },
+    ];
+    // What it has been fetching lately, so the farmer names a price knowing the market (D-053).
+    const g = sellGuidance(ctx, null);
+    if (g?.messageKey === 'price.hint.range') lines.push({ key: g.messageKey, params: guidanceParams(g) });
+    return lines;
+  },
+  handleInput: (input, ctx) => {
+    if (input.trim() === '0') {
+      ctx.data.sellPrice = null;
+      return { next: 'sell_confirm' };
+    }
+    const pesewas = parseGhs(input);
+    if (pesewas === null) return { error: { key: 'ussd.offer.priceInvalid' } };
+    ctx.data.sellPrice = pesewas;
     return { next: 'sell_confirm' };
   },
 };
 
+/** Is the price on offer sensible? Null when the flow has no crop or unit yet. */
+function sellGuidance(ctx: UssdCtx, price: number | null) {
+  if (!ctx.data.sellCommodity || !ctx.data.sellUnit) return null;
+  try {
+    return priceGuidance({
+      commodityCode: String(ctx.data.sellCommodity),
+      unitCode: String(ctx.data.sellUnit),
+      regionCode: ctx.farmer?.regionCode,
+      price,
+      side: 'sell',
+    });
+  } catch {
+    return null; // advice must never get in the way of listing
+  }
+}
+
 export const sellConfirm: UssdScreen = {
   key: 'sell_confirm',
   render: (ctx) => [
+    // A price well off the market is flagged before the farmer presses 1 (D-053).
+    ...(() => {
+      const g = ctx.data.sellPrice ? sellGuidance(ctx, Number(ctx.data.sellPrice)) : null;
+      return g && g.verdict !== 'fair' && g.verdict !== 'unknown' ? [{ key: g.messageKey, params: guidanceParams(g) }] : [];
+    })(),
     {
-      key: 'ussd.sell.confirm',
+      key: ctx.data.sellPrice ? 'ussd.sell.confirmPrice' : 'ussd.sell.confirm',
       params: {
         qty: Number(ctx.data.sellQty),
         unit: t(ctx.locale, `unit.${String(ctx.data.sellUnit)}`),
         commodity: t(ctx.locale, `commodity.${String(ctx.data.sellCommodity)}`),
         band: t(ctx.locale, `band.${String(ctx.data.sellBand)}`),
+        price: ctx.data.sellPrice ? formatGhs(Number(ctx.data.sellPrice)) : '',
       },
     },
     { key: 'ussd.common.confirm' },
@@ -158,6 +220,7 @@ export const sellConfirm: UssdScreen = {
       unitQty: Number(ctx.data.sellQty),
       declaredBand: ctx.data.sellBand as GradeBand,
       readyDate: Date.now() + Number(ctx.data.sellReadyDays) * DAY_MS,
+      askingPricePerUnit: ctx.data.sellPrice ? Number(ctx.data.sellPrice) : undefined,
       channel: 'ussd', // basic-phone listing — buyers see the phone, not photos (D-036)
     });
     return {

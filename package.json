@@ -14,12 +14,11 @@
     "dev": "concurrently -n server,web -c blue,green \"npm run dev -w @ftm/server\" \"npm run dev -w @ftm/web\"",
     "db:reset": "npm run db:reset -w @ftm/core",
     "db:inspect": "npm run db:inspect -w @ftm/core",
-    "momo:provision": "npm run momo:provision -w @ftm/server",
     "demo": "npm run demo -w @ftm/server",
-    "local-models": "local-models/.venv/bin/python local-models/server.py",
     "test": "vitest run",
     "check": "tsc --noEmit -p packages/core && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web",
-    "i18n:draft": "npm run i18n:draft -w @ftm/core"
+    "i18n:draft": "npm run i18n:draft -w @ftm/core",
+    "i18n:extract": "npm run i18n:extract -w @ftm/core"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
@@ -30,7 +29,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "better-sqlite3@13.0.3": true,
+    "better-sqlite3@13.0.3": false,
     "esbuild@0.18.20": true,
     "esbuild@0.25.12": true
   }

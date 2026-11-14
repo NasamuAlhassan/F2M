@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { and, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -7,15 +6,14 @@ import { buyers, demands, drivers as driversTable, lots } from '../db/schema';
 import { setGradingProvider } from '../providers/grading/index';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
 import { listBuyerNotifications, markNotificationsRead, unreadNotificationCount } from './buyerNotifications';
-import { verifyBuyerLogin } from './buyers';
-import { listContractsForFarmer } from './contracts';
+import { acceptFor, testBuyer } from '../testing/fixtures';
 import { createDemand } from './demands';
 import { registerDriver } from './drivers';
 import { registerFarmer } from './farmers';
 import { agreeGrading, confirmPickup, runGrading } from './gradingFlow';
 import { acceptJob, confirmJobDelivery, confirmJobPickup, requestTransport } from './logistics';
 import { registerLot } from './lots';
-import { acceptOfferAndHold, pollPaymentsOnce } from './paymentFlow';
+import { pollPaymentsOnce } from './paymentFlow';
 import { addPhoto } from './photos';
 import { getCommodityByCode } from './registries';
 
@@ -51,10 +49,10 @@ describe('buyer notification center (M15)', () => {
       .run();
     db.update(driversTable).set({ active: false }).run();
 
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
 
     const farmer = registerFarmer({ phone: '+233209334455', name: 'Notif Farmer', regionCode: 'BONO_EAST' });
-    registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     const driver = registerDriver({
       phone: '+233549334455',
       name: 'Notif Driver',
@@ -74,11 +72,11 @@ describe('buyer notification center (M15)', () => {
       regionCode: 'GREATER_ACCRA',
     });
 
-    const offer = listContractsForFarmer(farmer.id, ['OFFERED'])[0]!;
-    await acceptOfferAndHold(offer.id, farmer.id); // → notif.offerAccepted
+    // The farmer accepting the engine's bid creates the order (Phase 1).
+    const order = await acceptFor(farmer.id, lot.id); // → notif.dealAgreed
     await pollPaymentsOnce(); // → notif.fundsHeld
 
-    const job = requestTransport(offer.id, buyer.id);
+    const job = requestTransport(order.id, buyer.id);
     await acceptJob(job.id, driver.id); // → notif.driverAssigned
     await pollPaymentsOnce(); // job FUNDS_HELD (no buyer notif — their own fee)
     confirmJobPickup(job.id, driver.id); // → notif.inTransit (+ contract PICKUP_CONFIRMED)
@@ -86,15 +84,15 @@ describe('buyer notification center (M15)', () => {
     const photo = await sharp({ create: { width: 300, height: 200, channels: 3, background: { r: 160, g: 120, b: 60 } } })
       .jpeg()
       .toBuffer();
-    await addPhoto({ contractId: offer.id, buffer: photo, actor: { type: 'buyer', id: buyer.id } });
-    await runGrading(offer.id); // → notif.graded
+    await addPhoto({ contractId: order.id, buffer: photo, actor: { type: 'buyer', id: buyer.id } });
+    await runGrading(order.id); // → notif.graded
     await confirmJobDelivery(job.id, buyer.id);
-    await agreeGrading(offer.id, farmer.id);
+    await agreeGrading(order.id, farmer.id);
     await pollPaymentsOnce(); // → notif.settled + notif.driverPaid
 
     const keys = listBuyerNotifications(buyer.id, 100).map((n) => n.templateKey);
     for (const expected of [
-      'notif.offerAccepted',
+      'notif.dealAgreed',
       'notif.fundsHeld',
       'notif.driverAssigned',
       'notif.inTransit',
@@ -110,14 +108,13 @@ describe('buyer notification center (M15)', () => {
   });
 
   it('scopes unread counts and mark-read to the owning buyer', () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
+    const buyer = testBuyer();
     expect(unreadNotificationCount(buyer.id)).toBeGreaterThan(0);
 
     const other = db
       .insert(buyers)
       .values({
-        email: 'other@demo.ftm',
-        passwordHash: bcrypt.hashSync('x', 4),
+        phone: '+233555000777',
         name: 'Other Buyer',
         momoMsisdn: '233555000777',
         regionCode: 'ASHANTI',

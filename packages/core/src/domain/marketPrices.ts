@@ -1,6 +1,7 @@
 import { asc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { marketPrices, type MarketPrice } from '../db/schema';
+import { observePrice } from './priceIntel';
 import { getCommodityByCode } from './registries';
 
 export function listMarketPrices(commodityId: string): MarketPrice[] {
@@ -27,6 +28,17 @@ export function upsertMarketPrice(input: {
     pricePerKg: input.pricePerKg,
     recordedAt: input.recordedAt ?? Date.now(),
   };
+  // The same quote also joins the price history, so it shows up in trends (D-053).
+  observePrice({
+    commodityId: commodity.id,
+    regionCode: input.regionCode,
+    market: input.market,
+    pricePerKg: input.pricePerKg,
+    source: 'market',
+    dataset: 'manual',
+    refId: `manual:${commodity.code}:${input.market}:${new Date(values.recordedAt).toISOString().slice(0, 10)}`,
+    observedAt: values.recordedAt,
+  });
   return db
     .insert(marketPrices)
     .values(values)

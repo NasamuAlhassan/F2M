@@ -31,10 +31,11 @@ import { queueSms } from './notifications';
 import { getCommodityById } from './registries';
 import { appendLotEvent } from './trace';
 import { formatGhs } from './types';
+import { confirmReceipt, markDelivered } from './settlement';
 
 const MAX_JOB_FUNDING_ATTEMPTS = 2;
-const BUSY_STATES = ['ASSIGNED', 'FUNDS_HELD', 'PICKED_UP', 'DELIVERED'] as const;
-export const LIVE_JOB_STATES = ['REQUESTED', 'NO_DRIVER', 'ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'DELIVERED'] as const;
+const BUSY_STATES = ['ASSIGNED', 'FUNDS_HELD', 'PICKED_UP', 'ARRIVED', 'DELIVERED'] as const;
+export const LIVE_JOB_STATES = ['REQUESTED', 'NO_DRIVER', 'ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'ARRIVED', 'DELIVERED'] as const;
 
 export interface TransportQuote {
   vehicleClass: VehicleClass;
@@ -501,13 +502,83 @@ export function confirmJobPickup(jobId: string, driverId: string): DeliveryJob {
     contractId: job.contractId,
     jobId: job.id,
   });
+  // The farmer hears that the produce left with the driver (vision §10.4).
+  notifyFarmerJob(job, 'sms.collected');
   return job;
 }
 
-/** Buyer confirms the goods arrived — releases the fee to the driver. */
+function notifyFarmerJob(job: DeliveryJob, templateKey: 'sms.collected' | 'sms.driverAtPickup'): void {
+  const farmer = getFarmerById(job.farmerId);
+  const lot = db.select().from(lots).where(eq(lots.id, job.lotId)).get();
+  if (!farmer || !lot) return;
+  const driver = job.driverId ? getDriverById(job.driverId) : undefined;
+  queueSms({
+    phone: farmer.phone,
+    locale: farmer.locale,
+    templateKey,
+    params: { commodity: t(farmer.locale, getCommodityById(lot.commodityId).nameKey), driver: driver?.name ?? '', lotCode: lot.lotCode },
+    contractId: job.contractId,
+    lotId: job.lotId,
+  });
+}
+
+/** A driver milestone that is not a state change: reached the pickup, or set off (vision §10.4). */
+function milestone(jobId: string, driverId: string, type: 'DRIVER_AT_PICKUP' | 'DRIVER_DEPARTED', states: string[]): DeliveryJob {
+  const job = getJob(jobId);
+  if (job.driverId !== driverId) throw new DomainError('Not your job', 'FORBIDDEN', 403);
+  if (!states.includes(job.state)) throw new DomainError('That step does not fit this job now', 'INVALID_STATE', 409);
+  appendLotEvent(db, { lotId: job.lotId, type, actorType: 'system', payload: { jobId, driverId } }); // the trace's actors are farmer/buyer/system; job steps log as system
+  queueBuyerNotification({
+    buyerId: job.buyerId,
+    templateKey: type === 'DRIVER_AT_PICKUP' ? 'notif.driverAtPickup' : 'notif.driverDeparted',
+    params: { jobCode: job.jobCode },
+    contractId: job.contractId,
+    jobId: job.id,
+  });
+  return job;
+}
+
+/** The driver is at the farmer's pickup point. */
+export function driverAtPickup(jobId: string, driverId: string): DeliveryJob {
+  const job = milestone(jobId, driverId, 'DRIVER_AT_PICKUP', ['FUNDS_HELD']);
+  notifyFarmerJob(job, 'sms.driverAtPickup');
+  return job;
+}
+
+/** The driver has set off for the buyer. */
+export function driverDeparted(jobId: string, driverId: string): DeliveryJob {
+  return milestone(jobId, driverId, 'DRIVER_DEPARTED', ['PICKED_UP']);
+}
+
+/**
+ * The driver is at the destination (Phase 3). The buyer's 24 h receipt clock
+ * starts once the produce is graded (it usually already is: grading runs at pickup).
+ */
+export function driverArrived(jobId: string, driverId: string): DeliveryJob {
+  const job = transitionJob(jobId, 'ARRIVED', { type: 'driver', id: driverId });
+  const contract = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get();
+  if (contract?.state === 'GRADED') markDelivered(contract.id, 'driver');
+  return job;
+}
+
+/**
+ * Buyer confirms the goods arrived. Since Phase 3 this is the buyer's receipt
+ * of the whole order: the driver is paid and the farmer's balance goes out.
+ * If the produce is not graded yet, only the driver is paid now; the order
+ * catches up when the grade lands.
+ */
 export async function confirmJobDelivery(jobId: string, buyerId: string): Promise<DeliveryJob> {
-  transitionJob(jobId, 'DELIVERED', { type: 'buyer', id: buyerId });
-  await initiateJobRelease(jobId);
+  const job = getJob(jobId);
+  if (job.buyerId !== buyerId) throw new DomainError('Not your job', 'FORBIDDEN', 403);
+  const contract = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get();
+  if (contract?.state === 'GRADED') markDelivered(contract.id, 'driver');
+  const now = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get();
+  if (now?.state === 'DELIVERED') {
+    await confirmReceipt(now.id, { type: 'buyer', id: buyerId });
+  } else {
+    transitionJob(jobId, 'DELIVERED', { type: 'buyer', id: buyerId });
+    await initiateJobRelease(jobId);
+  }
   return getJob(jobId);
 }
 
@@ -682,7 +753,7 @@ export function contractsWithGoodsInTransit(): Set<string> {
     db
       .select({ contractId: deliveryJobs.contractId })
       .from(deliveryJobs)
-      .where(inArray(deliveryJobs.state, ['PICKED_UP', 'DELIVERED', 'PAID']))
+      .where(inArray(deliveryJobs.state, ['PICKED_UP', 'ARRIVED', 'DELIVERED', 'PAID']))
       .all()
       .map((r) => r.contractId),
   );

@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '../db/client';
@@ -6,20 +5,15 @@ import { buyers, demands, lots } from '../db/schema';
 import { getCommodityByCode } from './registries';
 import { MockPaymentProvider, setPaymentProvider } from '../providers/payment/index';
 import { transitionContract } from '../state/contractMachine';
-import { getContract, listContractsForFarmer } from './contracts';
+import { getContract } from './contracts';
 import { createDemand } from './demands';
 import { registerFarmer } from './farmers';
 import { ACCOUNTS, accountBalance, allJournalsBalanced, contractEscrowBalance } from './ledger';
 import { getLot, registerLot } from './lots';
-import {
-  acceptOfferAndHold,
-  initiateRelease,
-  pollPaymentsOnce,
-  refundHold,
-  releaseDuePayments,
-} from './paymentFlow';
+import { pollPaymentsOnce, refundHold } from './paymentFlow';
+import { confirmReceipt, markDelivered, payAdvance } from './settlement';
 import { getTrace } from './trace';
-import { verifyBuyerLogin } from './buyers';
+import { acceptFor, testBuyer } from '../testing/fixtures';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -35,9 +29,10 @@ afterAll(() => {
  * partially-matched ones that would grab the new lot at registration), then
  * register a fresh farmer + 500kg lot + an exactly-sized demand. The new lot
  * outscores any leftover lot (full quantity fit + shortest distance), so the
- * offer deterministically lands on this farmer.
+ * engine's bid deterministically lands on this farmer. The farmer accepting it
+ * creates the order in ACCEPTED and starts the hold (Phase 1).
  */
-function offerFor(phone: string, buyerId: string) {
+async function acceptedOrder(phone: string, buyerId: string) {
   const yam = getCommodityByCode('YAM');
   db.update(demands)
     .set({ status: 'cancelled' })
@@ -60,25 +55,27 @@ function offerFor(phone: string, buyerId: string) {
     commodityCode: 'YAM',
     quantityKg: 500,
     minBand: 'B',
-    basePricePerKg: 400, // B=400, A=455, C=318
+    basePricePerKg: 400, // B=400/kg → the B lot is bid 2 × 250kg units at 100,000p each
     windowStart: Date.now(),
     windowEnd: Date.now() + 14 * DAY,
     regionCode: 'GREATER_ACCRA',
   });
-  const offer = listContractsForFarmer(farmer.id, ['OFFERED']).find((c) => c.buyerId === buyerId)!;
-  return { farmer, lot, offer };
+  const order = await acceptFor(farmer.id, lot.id);
+  expect(order.buyerId).toBe(buyerId);
+  return { farmer, lot, order };
 }
 
 describe('payment flow (M4)', () => {
   it('holds funds on accept and posts a balanced hold journal', async () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
-    const { farmer, offer } = offerFor('0271000001', buyer.id);
-
-    await acceptOfferAndHold(offer.id, farmer.id);
-    expect(getContract(offer.id).state).toBe('ACCEPTED');
+    const buyer = testBuyer();
+    const { order } = await acceptedOrder('0271000001', buyer.id);
+    expect(getContract(order.id).state).toBe('ACCEPTED');
+    // The hold is the exact agreed total: 2 units × 100,000p.
+    expect(order.holdAmount).toBe(200_000);
+    expect(order.agreedTotal).toBe(200_000);
 
     await pollPaymentsOnce();
-    const contract = getContract(offer.id);
+    const contract = getContract(order.id);
     expect(contract.state).toBe('FUNDS_HELD');
     expect(contractEscrowBalance(contract.id)).toBe(contract.holdAmount);
     expect(allJournalsBalanced()).toBe(true);
@@ -90,72 +87,78 @@ describe('payment flow (M4)', () => {
     const badBuyer = db
       .insert(buyers)
       .values({
-        email: 'declines@demo.ftm',
-        passwordHash: bcrypt.hashSync('x', 4),
+        phone: '+233555110000',
         name: 'Declining Buyer',
         momoMsisdn: '233555110000',
         regionCode: 'GREATER_ACCRA',
       })
       .returning()
       .get();
-    const { farmer, lot, offer } = offerFor('0271000002', badBuyer.id);
+    const { lot, order } = await acceptedOrder('0271000002', badBuyer.id);
+    expect(getLot(lot.id).remainingKg).toBe(0); // the order took the whole listing
 
-    await acceptOfferAndHold(offer.id, farmer.id);
     await pollPaymentsOnce(); // fail #1 → FUNDING_FAILED → auto-retry → ACCEPTED
     // The retry hold also fails against the same wallet.
     await pollPaymentsOnce(); // fail #2 → CANCELLED
 
-    const contract = getContract(offer.id);
+    const contract = getContract(order.id);
     expect(contract.state).toBe('CANCELLED');
     expect(contract.fundingAttempts).toBe(2);
     expect(contractEscrowBalance(contract.id)).toBe(0); // nothing was ever held
-    expect(getLot(lot.id).remainingKg).toBe(500); // reservation released
+    expect(getLot(lot.id).remainingKg).toBe(500); // bags back on the listing
+    expect(getLot(lot.id).status).toBe('registered');
     const types = getTrace(lot.id).map((e) => e.type);
     expect(types).toContain('FUNDING_FAILED');
     expect(types).toContain('CANCELLED');
   });
 
-  it('settles: releases the graded amount and refunds the remainder', async () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
-    const { farmer, lot, offer } = offerFor('0271000003', buyer.id);
-
-    await acceptOfferAndHold(offer.id, farmer.id);
+  // Before Phase 1 the hold was sized at the best band and settlement refunded
+  // the grade delta. Every order is now an agreed deal that pays its agreed
+  // total whatever the grade, and no production path creates a per-grade
+  // contract any more — so settlement releases the whole hold, refunding nothing.
+  it('pays the farmer in two parts — an advance at grading, the balance on receipt — then settles', async () => {
+    // Phase 3, the owner's rule (docs/PHASE3.md): 30% at pickup, the rest when the buyer receives it.
+    const buyer = testBuyer();
+    const { farmer, lot, order } = await acceptedOrder('0271000003', buyer.id);
     await pollPaymentsOnce();
-    expect(getContract(offer.id).state).toBe('FUNDS_HELD');
+    expect(getContract(order.id).state).toBe('FUNDS_HELD');
 
-    transitionContract(offer.id, 'PICKUP_CONFIRMED', { type: 'farmer', id: farmer.id });
-    // Graded B: 500kg × 400p = 200,000p; hold was 500 × 455 = 227,500p.
-    const finalAmount = 500 * 400;
-    transitionContract(offer.id, 'GRADED', { type: 'system' }, { finalGrade: 'B', finalAmount });
-
+    transitionContract(order.id, 'PICKUP_CONFIRMED', { type: 'farmer', id: farmer.id });
+    const total = order.agreedTotal!;
+    expect(total).toBe(order.holdAmount);
+    transitionContract(order.id, 'GRADED', { type: 'system' }, { finalGrade: 'B', finalAmount: total });
+    const farmerBefore = accountBalance(ACCOUNTS.farmerPayable(farmer.id));
     const buyerRefundsBefore = accountBalance(ACCOUNTS.buyerRefunds(buyer.id));
-    const released = await releaseDuePayments(Date.now() + 11 * 60 * 1000); // past the 10min window
-    expect(released).toBe(1);
+
+    await payAdvance(order.id);
+    await pollPaymentsOnce();
+    expect(accountBalance(ACCOUNTS.farmerPayable(farmer.id)) - farmerBefore).toBe(Math.round(total * 0.3));
+    expect(getContract(order.id).advanceAmount).toBe(Math.round(total * 0.3));
+    expect(await payAdvance(order.id)).toBeNull(); // never twice
+
+    markDelivered(order.id, 'no_transport');
+    expect(getContract(order.id).state).toBe('DELIVERED');
+    await confirmReceipt(order.id, { type: 'buyer', id: buyer.id });
     await pollPaymentsOnce();
 
-    const contract = getContract(offer.id);
+    const contract = getContract(order.id);
     expect(contract.state).toBe('SETTLED');
     expect(contractEscrowBalance(contract.id)).toBe(0); // escrow zeroes at terminal state
-    expect(accountBalance(ACCOUNTS.farmerPayable(farmer.id))).toBe(finalAmount);
-    expect(accountBalance(ACCOUNTS.buyerRefunds(buyer.id)) - buyerRefundsBefore).toBe(contract.holdAmount - finalAmount);
+    expect(accountBalance(ACCOUNTS.farmerPayable(farmer.id)) - farmerBefore).toBe(total);
+    expect(accountBalance(ACCOUNTS.buyerRefunds(buyer.id)) - buyerRefundsBefore).toBe(0);
     expect(allJournalsBalanced()).toBe(true);
     expect(getLot(lot.id).status).toBe('settled');
-
-    // Idempotent: a second release attempt returns the existing payment.
-    const again = await initiateRelease(offer.id).catch((e) => e);
-    expect(again).toBeInstanceOf(Error); // SETTLED now — no second disbursement possible
   });
 
   it('refunds the full hold when a contract dies after funding', async () => {
-    const buyer = verifyBuyerLogin('buyer@demo.ftm', 'demo-buyer-2026');
-    const { farmer, lot, offer } = offerFor('0271000004', buyer.id);
-    await acceptOfferAndHold(offer.id, farmer.id);
+    const buyer = testBuyer();
+    const { lot, order } = await acceptedOrder('0271000004', buyer.id);
     await pollPaymentsOnce();
 
-    const held = getContract(offer.id);
-    refundHold(offer.id, { reason: 'pickup window missed' });
+    const held = getContract(order.id);
+    refundHold(order.id, { reason: 'pickup window missed' });
 
-    const contract = getContract(offer.id);
+    const contract = getContract(order.id);
     expect(contract.state).toBe('CANCELLED_REFUNDED');
     expect(contractEscrowBalance(contract.id)).toBe(0);
     expect(allJournalsBalanced()).toBe(true);

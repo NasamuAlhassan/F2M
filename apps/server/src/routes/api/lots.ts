@@ -1,54 +1,20 @@
-import {
-  getCommodityById,
-  getFarmerById,
-  getLot,
-  getTrace,
-  gradeBandSchema,
-  listLotsByFarmer,
-  registerLot,
-  t,
-} from '@ftm/core';
+import { DomainError, getLot, getTrace, listContractsForLot } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 
-const registerLotSchema = z.object({
-  farmerId: z.string(),
-  commodityCode: z.string(),
-  unitCode: z.string(),
-  unitQty: z.number().positive(),
-  declaredBand: gradeBandSchema,
-  readyDate: z.number().optional(),
-  askingPricePerKg: z.number().int().positive().optional(),
-  gpsLat: z.number().optional(),
-  gpsLng: z.number().optional(),
-});
-
+/**
+ * Lots are created through the channels that know who the farmer is — USSD,
+ * the voice line, and the farmer's own portal (POST /farmer/lots) — never by
+ * an anonymous API call (D-047). Anyone may read a lot's public, whitelisted
+ * story at /public/trace/:lotId (D-033).
+ */
 export async function lotRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/lots', async (req, reply) => {
-    const lot = registerLot(registerLotSchema.parse(req.body));
-    return reply.code(201).send({ lot });
-  });
-
-  app.get('/lots/:id', async (req) => {
-    const { id } = req.params as { id: string };
-    const lot = getLot(id);
-    const farmer = getFarmerById(lot.farmerId);
-    const commodity = getCommodityById(lot.commodityId);
-    return {
-      lot,
-      farmer: farmer ? { id: farmer.id, name: farmer.name, phone: farmer.phone, regionCode: farmer.regionCode } : null,
-      commodity: { code: commodity.code, name: t('en', commodity.nameKey), clockType: commodity.clockType },
-    };
-  });
-
-  app.get('/lots/:id/trace', async (req) => {
+  // The full trace, money amounts included — only for a buyer trading on this lot.
+  app.get('/lots/:id/trace', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
     getLot(id); // 404 on unknown lot
+    if (!listContractsForLot(id).some((c) => c.buyerId === req.user.sub)) {
+      throw new DomainError('Not your lot', 'FORBIDDEN', 403);
+    }
     return { events: getTrace(id) };
-  });
-
-  app.get('/farmers/:farmerId/lots', async (req) => {
-    const { farmerId } = req.params as { farmerId: string };
-    return { lots: listLotsByFarmer(farmerId) };
   });
 }

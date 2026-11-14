@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { api, dateTime, ghs } from '../api';
 import { Glyph } from './engrave';
 import { useDialog } from './Modal';
-import { btnCls, btnGhostCls, Stat, StateBadge } from './ui';
+import { btnCls, btnGhostCls, BusyLabel, hitAreaCls, plateBtnCls, Stat, StateBadge, textLinkCls } from './ui';
 
 // The AI Intent & Auto-Matching Engine's shared pieces, in the Trade
 // Instrument world: a match arrives as an advice note under a gold plate.
@@ -81,7 +82,7 @@ export function ScoreRing({ pct }: { pct: number }) {
           strokeLinecap="butt"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - pct / 100)}
-          style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16,1,0.3,1)' }}
+          className="transition-[stroke-dashoffset] duration-[var(--dur-slow)] motion-reduce:transition-none"
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -133,11 +134,11 @@ export function MatchBanner({
           <StateBadge state={match.state} />
           <div className="flex flex-wrap justify-end gap-2">
             {match.state === 'OFFERED' && simulateEnabled && (
-              <button className={btnCls} onClick={onSimulate} disabled={simulating}>
-                {simulating ? 'Accepting…' : 'Accept Contract'}
+              <button type="button" className={btnCls} onClick={onSimulate} disabled={simulating} aria-busy={simulating || undefined}>
+                <BusyLabel busy={simulating} label="Accept Contract" busyLabel="Accepting…" />
               </button>
             )}
-            <button className={btnGhostCls} onClick={onPreview}>
+            <button type="button" className={btnGhostCls} onClick={onPreview}>
               Voice & SMS
             </button>
           </div>
@@ -147,8 +148,8 @@ export function MatchBanner({
             </p>
           )}
           <Link
-            to={`/contracts/${match.contractId}`}
-            className="text-xs font-semibold text-[var(--ink)] underline decoration-[var(--gold-deep)] underline-offset-2 hover:text-[var(--gold-deep)]"
+            to={`/deals/${match.contractId}`}
+            className={`${textLinkCls} ${hitAreaCls} text-xs font-semibold text-[var(--ink)] hover:text-[var(--gold-deep)]`}
           >
             View Contract
           </Link>
@@ -198,14 +199,14 @@ export function MatchRow({
       </div>
       <StateBadge state={match.state} />
       {match.state === 'OFFERED' && simulateEnabled && (
-        <button className={btnCls} onClick={onSimulate} disabled={simulating}>
-          {simulating ? 'Accepting…' : 'Accept Contract'}
+        <button type="button" className={btnCls} onClick={onSimulate} disabled={simulating} aria-busy={simulating || undefined}>
+          <BusyLabel busy={simulating} label="Accept Contract" busyLabel="Accepting…" />
         </button>
       )}
-      <button className={btnGhostCls} onClick={onPreview}>
+      <button type="button" className={btnGhostCls} onClick={onPreview}>
         Voice & SMS
       </button>
-      <Link to={`/contracts/${match.contractId}`} className="text-sm font-semibold text-[var(--gold-deep)] hover:underline">
+      <Link to={`/deals/${match.contractId}`} className={`${textLinkCls} ${hitAreaCls} text-sm font-semibold text-[var(--gold-deep)]`}>
         Contract
       </Link>
     </div>
@@ -215,30 +216,34 @@ export function MatchRow({
 export function SimulationDrawer({ contractId, onClose }: { contractId: string; onClose: () => void }) {
   const [locale, setLocale] = useState('tw');
   const { panelRef, trapTab } = useDialog<HTMLElement>(onClose);
+  const titleId = useId();
   const { data } = useQuery({
     queryKey: ['alert-preview', contractId, locale],
     queryFn: () => api<AlertPreview>(`/api/engine/alert-preview?contractId=${contractId}&locale=${locale}`),
   });
 
-  return (
+  // Portalled to document.body: useDialog makes #root inert while open.
+  return createPortal(
     <div className="fixed inset-0 z-30" onClick={onClose}>
-      <div className="absolute inset-0 bg-[var(--ink)]/70" />
+      <div className="scrim-in absolute inset-0 bg-[var(--ink)]/70" />
       <aside
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Voice and SMS simulation"
+        aria-labelledby={titleId}
         tabIndex={-1}
-        className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto border-l border-[var(--ink-7)] bg-[var(--paper)] outline-none"
+        className="drawer-in absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto overscroll-contain border-l border-[var(--ink-7)] bg-[var(--paper)] outline-none"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trapTab}
       >
-        <div className="plate flex items-center justify-between px-5 py-4">
+        <div className="plate on-dark flex items-center justify-between gap-4 px-5 py-5">
           <div>
-            <h2 className="display text-sm font-semibold tracking-[0.1em]">VOICE & SMS SIMULATION</h2>
-            <p className="smallcaps mt-0.5 text-[var(--ink-3)]">what the farmer's basic phone receives</p>
+            <h2 id={titleId} className="headline text-2xl">
+              What the farmer's phone receives
+            </h2>
+            <p className="mt-1 text-sm text-[var(--ink-2)]">Calls and text messages, simulated</p>
           </div>
-          <button className="stamp px-2 py-0.5 text-[11px] text-[var(--paper)] hover:bg-[var(--ink-8)]" onClick={onClose}>
+          <button type="button" className={plateBtnCls} onClick={onClose}>
             Close
           </button>
         </div>
@@ -253,10 +258,12 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
             {(data?.locales ?? [{ code: 'tw', label: 'Twi' }]).map((l) => (
               <button
                 key={l.code}
-                className={`smallcaps min-h-11 min-w-[72px] flex-1 py-1.5 transition-colors lg:min-h-0 ${
+                type="button"
+                aria-pressed={locale === l.code}
+                className={`smallcaps min-h-11 min-w-[72px] flex-1 py-1.5 transition-colors lg:min-h-9 ${
                   locale === l.code
                     ? 'bg-[var(--forest)] text-[var(--paper)]'
-                    : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:text-[var(--ink)]'
+                    : 'bg-[var(--paper-lift)] text-[var(--ink-6)] hover:bg-[var(--paper)] hover:text-[var(--ink)] active:bg-[var(--paper-deep)]'
                 }`}
                 onClick={() => setLocale(l.code)}
               >
@@ -267,7 +274,7 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
 
           {data?.reviewNote && (
             <p className="stamp mb-4 px-3 py-2 text-[11px] normal-case tracking-normal text-[var(--gold-deep)]">
-              Machine-drafted translation — requires native-speaker review (Khaya AI) before farmer-facing use.
+              Machine translation. Native speakers are still checking it.
             </p>
           )}
 
@@ -285,7 +292,7 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
           <div className="space-y-2">
             {(data?.voice ?? []).map((line, i) => (
               <div key={i} className="flex items-start gap-2.5 border border-[var(--gold)] bg-[var(--gold-wash)] px-3.5 py-3 text-sm text-[var(--ink)]">
-                <Glyph name="speak" className="ember mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--gold-deep)]" />
+                <Glyph name="speak" className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--gold-deep)]" />
                 {line}
               </div>
             ))}
@@ -296,6 +303,7 @@ export function SimulationDrawer({ contractId, onClose }: { contractId: string; 
           </div>
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }

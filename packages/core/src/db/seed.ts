@@ -1,8 +1,7 @@
-import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { RubricDoc, ClockConfig } from '../domain/types';
 import { db } from './client';
-import { buyers, commodities, marketPrices, regions, rubrics, units, vehicleClasses } from './schema';
+import { commodities, marketPrices, priceObservations, regions, rubrics, units, vehicleClasses } from './schema';
 
 // Approximate region centroids — distance fallback when a farmer has no GPS fix.
 const REGION_SEED: Array<{ code: string; lat: number; lng: number }> = [
@@ -498,16 +497,261 @@ COMMODITY_SEED.push(
   },
 );
 
-export const DEMO_BUYER = {
-  email: 'buyer@demo.ftm',
-  password: 'demo-buyer-2026',
-  name: 'Adjoa Mensah',
-  company: 'Accra Fresh Markets Ltd',
-  momoMsisdn: '233555000123',
-  regionCode: 'GREATER_ACCRA',
-};
+// Phase 1 (D-051): the northern grains and legumes, and cassava — the crops the
+// owner's farmers grow beside the first eight. Bag sizes are the trade's own:
+// a "maxi bag" of grain or beans is about 100kg; fresh cassava goes by the sack.
+const grainClock: ClockConfig = { offerTtlMinutes: 1440, distanceDecayKm: 300, allowsForward: true, maxWindowDays: 60 };
 
-export async function seed(): Promise<void> {
+COMMODITY_SEED.push(
+  {
+    code: 'CASSAVA',
+    sortOrder: 90,
+    category: 'tuber',
+    // Fresh roots spoil within two or three days of lifting (blue-black streaking),
+    // so cassava trades like a perishable, unlike yam.
+    clockType: 'perishable',
+    clock: { offerTtlMinutes: 240, distanceDecayKm: 80, allowsForward: false, maxWindowDays: 2 },
+    units: [{ code: 'SACK', kgPerUnit: 90 }],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'streaking',
+          labelKey: 'rubric.cassava.streaking',
+          visualCues: 'blue-black or brown streaks in cut flesh, dark ring under the peel — roots lifted too long ago',
+          bandDescriptors: band(
+            'White flesh, no streaks — freshly lifted',
+            'Faint streaking at the cut ends only',
+            'Streaks spreading into the flesh',
+            'Flesh dark throughout',
+          ),
+        },
+        {
+          key: 'cuts_damage',
+          labelKey: 'rubric.cassava.cuts_damage',
+          visualCues: 'broken roots, machete cuts, peel stripped off',
+          bandDescriptors: band('Whole roots, peel intact', 'Minor nicks or peeled patches', 'Many broken or cut roots', 'Mostly broken pieces'),
+        },
+        {
+          key: 'rot',
+          labelKey: 'rubric.cassava.rot',
+          visualCues: 'soft wet patches, sour smell, mould at the ends',
+          bandDescriptors: band('No rot visible', 'One or two suspect roots', 'Several rotting roots', 'Rot through the sack'),
+        },
+        {
+          key: 'size_uniformity',
+          labelKey: 'rubric.cassava.size_uniformity',
+          visualCues: 'consistent root size versus thin woody roots mixed in',
+          bandDescriptors: band('Consistent well-filled roots', 'Mostly consistent', 'Mixed sizes', 'Mostly thin or woody roots'),
+        },
+      ],
+    },
+  },
+  {
+    code: 'MILLET',
+    sortOrder: 100,
+    category: 'grain',
+    clockType: 'storable',
+    clock: grainClock,
+    units: [
+      { code: 'BAG_100KG', kgPerUnit: 100 },
+      { code: 'BAG_50KG', kgPerUnit: 50 },
+      { code: 'OLONKA', kgPerUnit: 2.5, isInformal: true },
+    ],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'moisture',
+          labelKey: 'rubric.millet.moisture',
+          visualCues: 'clumping grain, dull damp look, condensation in the bag',
+          bandDescriptors: band('Dry free-flowing grain', 'Slight dullness, no clumping', 'Some clumped patches', 'Visibly wet or caked grain'),
+        },
+        {
+          key: 'foreign_matter',
+          labelKey: 'rubric.millet.foreign_matter',
+          visualCues: 'chaff, stones, sand and plant debris among the small grains',
+          bandDescriptors: band('Essentially clean', 'Traces of chaff', 'Visible sand or stones', 'Heavy contamination'),
+        },
+        {
+          key: 'shrivelled_grains',
+          labelKey: 'rubric.millet.shrivelled_grains',
+          visualCues: 'small empty or shrivelled grains among plump ones',
+          bandDescriptors: band('Plump uniform grain', 'A few shrivelled grains', 'Many shrivelled grains', 'Mostly empty or immature'),
+        },
+        {
+          key: 'insect_damage',
+          labelKey: 'rubric.millet.insect_damage',
+          visualCues: 'bored grains, live insects, powdery dust',
+          bandDescriptors: band('No insect damage', 'Isolated bored grains', 'Visible insects or dust', 'Heavy infestation'),
+        },
+        {
+          key: 'mould',
+          labelKey: 'rubric.millet.mould',
+          visualCues: 'musty caking, dark or pink fungal growth',
+          bandDescriptors: band('No visible mould', 'Isolated specks', 'Small mouldy patches', 'Widespread mould'),
+        },
+      ],
+    },
+  },
+  {
+    code: 'SORGHUM',
+    sortOrder: 110,
+    category: 'grain',
+    clockType: 'storable',
+    clock: grainClock,
+    units: [
+      { code: 'BAG_100KG', kgPerUnit: 100 },
+      { code: 'BAG_50KG', kgPerUnit: 50 },
+      { code: 'OLONKA', kgPerUnit: 2.5, isInformal: true },
+    ],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'moisture',
+          labelKey: 'rubric.sorghum.moisture',
+          visualCues: 'clumping grain, swollen kernels, condensation in the bag',
+          bandDescriptors: band('Dry free-flowing grain', 'Slight dullness, no clumping', 'Some clumped patches', 'Visibly wet or sprouting grain'),
+        },
+        {
+          key: 'broken_grains',
+          labelKey: 'rubric.sorghum.broken_grains',
+          visualCues: 'split or crushed kernels, exposed white starch',
+          bandDescriptors: band('Under about 3% broken', 'Roughly 3-8% broken', 'Roughly 8-15% broken', 'Mostly broken or crushed'),
+        },
+        {
+          key: 'foreign_matter',
+          labelKey: 'rubric.sorghum.foreign_matter',
+          visualCues: 'glumes, stalk pieces, stones and sand',
+          bandDescriptors: band('Essentially clean', 'Traces of chaff', 'Visible debris or stones', 'Heavy contamination'),
+        },
+        {
+          key: 'mould',
+          labelKey: 'rubric.sorghum.mould',
+          visualCues: 'grain mould: pink, grey or black discoloured kernels, caking — grade strictly',
+          bandDescriptors: band('No visible mould', 'A few discoloured kernels', 'Mouldy kernels throughout', 'Widespread mould or caking'),
+        },
+        {
+          key: 'insect_damage',
+          labelKey: 'rubric.sorghum.insect_damage',
+          visualCues: 'bored kernels, live weevils, powdery dust',
+          bandDescriptors: band('No insect damage', 'Isolated bored kernels', 'Visible insects or dust', 'Heavy infestation'),
+        },
+      ],
+    },
+  },
+  {
+    code: 'SOYBEAN',
+    sortOrder: 120,
+    category: 'grain',
+    clockType: 'storable',
+    clock: grainClock,
+    units: [
+      { code: 'BAG_100KG', kgPerUnit: 100 },
+      { code: 'BAG_50KG', kgPerUnit: 50 },
+    ],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'moisture',
+          labelKey: 'rubric.soybean.moisture',
+          visualCues: 'soft wrinkled beans, damp clumping, condensation in the bag',
+          bandDescriptors: band('Dry hard beans', 'A few soft beans', 'Noticeably damp', 'Wet or swollen beans'),
+        },
+        {
+          key: 'split_beans',
+          labelKey: 'rubric.soybean.split_beans',
+          visualCues: 'halved beans and loose seed coats among whole beans',
+          bandDescriptors: band('Under about 5% split', 'Roughly 5-10% split', 'Roughly 10-20% split', 'Mostly split or crushed'),
+        },
+        {
+          key: 'foreign_matter',
+          labelKey: 'rubric.soybean.foreign_matter',
+          visualCues: 'pod pieces, stalks, stones and soil',
+          bandDescriptors: band('Essentially clean', 'Traces of pod or stalk', 'Visible stones or soil', 'Heavy contamination'),
+        },
+        {
+          key: 'discoloration',
+          labelKey: 'rubric.soybean.discoloration',
+          visualCues: 'green immature beans, purple or brown stained seed coats',
+          bandDescriptors: band('Uniform pale yellow', 'A few green or stained beans', 'Many discoloured beans', 'Predominantly green or stained'),
+        },
+        {
+          key: 'mould',
+          labelKey: 'rubric.soybean.mould',
+          visualCues: 'white or grey fungal growth, musty caking',
+          bandDescriptors: band('No visible mould', 'Isolated specks', 'Small mouldy patches', 'Widespread mould'),
+        },
+      ],
+    },
+  },
+  {
+    code: 'COWPEA',
+    sortOrder: 130,
+    category: 'grain',
+    clockType: 'storable',
+    clock: grainClock,
+    units: [
+      { code: 'BAG_100KG', kgPerUnit: 100 },
+      { code: 'BAG_50KG', kgPerUnit: 50 },
+      { code: 'OLONKA', kgPerUnit: 2.5, isInformal: true },
+    ],
+    rubric: {
+      gradeBands: ['A', 'B', 'C', 'REJECT'],
+      aggregation: 'worst_criterion',
+      criteria: [
+        {
+          key: 'insect_damage',
+          labelKey: 'rubric.cowpea.insect_damage',
+          visualCues: 'round exit holes from weevils (bruchids), eggs on the seed coat, powdery dust — the main loss in stored beans',
+          bandDescriptors: band('No holes or eggs', 'A few holed beans', 'Many holed beans or live weevils', 'Heavy infestation'),
+        },
+        {
+          key: 'moisture',
+          labelKey: 'rubric.cowpea.moisture',
+          visualCues: 'soft swollen beans, damp clumping',
+          bandDescriptors: band('Dry hard beans', 'A few soft beans', 'Noticeably damp', 'Wet or sprouting beans'),
+        },
+        {
+          key: 'foreign_matter',
+          labelKey: 'rubric.cowpea.foreign_matter',
+          visualCues: 'pod shells, stones and soil among the beans',
+          bandDescriptors: band('Essentially clean', 'Traces of shell', 'Visible stones or soil', 'Heavy contamination'),
+        },
+        {
+          key: 'shrivelled_discoloured',
+          labelKey: 'rubric.cowpea.shrivelled_discoloured',
+          visualCues: 'wrinkled undersized beans, dark or stained seed coats',
+          bandDescriptors: band('Plump even-coloured beans', 'A few shrivelled or stained', 'Many shrivelled or stained', 'Mostly shrivelled or dark'),
+        },
+        {
+          key: 'mould',
+          labelKey: 'rubric.cowpea.mould',
+          visualCues: 'white or green fungal growth, musty caking',
+          bandDescriptors: band('No visible mould', 'Isolated specks', 'Small mouldy patches', 'Widespread mould'),
+        },
+      ],
+    },
+  },
+);
+
+/**
+ * Reference data: regions, crops, units, rubrics, market prices, the vehicle
+ * rate card. Safe to run again: rows that exist are kept.
+ *
+ * `refresh` (the default, for db:reset) also rewrites the reference prices and
+ * the rate card to these values. The server runs it on every start with
+ * `refresh: false`, so a crop added here (Phase 1 added five) reaches an
+ * existing database without touching anything already there.
+ */
+export async function seed(opts: { refresh?: boolean } = {}): Promise<void> {
+  const refresh = opts.refresh ?? true;
   for (const r of REGION_SEED) {
     db.insert(regions)
       .values({ code: r.code, nameKey: `region.${r.code}`, lat: r.lat, lng: r.lng })
@@ -550,7 +794,7 @@ export async function seed(): Promise<void> {
       .run();
   }
 
-  seedMarketPrices();
+  seedMarketPrices(refresh);
 
   // Logistics rate card (D-024): base fee + per-km, quoted upfront per vehicle class.
   const VEHICLE_SEED = [
@@ -559,30 +803,20 @@ export async function seed(): Promise<void> {
     { code: 'light_truck', capacityKg: 5000, baseFee: 8000, perKmRate: 600, sortOrder: 30 },
   ];
   for (const v of VEHICLE_SEED) {
-    db.insert(vehicleClasses)
-      .values({ ...v, nameKey: `vehicle.${v.code}` })
-      .onConflictDoUpdate({
-        target: vehicleClasses.code,
-        set: { capacityKg: v.capacityKg, baseFee: v.baseFee, perKmRate: v.perKmRate, sortOrder: v.sortOrder },
-      })
-      .run();
+    const row = db.insert(vehicleClasses).values({ ...v, nameKey: `vehicle.${v.code}` });
+    if (refresh) {
+      row
+        .onConflictDoUpdate({
+          target: vehicleClasses.code,
+          set: { capacityKg: v.capacityKg, baseFee: v.baseFee, perKmRate: v.perKmRate, sortOrder: v.sortOrder },
+        })
+        .run();
+    } else {
+      row.onConflictDoNothing().run();
+    }
   }
 
-  const existingBuyer = db.select().from(buyers).where(eq(buyers.email, DEMO_BUYER.email)).get();
-  if (!existingBuyer) {
-    db.insert(buyers)
-      .values({
-        email: DEMO_BUYER.email,
-        passwordHash: bcrypt.hashSync(DEMO_BUYER.password, 10),
-        name: DEMO_BUYER.name,
-        company: DEMO_BUYER.company,
-        momoMsisdn: DEMO_BUYER.momoMsisdn,
-        regionCode: DEMO_BUYER.regionCode,
-      })
-      .run();
-  }
-
-  console.log(`Seed complete. Demo buyer login: ${DEMO_BUYER.email} / ${DEMO_BUYER.password}`);
+  console.log('Seed complete: regions, commodities, units, rubrics, market prices, vehicle rate card.');
 }
 
 // Reference market prices (GHS/kg → pesewas). Placeholder data clearly marked
@@ -604,22 +838,51 @@ const PRICE_SEED: Record<string, [number, number, number, number]> = {
   PEPPER: [800, 1050, 900, 700],
   ONION: [650, 800, 720, 580],
   PLANTAIN: [300, 420, 360, 340],
+  // Phase 1 crops, from 2025-26 reports: FAO FPMA sorghum at Techiman (GHS 726.67
+  // per 109kg, May 2026), soya after the export ban (~GHS 350 a bag), cowpea
+  // (~GHS 10.6/kg, Aug 2026), cassava sacks at GHS 300-400. Reference only.
+  CASSAVA: [350, 450, 400, 330],
+  MILLET: [720, 850, 780, 650],
+  SORGHUM: [667, 780, 720, 600],
+  SOYBEAN: [350, 450, 400, 330],
+  COWPEA: [950, 1150, 1050, 900],
 };
 
-function seedMarketPrices(): void {
+function seedMarketPrices(refresh: boolean): void {
   const now = Date.now();
   const allCommodities = db.select().from(commodities).all();
   for (const [code, prices] of Object.entries(PRICE_SEED)) {
     const commodity = allCommodities.find((c) => c.code === code);
     if (!commodity) continue;
     MARKETS.forEach(({ market, regionCode }, i) => {
-      db.insert(marketPrices)
-        .values({ commodityId: commodity.id, market, regionCode, pricePerKg: prices[i]!, recordedAt: now })
-        .onConflictDoUpdate({
-          target: [marketPrices.commodityId, marketPrices.market],
-          set: { pricePerKg: prices[i]!, recordedAt: now },
-        })
-        .run();
+      // The same placeholder joins the price history as a 'reference' — the lowest-trust
+      // source, used only when nothing real exists, and it ages out like any other (D-053).
+      const ref = db.insert(priceObservations).values({
+        commodityId: commodity.id,
+        regionCode,
+        market,
+        pricePerKg: prices[i]!,
+        source: 'reference',
+        dataset: 'seed',
+        refId: `seed:${code}:${market}`,
+        observedAt: now,
+      });
+      if (refresh) {
+        ref.onConflictDoUpdate({ target: [priceObservations.source, priceObservations.refId], set: { pricePerKg: prices[i]!, observedAt: now } }).run();
+      } else {
+        ref.onConflictDoNothing().run();
+      }
+      const row = db.insert(marketPrices).values({ commodityId: commodity.id, market, regionCode, pricePerKg: prices[i]!, recordedAt: now });
+      if (refresh) {
+        row
+          .onConflictDoUpdate({
+            target: [marketPrices.commodityId, marketPrices.market],
+            set: { pricePerKg: prices[i]!, recordedAt: now },
+          })
+          .run();
+      } else {
+        row.onConflictDoNothing().run(); // a price already there (or a real one later) is never overwritten
+      }
     });
   }
 }

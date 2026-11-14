@@ -12,13 +12,24 @@ try {
   // No .env is fine — mock mode needs zero keys (D-013).
 }
 
+/** A blank line in .env (`NAME=`) means "not set", not "set to nothing". */
+const blankIsUnset = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === '' ? undefined : v), schema);
+
 const envSchema = z
   .object({
     PORT: z.coerce.number().int().default(3000),
-    JWT_SECRET: z.string().default('dev-only-secret-change-me'),
+    // Web logins (D-047): the server verifies Supabase tokens against this
+    // project's public keys. The same value the browser uses, so one setting.
+    VITE_SUPABASE_URL: z.string().optional(),
     DATABASE_PATH: z.string().default('data/ftm.db'),
     STORAGE_DIR: z.string().default('apps/server/storage'),
     DISPUTE_WINDOW_MINUTES: z.coerce.number().default(10),
+    // Phase 3 settlement (the owner's rules, docs/PHASE3.md): the share of the
+    // agreed total paid to the farmer at pickup, how long a buyer has to confirm
+    // or report a problem, and how long a farmer has to answer a claim.
+    FARMER_ADVANCE_PERCENT: z.coerce.number().min(0).max(100).default(30),
+    RECEIPT_WINDOW_HOURS: z.coerce.number().positive().default(24),
+    CLAIM_ANSWER_HOURS: z.coerce.number().positive().default(24),
     PUBLIC_BASE_URL: z.string().default('http://localhost:3000'),
 
     GRADING_PROVIDER: z.enum(['mock', 'hf']).default('mock'),
@@ -27,16 +38,13 @@ const envSchema = z
     // the original 7B VL retired from the router, verified live 2026-08-24.
     GRADING_MODEL: z.string().default('Qwen/Qwen3-VL-30B-A3B-Instruct'),
 
-    PAYMENT_PROVIDER: z.enum(['mock', 'momo']).default('mock'),
+    // Payments are simulated until Phase 3 picks a licensed payment provider
+    // (docs/COSTS.md §6). The value still matters: demo-only shortcuts such as
+    // "accept for the farmer" are locked to 'mock' and stay locked when a real
+    // provider is added here.
+    PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
     MOCK_PAYMENT_DELAY_MS: z.coerce.number().default(2000),
     PAYMENT_TIMEOUT_MS: z.coerce.number().default(120_000),
-    MOMO_BASE_URL: z.string().default('https://sandbox.momodeveloper.mtn.com'),
-    MOMO_SUB_KEY_COLLECTIONS: z.string().optional(),
-    MOMO_SUB_KEY_DISBURSEMENTS: z.string().optional(),
-    MOMO_API_USER: z.string().optional(),
-    MOMO_API_KEY: z.string().optional(),
-    MOMO_TARGET_ENV: z.string().default('sandbox'),
-    MOMO_CURRENCY: z.string().default('EUR'),
 
     AT_USERNAME: z.string().default('sandbox'),
     AT_API_KEY: z.string().optional(),
@@ -44,25 +52,64 @@ const envSchema = z
     NOTIFY_PROVIDER: z.enum(['mock', 'at']).default('mock'),
     USSD_SHORTCODE: z.string().default('*384*7247#'),
     DISPATCH_OFFER_TTL_MINUTES: z.coerce.number().default(10),
+    // A listing lapses this many days after it was listed or last changed (Phase 1).
+    LISTING_TTL_DAYS: z.coerce.number().default(30),
+
+    // Live prices (D-053). F2M's own deals and asking prices feed the price engine
+    // by themselves; these bring in outside data too. PRICE_FEED_URL is polled for
+    // the JSON shape in docs/PRICES.md; PRICE_INGEST_TOKEN lets a partner POST that
+    // shape to /api/feeds/prices (off until set); PRICE_FEED_HDX loads WFP's
+    // 2006-2023 Ghana history once, for seasonality.
+    PRICE_FEED_URL: blankIsUnset(z.string().url().optional()),
+    PRICE_FEED_TOKEN: blankIsUnset(z.string().optional()),
+    PRICE_FEED_INTERVAL_MINUTES: z.coerce.number().default(360),
+    PRICE_INGEST_TOKEN: blankIsUnset(z.string().min(16).optional()),
+    PRICE_FEED_HDX: z.enum(['true', 'false']).default('false'),
+
+    // Smart alerts (D-055): how many people one new listing or request may reach,
+    // how many alert SMS one farmer may get in a day, and how far a crop's price
+    // must move in two weeks before sellers and buyers are told.
+    ALERT_MAX_RECIPIENTS: z.coerce.number().int().min(0).default(8),
+    ALERT_SMS_PER_FARMER_PER_DAY: z.coerce.number().int().min(0).default(2),
+    ALERT_PRICE_MOVE_PCT: z.coerce.number().min(1).default(10),
+
+    // The language-model assist (D-056). OFF by default: with 'off' every feature runs on
+    // its own rules, exactly as before. 'anthropic' sends short, scrubbed pieces of text
+    // (a farmer's listing sentence, a buyer's typed request) to Anthropic's API, so the
+    // owner must switch it on knowingly (D-047 keeps personal data in-house).
+    LLM_PROVIDER: z.enum(['off', 'anthropic']).default('off'),
+    ANTHROPIC_API_KEY: blankIsUnset(z.string().optional()),
+    LLM_MODEL: z.string().default('claude-opus-5-5'),
+    // Low effort keeps a call quick enough for a live phone call; the answer is only ever a suggestion.
+    LLM_EFFORT: z.enum(['low', 'medium', 'high']).default('low'),
+    LLM_TIMEOUT_MS: z.coerce.number().default(8000),
 
     VOICE_PROVIDER: z.enum(['mock', 'at']).default('mock'),
     AT_VOICE_NUMBER: z.string().optional(),
     VOICE_ANSWER_TIMEOUT_MS: z.coerce.number().default(120_000),
 
-    // Voice listing pipeline (D-038): speech → text → English → parsed lot.
-    // 'khaya' = GhanaNLP's hosted API (quota-metered); 'hf' = open models via
-    // the Hugging Face token (D-041) — LLM translation on the router, Whisper
-    // ASR on hf-inference. 'local' = open-weight models run in-process by
-    // local-models/server.py (D-044) — the only path that covers Kusaal,
-    // which neither Khaya nor a generic LLM handles well. TTS has no HF or
-    // local path yet (MMS not deployed on either).
-    ASR_PROVIDER: z.enum(['mock', 'khaya', 'hf', 'local']).default('mock'),
-    MT_PROVIDER: z.enum(['mock', 'khaya', 'hf', 'local']).default('mock'),
-    TTS_PROVIDER: z.enum(['mock', 'khaya']).default('mock'),
-    KHAYA_API_KEY: z.string().optional(),
-    MT_MODEL: z.string().default('google/gemma-3-27b-it'),
-    ASR_MODEL: z.string().default('openai/whisper-large-v3'),
-    LOCAL_MODELS_URL: z.string().default('http://localhost:8008'),
+    // Language layer (D-038, D-045): speech → text → English → parsed lot, and
+    // the IVR's local-language voice. 'space' = the owner's own Hugging Face
+    // language Space: hears, translates and speaks Twi/Ewe/Kusaal/Dagbani/Hausa
+    // on their own models, public and keyless. 'mock' = offline stand-ins.
+    ASR_PROVIDER: z.enum(['mock', 'space']).default('mock'),
+    MT_PROVIDER: z.enum(['mock', 'space']).default('mock'),
+    TTS_PROVIDER: z.enum(['mock', 'space']).default('mock'),
+    SPACE_URL: z.string().default('https://princealhassannasamu-tekyerema-lang.hf.space'),
+    // Cold first calls load a model (measured 33 s for English hearing), so the
+    // ceiling is generous; the TTS provider applies its own, shorter budget.
+    SPACE_TIMEOUT_MS: z.coerce.number().default(60_000),
+
+    // The phone simulator (D-047): 'true' turns on the /phone handset, the
+    // USSD/IVR tester pages and their SMS/call inboxes, so real numbers can be
+    // tested before a live USSD code and voice number exist. Anyone who can
+    // reach the server can then act as any phone, so it is for a closed test
+    // group only — 'false' once the real carrier is live.
+    SIMULATOR_ENABLED: z.enum(['true', 'false']).default('true'),
+    // A secret Africa's Talking must send with every USSD/voice callback
+    // (?token=…) once the simulator is off. AT has no request signing, so an
+    // unguessable value in the callback URL is their own recommendation.
+    CARRIER_WEBHOOK_TOKEN: z.string().optional(),
 
     // Review gate escape hatch (D-040): 'true' lets machine-drafted catalogs
     // reach farmer-facing surfaces — the owner's own live testing ONLY.
@@ -74,24 +121,20 @@ const envSchema = z
     if (env.GRADING_PROVIDER === 'hf' && !env.HF_TOKEN) {
       ctx.addIssue({ code: 'custom', message: 'GRADING_PROVIDER=hf requires HF_TOKEN' });
     }
+    if (env.LLM_PROVIDER === 'anthropic' && !env.ANTHROPIC_API_KEY) {
+      ctx.addIssue({ code: 'custom', message: 'LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY' });
+    }
     if (env.NOTIFY_PROVIDER === 'at' && !env.AT_API_KEY) {
       ctx.addIssue({ code: 'custom', message: 'NOTIFY_PROVIDER=at requires AT_API_KEY' });
-    }
-    if ((env.ASR_PROVIDER === 'khaya' || env.MT_PROVIDER === 'khaya' || env.TTS_PROVIDER === 'khaya') && !env.KHAYA_API_KEY) {
-      ctx.addIssue({ code: 'custom', message: 'ASR/MT/TTS_PROVIDER=khaya requires KHAYA_API_KEY' });
-    }
-    if ((env.ASR_PROVIDER === 'hf' || env.MT_PROVIDER === 'hf') && !env.HF_TOKEN) {
-      ctx.addIssue({ code: 'custom', message: 'ASR/MT_PROVIDER=hf requires HF_TOKEN' });
     }
     if (env.VOICE_PROVIDER === 'at' && (!env.AT_API_KEY || !env.AT_VOICE_NUMBER)) {
       ctx.addIssue({ code: 'custom', message: 'VOICE_PROVIDER=at requires AT_API_KEY and AT_VOICE_NUMBER' });
     }
-    if (env.PAYMENT_PROVIDER === 'momo') {
-      for (const key of ['MOMO_SUB_KEY_COLLECTIONS', 'MOMO_SUB_KEY_DISBURSEMENTS', 'MOMO_API_USER', 'MOMO_API_KEY'] as const) {
-        if (!env[key]) {
-          ctx.addIssue({ code: 'custom', message: `PAYMENT_PROVIDER=momo requires ${key}` });
-        }
-      }
+    if (env.SIMULATOR_ENABLED === 'false' && !env.CARRIER_WEBHOOK_TOKEN) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'SIMULATOR_ENABLED=false requires CARRIER_WEBHOOK_TOKEN — otherwise anyone can drive the USSD and voice endpoints',
+      });
     }
   });
 
@@ -108,6 +151,8 @@ export const config = {
   databasePath: path.isAbsolute(env.DATABASE_PATH) ? env.DATABASE_PATH : path.join(REPO_ROOT, env.DATABASE_PATH),
   storageDir: path.isAbsolute(env.STORAGE_DIR) ? env.STORAGE_DIR : path.join(REPO_ROOT, env.STORAGE_DIR),
   draftLocalesLive: env.I18N_DRAFT_LOCALES_LIVE === 'true',
+  supabaseUrl: env.VITE_SUPABASE_URL ? env.VITE_SUPABASE_URL.replace(/\/+$/, '') : null,
+  simulatorEnabled: env.SIMULATOR_ENABLED === 'true',
 };
 
 export type Config = typeof config;

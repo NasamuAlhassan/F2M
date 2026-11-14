@@ -161,26 +161,43 @@
 
   const WAVE = '<span class="wave"><i></i><i></i><i></i><i></i></span>';
 
-  async function postAnswer(digits) {
-    const body = new URLSearchParams({
-      sessionId,
-      isActive: '1',
-      callerNumber: phoneInput.value.trim(),
-    });
-    if (digits !== undefined) body.set('dtmfDigits', digits);
-    const res = await fetch('/voice/answer?callId=' + currentCall.id, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-    const xml = await res.text();
+  // Phase 2 calls (docs/PHASE2.md): each answer goes to the callbackUrl the
+  // last response named; a number step collects digits until #; a <Record>
+  // step takes the typed "speech" below; a <Redirect> is followed at once.
+  let step = { gather: null, record: null, number: false };
+  let typed = '';
+  let redirects = 0;
+
+  const localUrl = (u) => { const x = new URL(u, location.origin); return x.pathname + x.search; };
+
+  async function post(url, fields) {
+    const body = new URLSearchParams({ sessionId, isActive: '1', callerNumber: phoneInput.value.trim(), ...fields });
+    const res = await fetch(localUrl(url), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+    show(await res.text());
+  }
+
+  function show(xml) {
     const doc = new DOMParser().parseFromString(xml, 'application/xml');
-    const say = doc.querySelector('Say');
+    const text = [...doc.querySelectorAll('Say')].map((n) => n.textContent).join(' ').replace(/</g, '&lt;') || '…';
     const gather = doc.querySelector('GetDigits');
-    const text = (say ? say.textContent : '…').replace(/</g, '&lt;');
-    if (gather) {
+    const record = doc.querySelector('Record');
+    const redirect = doc.querySelector('Redirect');
+    step = {
+      gather: gather ? gather.getAttribute('callbackUrl') : null,
+      record: record ? record.getAttribute('callbackUrl') : null,
+      number: Boolean(gather && gather.getAttribute('numDigits') !== '1'),
+    };
+    typed = '';
+    if (redirect && redirects < 4) {
+      redirects += 1;
       screen.innerHTML = WAVE + text;
-      keypad.style.display = 'grid';
+      return post(redirect.textContent.trim(), {});
+    }
+    redirects = 0;
+    if (step.gather || step.record) {
+      const how = [step.gather ? (step.number ? 'type a number, then #' : 'press a key') : '', step.record ? 'type what you say below, then Speak' : ''].filter(Boolean).join(' · ');
+      screen.innerHTML = WAVE + text + '\n\n<span class="hint">' + how + '</span>';
+      keypad.style.display = step.gather ? 'grid' : 'none';
     } else {
       screen.innerHTML = '🔊 ' + text + '\n\n— call ended —';
       keypad.style.display = 'none';
@@ -194,33 +211,44 @@
     inCall = true;
     sessionId = 'ivr-' + Math.random().toString(36).slice(2, 10);
     answer.disabled = true; reject.disabled = true;
-    postAnswer(undefined);
+    post('/voice/answer?callId=' + currentCall.id, {});
   });
 
   function sendDigits(d) {
-    if (!currentCall) return;
-    postAnswer(d);
+    if (!inCall || !step.gather) return;
+    if (!step.number) return post(step.gather, { dtmfDigits: d });
+    if (d !== '#') { typed += d; screen.innerHTML = screen.innerHTML.replace(/\n\n⌨.*$/, '') + '\n\n⌨ ' + typed; return; }
+    if (typed) post(step.gather, { dtmfDigits: typed });
   }
 
-  // The open-ended listing call (D-038): drives the REAL inbound wire — the
-  // typed text stands in for the recording (mock ASR); Khaya transcribes later.
+  // Speech: mid-call it answers the <Record> step; otherwise it dials the
+  // listing line (its menu), or — the old one-breath way — lists in one go.
   document.getElementById('speak').addEventListener('click', async () => {
     const speech = document.getElementById('speech').value.trim();
     const out = document.getElementById('speakout');
-    if (!speech) return;
+    if (inCall && step.record) {
+      document.getElementById('speech').value = '';
+      return post(step.record, { transcript: speech });
+    }
     out.style.display = 'block';
     out.textContent = '☎ dialing the listing line…';
     try {
-      const res = await fetch('/voice/answer', {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ callerNumber: phoneInput.value.trim(), transcript: speech }),
-      });
-      const xml = await res.text();
-      const say = new DOMParser().parseFromString(xml, 'application/xml').querySelector('Say');
-      out.textContent = '🔊 ' + (say ? say.textContent : xml);
+      inCall = true;
+      sessionId = 'line-' + Math.random().toString(36).slice(2, 10);
+      currentCall = { id: null, flow: 'line' };
+      if (speech) {
+        // The one-breath listing (D-038), kept for quick demos.
+        const res = await fetch('/voice/answer', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ callerNumber: phoneInput.value.trim(), transcript: speech }) });
+        const say = new DOMParser().parseFromString(await res.text(), 'application/xml').querySelector('Say');
+        out.textContent = '🔊 ' + (say ? say.textContent : '');
+        inCall = false; currentCall = null;
+        return;
+      }
+      out.style.display = 'none';
+      await post('/voice/answer', {});
     } catch {
       out.textContent = 'Network error — is the server running on :3000?';
+      inCall = false;
     }
   });
 

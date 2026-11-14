@@ -1,19 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  carrierCallbackUrl,
+  carrierRequestAllowed,
   config,
   DomainError,
   finishVoiceCall,
   getFarmerByPhone,
+  getInboundCallForSession,
   getLot,
   getVoiceCall,
+  normalizePhone,
   processVoiceListing,
+  startInboundCall,
   t,
 } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { handleVoiceAnswer } from '../ivr/index';
-import { recordResponse, sayResponse } from '../ivr/xml';
+import { sayResponse } from '../ivr/xml';
 
 // Africa's Talking Voice wire format: form-encoded POSTs, XML replies.
 const answerSchema = z.object({
@@ -28,26 +33,49 @@ const answerSchema = z.object({
 });
 
 export async function voiceRoutes(app: FastifyInstance): Promise<void> {
+  // Only the carrier (or, while it is on, the simulator) may drive calls (D-047).
+  app.addHook('onRequest', async (req, reply) => {
+    if (!carrierRequestAllowed((req.query as { token?: unknown }).token)) {
+      await reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Unknown caller' } });
+    }
+  });
+
   // The web handset simulator's stand-in for a carrier's recorded-call upload
   // (D-038 real audio path): the browser records the farmer's mic with
   // MediaRecorder, POSTs the blob here, and gets back a URL it hands to
   // /voice/answer as recordingUrl — the same field a real Africa's Talking
   // callback would carry. No DB row: unlike lot photos, a recording is
   // input to the ASR step, not a marketplace asset worth keeping after.
-  app.post('/voice/upload-recording', async (req, reply) => {
+  // Simulator-only: a real carrier hosts its own recordings.
+  if (config.simulatorEnabled) app.post('/voice/upload-recording', async (req, reply) => {
     const file = await req.file();
     if (!file) throw new DomainError('Attach an audio file', 'NO_FILE', 400);
     const dir = path.join(config.storageDir, 'recordings');
     fs.mkdirSync(dir, { recursive: true });
-    const fileName = `${crypto.randomUUID()}.webm`;
+    // Keep the container the client actually sent: the simulator now uploads
+    // WAV (the language Space can't read WebM), older clients still send WebM.
+    const isWav = file.mimetype.includes('wav') || file.filename.toLowerCase().endsWith('.wav');
+    const fileName = `${crypto.randomUUID()}.${isWav ? 'wav' : 'webm'}`;
     fs.writeFileSync(path.join(dir, fileName), await file.toBuffer());
     return reply.code(201).send({ recordingUrl: `${config.PUBLIC_BASE_URL}/recordings/${fileName}` });
   });
 
   app.post('/voice/answer', async (req, reply) => {
     const body = answerSchema.parse(req.body ?? {});
-    const { callId } = req.query as { callId?: string };
+    const { callId, hold } = req.query as { callId?: string; hold?: string };
     const phone = body.callerNumber ?? body.phoneNumber ?? '';
+    const callbackUrl = (id: string, extra?: string) => carrierCallbackUrl(`/voice/answer?callId=${id}${extra ? `&${extra}` : ''}`);
+    const answer = (id: string) =>
+      handleVoiceAnswer({
+        callId: id,
+        phone,
+        sessionId: body.sessionId,
+        dtmfDigits: body.dtmfDigits,
+        recordingUrl: body.recordingUrl,
+        transcript: body.transcript,
+        hold: hold === '1',
+        callbackUrl,
+      });
 
     // A voice gateway can only parse XML. Without this the global error
     // handler answers a DomainError with JSON — the caller hears dead air and
@@ -64,21 +92,25 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     async function answerCall() {
-    // No callId = an INBOUND call to the listing line (D-038): one open-ended
-    // recording becomes a marketplace lot. Outbound flows keep their callId.
+    // No callId = an INBOUND call to the listing line. Phase 2: the farmer gets
+    // a call row and the line's menu (sell, my listings, offers waiting), and
+    // every later answer carries that call's id. Outbound flows keep theirs.
     if (!callId) {
       const farmer = getFarmerByPhone(phone);
       const locale = farmer?.locale ?? 'en';
+      const live = getInboundCallForSession(body.sessionId);
+      if (live) return reply.type('application/xml').send(await answer(live.id));
       if (!body.recordingUrl && body.transcript === undefined) {
         if (!farmer) {
           return reply
             .type('application/xml')
             .send(await sayResponse(t(locale, 'voice.list.notRegistered', { code: config.USSD_SHORTCODE }), locale));
         }
-        return reply
-          .type('application/xml')
-          .send(await recordResponse(t(locale, 'voice.list.prompt'), locale, `${config.PUBLIC_BASE_URL}/voice/answer`));
+        const call = startInboundCall({ phone: normalizePhone(phone), locale, sessionRef: body.sessionId });
+        return reply.type('application/xml').send(await answer(call.id));
       }
+      // A whole listing in one recording with no call around it (D-038's
+      // one-breath line, still used by older simulator builds): list or refuse.
 
       const result = await processVoiceListing({
         phone,
@@ -103,14 +135,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
       return reply.type('application/xml').send(await sayResponse(t(locale, failKey, { code: config.USSD_SHORTCODE }), locale));
     }
 
-    const xml = await handleVoiceAnswer({
-      callId,
-      phone,
-      sessionId: body.sessionId,
-      dtmfDigits: body.dtmfDigits,
-      callbackUrl: `${config.PUBLIC_BASE_URL}/voice/answer?callId=${callId}`,
-    });
-    return reply.type('application/xml').send(xml);
+    return reply.type('application/xml').send(await answer(callId));
     }
   });
 

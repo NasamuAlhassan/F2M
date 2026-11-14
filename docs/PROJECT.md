@@ -42,7 +42,7 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 - **Buyer web portal** — marketplace browse + bids, demands, matches, contract detail (photos, grading, payments, transaction flow), consolidation, QR traceability, lot trace timeline.
 - **Seller web dashboard** — farmers log in with phone + SMS code: list lots, accept/decline bids, watch payouts (same domain calls as USSD).
 - **Real AI grading** via free HuggingFace vision models, with a deterministic mock fallback.
-- **Real payment rails** via MTN MoMo sandbox (Collections hold, Disbursements release), with a mock ledger fallback.
+- **Simulated payment rails** behind the double-entry ledger; a licensed payment provider is chosen in Phase 3 (MTN MoMo direct was built, then removed in D-046 — see `docs/COSTS.md` §6).
 - **Double-entry ledger** (every journal sums to zero) and an **append-only trace** per lot.
 - All user-facing text behind an i18n catalog (English only for now).
 
@@ -51,16 +51,16 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | Cut | Reason |
 |---|---|
 | Demand forecasting | Needs transaction history that doesn't exist yet — we don't claim what doesn't run |
-| Ghanaian language content | Architecture is ready; bad machine translation shown to a farmer is worse than English. Khaya AI integration comes after flows stabilise |
+| Ghanaian language content | **Since built:** five languages machine-translated by the owner's language Space and live by the owner's choice (D-045, D-049); native review still to come |
 | Field-agent app | Buyer uploads pickup photos in v1; the state machine already has the seams for an agent surface |
-| Cold storage / logistics / green layer | Marketplace revenue funds infrastructure later — traffic first, then the cold room the traffic justifies |
+| Cold storage / green layer | Marketplace revenue funds infrastructure later — traffic first, then the cold room the traffic justifies. (Logistics was since built: M13–M18, M28.) |
 | Production telco shortcode + live MoMo | Needs business registration; the sandboxes prove the flow end to end |
 | Farmer KYC beyond phone number | Pilot-stage concern, not prototype-stage |
 
 ### MVP is done when
 
 1. `npm run demo` drives the full spine to SETTLED **offline** (mock providers) and prints the trace timeline + balanced ledger.
-2. The same demo passes with **real** HF grading + MoMo sandbox money movement.
+2. The same demo passes with **real** HF grading and a real payment rail (Phase 3).
 3. The two-tab manual demo works live: USSD tester as the farmer, portal as the buyer, one lot end to end.
 
 ## Current status
@@ -98,7 +98,29 @@ The MVP is **one lot moved end to end**: a farmer registers and lists a lot thro
 | M28 — driver directory, direct hire, seller-arranged delivery (D-037) | **done** |
 | M29 — open-ended voice listing pipeline, mock-first ASR/MT (D-038) | **done** |
 | M30 — language day: 6 locales, review gate in t(), Khaya MT drafting + TTS (D-040) | **done** |
+| M31 — the Tɛkyerɛma language Space connected: hear, translate, speak (D-045) | **done** |
+| M32 — unused integrations removed: Khaya, HF speech rail, local-models, MTN MoMo direct (D-046) | **done** |
+| M33 — Phase 0: real accounts on Supabase, invite-only; simulator switch; carrier token (D-047) | **done** — first real signup verified 2026-11-14 |
+| M34 — languages live: five catalogs translated by the Space (D-049) | **done** |
+| M35 — the web interface translates too, from the same catalogs (D-050) | **done** |
+| M36 — Phase 1: offer threads with counter-offers, public buyer requests, listing management, five new crops (D-051) | **done** — server, USSD and voice; web screens in progress |
+| M37 — Phase 2: guided voice listing with readback, voice counter-offers, listings and offers by phone, transport by USSD (D-052) | **done** — live Twi listing verified through the Space; gateway behaviour awaits a voice number |
+| M38 — Phase 3: advance at pickup + balance on receipt, 24 h auto-receipt, buyer claims with farmer answer and F2M review, driver milestones (D-057) | **done** — server, USSD and voice; web screens in progress; reviewer screen is Phase 4 |
 
-**MVP:** criteria 1 and 3 met (offline scripted demo to SETTLED; two-tab manual demo verified live in a browser). Criterion 2 — the same demo on real HF grading + MoMo sandbox — is code-complete and waits only on external accounts (HF token, MoMo sandbox subscriptions, Africa's Talking sandbox + ngrok).
+**MVP:** criteria 1 and 3 met (offline scripted demo to SETTLED; two-tab manual demo verified live in a browser). Criterion 2 has real HF grading verified (D-041); the payment rail waits on Phase 3's provider choice and the Bank of Ghana questions in `docs/COSTS.md` §6.
 
-_Update this table at every milestone. Last updated: 2026-08-24._
+_Update this table at every milestone. Last updated: 2026-11-14._
+
+## Roadmap — the owner's vision document, in phases
+
+Agreed 2026-11-13: each phase is finished completely before the next starts, with research first. The target is the vision document's section 22 demonstration, built for real use by the owner and friends on their own phone numbers.
+
+| Phase | Scope | State |
+|---|---|---|
+| 0 — Foundation | Real accounts (Supabase phone + password, invite-only), open routes closed, simulator switch + carrier token, demo kept out of the real database, sample data on the `demo-data` branch, clean install, dependency updates, docs | done |
+| 1 — Two-way marketplace | Farmer's asking price per bag; buyers bid on the listing; counter-offers back and forth until one side accepts; buyer requests visible to all; listing management (quantity, price, sold, withdraw, expiry); harvest/availability/community fields; cassava, millet, sorghum, soya beans, cowpea | server, USSD and voice done (D-051); web screens in progress |
+| 2 — Farmer on a basic phone | Guided voice listing with replay and confirm-before-publish; voice negotiation; listing management and transport requests by phone; asking again when unsure | done (D-052) |
+| 3 — Order → delivery → payment | Order record and stages; driver stages and USSD parity; payment after delivery (driver paid on delivery, then the exchange settles); quality as declared / AI / inspected / buyer-confirmed; disputes | done (D-057); real money waits for Phase 6 |
+| 4 — Accounts, buyer portal, admin | Verification, smartphone farmer sign-up, buyer search and listing detail, admin dashboard, ratings | — |
+| 5 — Language quality (owner) | Fine-tuning on farm terms, a new English voice, Ga, native review, the licence change | parked |
+| 6 — Toward the field | Live SMS/USSD/voice, real money, cooperatives, QR on bags, return loads, price intelligence | — |

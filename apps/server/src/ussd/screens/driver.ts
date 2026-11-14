@@ -2,6 +2,9 @@ import {
   acceptJob,
   confirmJobPickup,
   declineJob,
+  driverArrived,
+  driverAtPickup,
+  driverDeparted,
   DomainError,
   formatGhs,
   getJob,
@@ -240,7 +243,7 @@ export const driverActive: UssdScreen = {
   render: (ctx) => {
     if (!ctx.driver) return [{ key: 'ussd.driver.job.none' }, { key: 'ussd.common.back' }];
     const active = listJobsForDriver(ctx.driver.id).find((j) =>
-      ['ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'DELIVERED'].includes(j.state),
+      ['ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'ARRIVED', 'DELIVERED'].includes(j.state),
     );
     ctx.data.drvActiveJobId = active?.id ?? null;
     if (!active) return [{ key: 'ussd.driver.job.none' }, { key: 'ussd.common.back' }];
@@ -255,8 +258,11 @@ export const driverActive: UssdScreen = {
         },
       },
     ];
-    if (active.state === 'FUNDS_HELD') lines.push({ key: 'ussd.driver.job.pickup' });
-    if (active.state === 'PICKED_UP') lines.push({ key: 'ussd.driver.job.awaitDelivery' });
+    // Phase 3 (vision §10.4): each milestone a basic phone can confirm. "1"
+    // stays "goods loaded", the key drivers already know.
+    if (active.state === 'FUNDS_HELD') lines.push({ key: 'ussd.driver.job.pickup' }, { key: 'ussd.driver.job.atPickup' });
+    if (active.state === 'PICKED_UP') lines.push({ key: 'ussd.driver.job.departed' }, { key: 'ussd.driver.job.arrived' });
+    if (active.state === 'ARRIVED') lines.push({ key: 'ussd.driver.job.awaitDelivery' });
     lines.push({ key: 'ussd.common.back' });
     return lines;
   },
@@ -269,6 +275,18 @@ export const driverActive: UssdScreen = {
     if (job.state === 'FUNDS_HELD' && input === '1') {
       confirmJobPickup(jobId, ctx.driver.id);
       return { end: [{ key: 'ussd.driver.job.pickupDone', params: { code: job.jobCode } }] };
+    }
+    if (job.state === 'FUNDS_HELD' && input === '2') {
+      driverAtPickup(jobId, ctx.driver.id);
+      return { end: [{ key: 'ussd.driver.job.atPickupDone', params: { code: job.jobCode } }] };
+    }
+    if (job.state === 'PICKED_UP' && input === '1') {
+      driverDeparted(jobId, ctx.driver.id);
+      return { end: [{ key: 'ussd.driver.job.departedDone', params: { code: job.jobCode } }] };
+    }
+    if (job.state === 'PICKED_UP' && input === '2') {
+      driverArrived(jobId, ctx.driver.id);
+      return { end: [{ key: 'ussd.driver.job.arrivedDone', params: { code: job.jobCode } }] };
     }
     return invalid();
   },

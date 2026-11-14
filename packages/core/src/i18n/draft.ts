@@ -1,12 +1,13 @@
 /**
- * Machine-draft the i18n catalogs from English via Khaya AI MT (D-040).
+ * Machine-draft the i18n catalogs from English with the owner's language
+ * Space (D-040, D-045). Keyless — it always uses the Space, whatever
+ * MT_PROVIDER says, so it works from a mock-mode checkout.
  *
  *   npm run i18n:draft                      # all non-en locales, missing keys only
  *   npm run i18n:draft -- --locale tw,ee    # specific locales
  *   npm run i18n:draft -- --all             # redraft keys already present too
  *
- * Requires KHAYA_API_KEY in .env (MT_PROVIDER may stay mock — the provider is
- * instantiated directly). Every drafted catalog stays behind the review gate:
+ * Every drafted catalog stays behind the review gate:
  * `_reviewed` is preserved (or ""), so nothing here reaches a farmer until a
  * native speaker signs off. Placeholders are masked as numeral sentinels for
  * the round-trip; keys whose placeholders don't survive two attempts are
@@ -15,9 +16,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { config } from '../config';
-import { LOCALE_TO_KHAYA } from '../providers/khaya';
-import { HfMtProvider, KhayaMtProvider, type MtProvider } from '../providers/mt/index';
+import { SpaceMtProvider, type MtProvider } from '../providers/mt/index';
+import { LOCALE_TO_SPACE } from '../providers/space';
 import { AVAILABLE_LOCALES } from './index';
 import { isPurePlaceholder, protectPlaceholders, restorePlaceholders } from './draftPlaceholders';
 
@@ -61,21 +61,10 @@ async function translateWithRetry(mt: MtProvider, text: string, to: string): Pro
   }
 }
 
-// MT_PROVIDER picks the engine: 'hf' = LLM translation via the HF router
-// (D-041, e.g. `MT_PROVIDER=hf npm run i18n:draft`); anything else = Khaya.
-const useHf = config.MT_PROVIDER === 'hf';
-if (useHf && !config.HF_TOKEN) {
-  console.error('MT_PROVIDER=hf needs HF_TOKEN in .env.');
-  process.exit(1);
-}
-if (!useHf && !config.KHAYA_API_KEY) {
-  console.error('KHAYA_API_KEY is not set — add it to .env (GhanaNLP grants keys free at https://ghananlp.org).');
-  process.exit(1);
-}
-
 const { locales, all } = parseArgs();
-const mt: MtProvider = useHf ? new HfMtProvider() : new KhayaMtProvider();
-const engine = useHf ? `hf:${config.MT_MODEL}` : 'khaya-mt';
+const mt: MtProvider = new SpaceMtProvider();
+const engine = 'tekyerema-space';
+const engineHasLocale = (code: string): boolean => Boolean(LOCALE_TO_SPACE[code]);
 const en = loadCatalog('en');
 const enKeys = Object.keys(en).filter((k) => !k.startsWith('_'));
 
@@ -83,8 +72,8 @@ for (const code of locales) {
   const label = AVAILABLE_LOCALES.find((l) => l.code === code)!.label;
   console.log(`\n── ${label} (${code}) ──`);
 
-  if (!useHf && !LOCALE_TO_KHAYA[code]) {
-    console.log(`  UNSUPPORTED: Khaya AI has no language code for '${code}' yet — catalog untouched, English fallback stands.`);
+  if (!engineHasLocale(code)) {
+    console.log(`  UNSUPPORTED: ${engine} has no language code for '${code}' yet — catalog untouched, English fallback stands.`);
     continue;
   }
 
