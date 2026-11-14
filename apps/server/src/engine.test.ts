@@ -128,7 +128,7 @@ describe('AI engine section (M19)', () => {
     const tw = await get<Preview>(`/api/engine/alert-preview?offerId=${offer.id}&locale=tw`);
     expect(tw.reviewNote).toBe(true);
     expect(tw.sms).toContain(tDraft('tw', 'commodity.YAM')); // Bayerɛ
-    expect(tw.voice[1]).toBe(tDraft('tw', 'voice.bid.menu', { code: config.USSD_SHORTCODE }));
+    expect(tw.voice[1]).toBe(tDraft('tw', 'voice.bid.menu2', { code: config.USSD_SHORTCODE }));
     expect(t('tw', 'commodity.YAM')).toBe('Yam'); // the gate, closed
 
     const ee = await get<Preview>(`/api/engine/alert-preview?offerId=${offer.id}&locale=ee`);

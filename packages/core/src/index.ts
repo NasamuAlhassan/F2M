@@ -60,6 +60,7 @@ export * from './domain/notifications';
 export * from './domain/buyerNotifications';
 export * from './domain/voiceCalls';
 export * from './domain/voiceListings';
+export * from './domain/voiceParse';
 export * from './domain/offers';
 export * from './providers/voice/index';
 export * from './domain/drivers';

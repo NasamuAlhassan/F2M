@@ -157,7 +157,7 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
         farmerName: farmer?.name ?? null,
         farmerPhone: farmer?.phone ?? null,
         sms: tDraft(locale, 'sms.bidReceived', params),
-        voice: [tDraft(locale, 'voice.bid.intro', params), tDraft(locale, 'voice.bid.menu', params)],
+        voice: [tDraft(locale, 'voice.bid.intro', params), tDraft(locale, 'voice.bid.menu2', params)],
         smsStatus: smsRecord?.status ?? null,
         callStatus: callRecord?.status ?? null,
       };

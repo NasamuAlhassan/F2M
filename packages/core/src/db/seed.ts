@@ -741,7 +741,17 @@ COMMODITY_SEED.push(
   },
 );
 
-export async function seed(): Promise<void> {
+/**
+ * Reference data: regions, crops, units, rubrics, market prices, the vehicle
+ * rate card. Safe to run again: rows that exist are kept.
+ *
+ * `refresh` (the default, for db:reset) also rewrites the reference prices and
+ * the rate card to these values. The server runs it on every start with
+ * `refresh: false`, so a crop added here (Phase 1 added five) reaches an
+ * existing database without touching anything already there.
+ */
+export async function seed(opts: { refresh?: boolean } = {}): Promise<void> {
+  const refresh = opts.refresh ?? true;
   for (const r of REGION_SEED) {
     db.insert(regions)
       .values({ code: r.code, nameKey: `region.${r.code}`, lat: r.lat, lng: r.lng })
@@ -784,7 +794,7 @@ export async function seed(): Promise<void> {
       .run();
   }
 
-  seedMarketPrices();
+  seedMarketPrices(refresh);
 
   // Logistics rate card (D-024): base fee + per-km, quoted upfront per vehicle class.
   const VEHICLE_SEED = [
@@ -793,13 +803,17 @@ export async function seed(): Promise<void> {
     { code: 'light_truck', capacityKg: 5000, baseFee: 8000, perKmRate: 600, sortOrder: 30 },
   ];
   for (const v of VEHICLE_SEED) {
-    db.insert(vehicleClasses)
-      .values({ ...v, nameKey: `vehicle.${v.code}` })
-      .onConflictDoUpdate({
-        target: vehicleClasses.code,
-        set: { capacityKg: v.capacityKg, baseFee: v.baseFee, perKmRate: v.perKmRate, sortOrder: v.sortOrder },
-      })
-      .run();
+    const row = db.insert(vehicleClasses).values({ ...v, nameKey: `vehicle.${v.code}` });
+    if (refresh) {
+      row
+        .onConflictDoUpdate({
+          target: vehicleClasses.code,
+          set: { capacityKg: v.capacityKg, baseFee: v.baseFee, perKmRate: v.perKmRate, sortOrder: v.sortOrder },
+        })
+        .run();
+    } else {
+      row.onConflictDoNothing().run();
+    }
   }
 
   console.log('Seed complete: regions, commodities, units, rubrics, market prices, vehicle rate card.');
@@ -834,20 +848,24 @@ const PRICE_SEED: Record<string, [number, number, number, number]> = {
   COWPEA: [950, 1150, 1050, 900],
 };
 
-function seedMarketPrices(): void {
+function seedMarketPrices(refresh: boolean): void {
   const now = Date.now();
   const allCommodities = db.select().from(commodities).all();
   for (const [code, prices] of Object.entries(PRICE_SEED)) {
     const commodity = allCommodities.find((c) => c.code === code);
     if (!commodity) continue;
     MARKETS.forEach(({ market, regionCode }, i) => {
-      db.insert(marketPrices)
-        .values({ commodityId: commodity.id, market, regionCode, pricePerKg: prices[i]!, recordedAt: now })
-        .onConflictDoUpdate({
-          target: [marketPrices.commodityId, marketPrices.market],
-          set: { pricePerKg: prices[i]!, recordedAt: now },
-        })
-        .run();
+      const row = db.insert(marketPrices).values({ commodityId: commodity.id, market, regionCode, pricePerKg: prices[i]!, recordedAt: now });
+      if (refresh) {
+        row
+          .onConflictDoUpdate({
+            target: [marketPrices.commodityId, marketPrices.market],
+            set: { pricePerKg: prices[i]!, recordedAt: now },
+          })
+          .run();
+      } else {
+        row.onConflictDoNothing().run(); // a price already there (or a real one later) is never overwritten
+      }
     });
   }
 }

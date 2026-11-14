@@ -27,6 +27,19 @@ async function callListingLine(phone: string, transcript?: string) {
   return res.body;
 }
 
+/** Answer a step at the callback URL the last response named, as the gateway does. */
+async function pressOn(xml: string, phone: string, digits: string) {
+  const url = /callbackUrl="([^"]+)"/.exec(xml)![1]!.replaceAll('&amp;', '&');
+  const res = await app.inject({
+    method: 'POST',
+    url: new URL(url).pathname + new URL(url).search,
+    payload: new URLSearchParams({ callerNumber: phone, dtmfDigits: digits }).toString(),
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  });
+  expect(res.statusCode).toBe(200);
+  return res.body;
+}
+
 describe('voice listing pipeline (M29, D-038)', () => {
   it('parses open speech against the live registries', () => {
     expect(parseListingText('I have ten bags of maize, good quality')).toMatchObject({
@@ -56,7 +69,9 @@ describe('voice listing pipeline (M29, D-038)', () => {
     registerFarmer({ phone, name: 'Play Farmer', regionCode: 'NORTHERN' });
     setTtsProvider({ name: 'mock', synthesize: async () => ({ url: 'http://localhost:3000/tts/en/rec.mp3' }) });
     try {
-      const xml = await callListingLine(phone);
+      // Phase 2: the line answers with its menu; 1 = sell, which records.
+      const menu = await callListingLine(phone);
+      const xml = await pressOn(menu, phone, '1');
       expect(xml).toContain('<Play url="http://localhost:3000/tts/en/rec.mp3"/>');
       expect(xml.indexOf('<Play')).toBeLessThan(xml.indexOf('<Record'));
       expect(xml).not.toContain('<Say');
@@ -75,10 +90,10 @@ describe('voice listing pipeline (M29, D-038)', () => {
     const phone = '+233207470101';
     registerFarmer({ phone, name: 'Voice Farmer', regionCode: 'NORTHERN' });
 
-    // First leg: the prompt + <Record>.
+    // First leg: the line's menu (Phase 2), keys not a recording.
     const promptXml = await callListingLine(phone);
-    expect(promptXml).toContain('tell us everything');
-    expect(promptXml).toContain('<Record');
+    expect(promptXml).toContain('Press 1 to sell produce');
+    expect(promptXml).toContain('<GetDigits');
 
     // Second leg: the "recording" arrives (typed transcript in mock mode).
     const confirmXml = await callListingLine(phone, 'Hello, I have ten bags of maize, good quality, ready now');

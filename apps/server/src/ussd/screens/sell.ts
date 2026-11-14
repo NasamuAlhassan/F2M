@@ -1,9 +1,11 @@
-import { config, formatGhs, getCommodityByCode, listCommodities, listUnits, registerLot, t, type GradeBand } from '@ftm/core';
+import { formatGhs, getCommodityByCode, listCommodities, listUnits, queueVoiceCall, registerLot, t, type GradeBand } from '@ftm/core';
 import type { UssdCtx, UssdScreen } from '../machine';
 import { DAY_MS, invalid, listLines, paginate, parseSelection } from './common';
 import { parseGhs } from './offers';
 
-// '8' calls out to the open voice line (D-038) instead of the step-by-step
+// '8' hands over to a voice call (Phase 2): F2M rings the farmer back and the
+// call asks, reads back and publishes the listing, at no cost to the farmer —
+// instead of the step-by-step
 // menu below — only offered on page 0, since a farmer who has already paged
 // through commodities is mid-flow, not looking for the shortcut. Kept clear
 // of '9' (this screen's own Next-page key) and '0' (Back), the two digits
@@ -31,7 +33,9 @@ export const sellCommodity: UssdScreen = {
       return { next: 'sell_commodity' };
     }
     if (input === '8' && page === 0) {
-      return { end: [{ key: 'ussd.sell.callNumber', params: { number: config.AT_VOICE_NUMBER || t(ctx.locale, 'ussd.sell.callNumberDemo') } }] };
+      if (!ctx.farmer) return invalid();
+      queueVoiceCall({ phone: ctx.farmer.phone, locale: ctx.farmer.locale, flow: 'listing' });
+      return { end: [{ key: 'ussd.sell.callingYou' }] };
     }
     const idx = parseSelection(input, pageItems.length, start);
     if (idx === null) return invalid();

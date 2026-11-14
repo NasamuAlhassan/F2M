@@ -13,7 +13,7 @@ import {
 } from './screens/driver';
 import { home } from './screens/home';
 import { langSettings, langWelcome } from './screens/language';
-import { lotDetail, lotEditPrice, lotEditQty, lotSoldConfirm, lotsList, lotWithdrawConfirm } from './screens/lots';
+import { lotDetail, lotEditPrice, lotEditQty, lotEditReady, lotSoldConfirm, lotsList, lotWithdrawConfirm } from './screens/lots';
 import { offerCounterConfirm, offerCounterPrice, offerCounterUnits, offerDetail, offersList } from './screens/offers';
 import { requestConfirm, requestDetail, requestPickLot, requestPrice, requestsList, requestUnits } from './screens/requests';
 import { paymentsScreen } from './screens/payments';
@@ -43,6 +43,7 @@ registerScreens(
   lotEditPrice,
   lotEditQty,
   lotSoldConfirm,
+  lotEditReady,
   offersList,
   offerDetail,
   offerCounterPrice,

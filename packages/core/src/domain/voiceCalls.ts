@@ -12,7 +12,7 @@ const ACTIVE_STATUSES = ['pending', 'placing', 'in_progress'] as const;
 export interface QueueVoiceCallInput {
   phone: string;
   locale: string;
-  flow: 'offer' | 'grade' | 'bridge' | 'bid';
+  flow: 'offer' | 'grade' | 'bridge' | 'bid' | 'listing';
   contractId?: string;
   /** The 'bid' flow (Phase 1): the offer thread whose proposal the call reads out. */
   offerId?: string;
@@ -131,6 +131,42 @@ export function setCallNode(callId: string, node: string): void {
   db.update(voiceCalls).set({ currentNode: node, updatedAt: Date.now() }).where(eq(voiceCalls.id, callId)).run();
 }
 
+/**
+ * A farmer calling the listing line (Phase 2) gets a call row like the calls
+ * F2M places, so a call to the line can also go over several questions and
+ * answers. It starts in progress: the farmer is already on the line.
+ */
+export function startInboundCall(input: { phone: string; locale: string; sessionRef: string }): VoiceCall {
+  return db
+    .insert(voiceCalls)
+    .values({ phone: input.phone, locale: input.locale, flow: 'line', direction: 'inbound', status: 'in_progress', sessionRef: input.sessionRef, attempts: 1 })
+    .returning()
+    .get();
+}
+
+/** The live inbound call for a gateway session, if the farmer is still on it. */
+export function getInboundCallForSession(sessionRef: string): VoiceCall | undefined {
+  if (!sessionRef) return undefined;
+  return db
+    .select()
+    .from(voiceCalls)
+    .where(and(eq(voiceCalls.sessionRef, sessionRef), eq(voiceCalls.direction, 'inbound'), eq(voiceCalls.status, 'in_progress')))
+    .get();
+}
+
+/** The call's memory between answers (Phase 2). */
+export function getCallState<T extends Record<string, unknown> = Record<string, unknown>>(call: VoiceCall): T {
+  try {
+    return (call.state ? JSON.parse(call.state) : {}) as T;
+  } catch {
+    return {} as T;
+  }
+}
+
+export function setCallState(callId: string, state: Record<string, unknown>): void {
+  db.update(voiceCalls).set({ state: JSON.stringify(state), updatedAt: Date.now() }).where(eq(voiceCalls.id, callId)).run();
+}
+
 /** Terminal call outcome + a VOICE_CALL trace event on the lot it was about. */
 export function finishVoiceCall(callId: string, status: 'completed' | 'no_answer' | 'failed', outcome?: Record<string, unknown>): void {
   const call = getVoiceCall(callId);
@@ -167,9 +203,16 @@ export function expireStaleVoiceCalls(now = Date.now()): number {
     .from(voiceCalls)
     .where(inArray(voiceCalls.status, ['placing', 'in_progress']))
     .all()
-    .filter((c) => now - (c.lastAttemptAt ?? c.updatedAt) > config.VOICE_ANSWER_TIMEOUT_MS);
+    // An answered call is stale when its last step is old, not its dialling:
+    // a guided listing (Phase 2) can run for minutes.
+    .filter((c) => now - (c.status === 'in_progress' ? c.updatedAt : (c.lastAttemptAt ?? c.updatedAt)) > config.VOICE_ANSWER_TIMEOUT_MS);
   for (const call of stale) {
-    if (call.attempts < MAX_CALL_ATTEMPTS) {
+    if (call.status === 'in_progress') {
+      // The farmer answered (or called the line) and then went quiet or hung
+      // up. Ringing them again would be a stranger's call out of nowhere;
+      // whatever they were doing waits for them on USSD and the SMS.
+      finishVoiceCall(call.id, 'completed', { result: 'hung_up', node: call.currentNode });
+    } else if (call.attempts < MAX_CALL_ATTEMPTS) {
       db.update(voiceCalls)
         .set({ status: 'pending', currentNode: null, sessionRef: null, updatedAt: now })
         .where(eq(voiceCalls.id, call.id))

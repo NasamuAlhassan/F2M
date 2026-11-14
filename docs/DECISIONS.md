@@ -425,3 +425,25 @@ Every significant choice gets an entry: date, decision, reasons, alternatives re
 **Kept for the web's move:** the older contract routes and `contractId` on the engine's preview and simulate endpoints still work. Contracts in OFFERED created before this change can still be accepted or declined.
 
 **Rejected:** reserving a listing for the first bidder (one slow buyer would block every other); counter-offers in kg (farmers trade in bags, crates and bunches); a separate "order" table beside contracts (everything after acceptance already runs on contracts); keeping per-grade refunds for an agreed price (two prices for one deal).
+
+## D-052 · 2026-11-14 · Phase 2: the call asks, reads back, and waits for a 1
+
+**Decision:** A farmer on a basic phone can list, manage listings and negotiate entirely by voice (design: `docs/PHASE2.md`). The call engine (`apps/server/src/ivr/`) now gives every step a way of listening: one key, a number ended by `#`, speech, or "type it or say it" (a `GetDigits` that falls through to a `Record`). Each call keeps a memory between answers (`voice_calls.state`, migration 0014), and a call to the listing line gets a call row too (`direction: inbound`). The keys mean the same everywhere: **9** hears it again (**\*** on a number step), **0** goes back, **#** ends a number. Silence is asked again twice, then the call ends politely.
+
+**Listing by voice:** reached from USSD "Sell → 8" (F2M calls back, free for the farmer) or the listing line's menu. The farmer first says it all in one go, and `parseListingDraft` keeps only what was clearly said (crop, quantity and unit, price per unit, harvest and ready days, quality words). The call then asks only for what is missing. A field not understood after two tries moves to the keypad (the crop list is read four at a time). Quality is two yes/no questions written for each crop. The whole listing is read back, and it is published only on **1**; **2** changes one field, **3** cancels with nothing saved. The recordings and transcripts are kept with the listing (`voice_listings`).
+
+**Negotiating by voice:** the offer call adds **3** counter (price typed, or said as "I can sell the 10 bags but I want 2,100 cedis a bag", then the quantity, then a readback) and **4** hear again. On the listing line, waiting offers are heard one after another and each answer returns to the list.
+
+**Managing by phone:** the line reads each listing and can change its quantity (as "how many are left"), price and ready date, mark it sold elsewhere, or remove it. USSD gains "Ask for transport" on a secured order (the farmer-suggested delivery from D-037) and "Change ready date".
+
+**Never guess:** "bags" of a crop sold in two bag sizes is asked, not assumed; two crops in one sentence names neither; a bare "good" is not a grade ("good morning" listed grade B before this was caught); "2,000" is one number, and "thousand" is a number word.
+
+**Slow voices:** a sentence the Space has never spoken (a readback with the farmer's own numbers) can miss the 6-second wait. The call then says "one moment" and comes straight back (`<Redirect>`), at most twice, before the gateway voice reads it (`TtsProvider.isPending`). Hearing a recording is slow too: live, ASR plus MT took 15 s, longer than a voice gateway waits for an answer. So a recording is heard in the background. The call waits up to 4 s, then holds with "one moment" until the hearing is done (up to six holds; after that the step is asked again).
+
+**Live check (2026-11-14):** a Twi listing sentence spoken by the Space's own Twi voice went through a real server with ASR, MT and TTS all on the Space. The listing was published correctly: 20 × 50kg bags of maize at GHS 500, grade A. ASR heard the Twi well. MT turned it into "I will give them one tenth of an ephah of corn… on the day of the fifth month". The parser kept only "corn" → maize and the call asked for the rest by keypad. This is the "never guess" rule working, and it is also the clearest evidence for fine-tuning the Space's Twi→English translation on farm sentences (Phase 5).
+
+**Calls that go quiet:** an answered call is judged by its last step, not by when it was dialled, so a long listing is never cut off. A farmer who hangs up mid-call is never rung back: the call is closed as `hung_up`.
+
+**Not verified live:** Africa's Talking's `GetDigits` (`numDigits`, `finishOnKey`, `timeout`) and `Record` (posting `recordingUrl`) are confirmed from its SDKs and documentation pages; its `Redirect` and the exact behaviour of a mid-call `Record` callback, or of a `GetDigits` followed by a `Record`, could not be confirmed from the documentation and need a voice number to test (Phase 6). The SMS receipt and the USSD routes stay as the fallback for every step.
+
+**Rejected:** a one-question-at-a-time form for everyone (slow for farmers who can say it all at once); publishing what the parser understood without a readback (vision §5.3: never publish blindly); typing letters on the keypad; separate voice and USSD rules for listings (both call the same `registerLot` / `updateLot` / `counterOffer`).

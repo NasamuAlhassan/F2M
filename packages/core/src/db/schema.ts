@@ -597,7 +597,12 @@ export const voiceCalls = sqliteTable(
     id: id(),
     phone: text('phone').notNull(),
     locale: text('locale').notNull().default('en'),
-    flow: text('flow', { enum: ['offer', 'grade', 'bridge', 'bid'] }).notNull(),
+    // 'listing' = a guided voice listing (Phase 2), 'line' = a farmer calling
+    // the listing line: sell, hear and change listings, answer offers.
+    flow: text('flow', { enum: ['offer', 'grade', 'bridge', 'bid', 'listing', 'line'] }).notNull(),
+    direction: text('direction', { enum: ['outbound', 'inbound'] }).notNull().default('outbound'),
+    /** The call's memory between answers (Phase 2): a listing draft, the offer being heard, retries. JSON. */
+    state: text('state'),
     contractId: text('contract_id').references(() => contracts.id),
     offerId: text('offer_id').references(() => offers.id), // the 'bid' flow: hear an offer thread's proposal (Phase 1)
     currentNode: text('current_node'),

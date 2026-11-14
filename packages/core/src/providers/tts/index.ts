@@ -15,6 +15,12 @@ import { LOCALE_TO_SPACE, spaceCall, spaceFileUrl, type SpaceFile } from '../spa
 export interface TtsProvider {
   readonly name: 'mock' | 'space';
   synthesize(opts: { text: string; locale: string }): Promise<{ url: string } | null>;
+  /**
+   * True while a clip that missed its wait is still being made (Phase 2): a
+   * call can play "one moment" and come back for it instead of falling back
+   * to the gateway voice. False for anything that will never arrive.
+   */
+  isPending?(opts: { text: string; locale: string }): boolean;
 }
 
 export class MockTtsProvider implements TtsProvider {
@@ -74,13 +80,27 @@ export class SpaceTtsProvider implements TtsProvider {
     }
   }
 
+  private clip(opts: { text: string; locale: string }): { lang: string; file: string; url: string } | null {
+    const lang = LOCALE_TO_SPACE[opts.locale];
+    if (!lang || opts.locale === 'en') return null;
+    const hash = createHash('sha256').update(`space|${lang}|${opts.text}`).digest('hex');
+    return {
+      lang,
+      file: path.join(this.cacheDir, opts.locale, `${hash}.wav`),
+      url: `${config.PUBLIC_BASE_URL}/tts/${opts.locale}/${hash}.wav`,
+    };
+  }
+
+  isPending(opts: { text: string; locale: string }): boolean {
+    const clip = this.clip(opts);
+    return clip !== null && this.inflight.has(clip.file);
+  }
+
   async synthesize(opts: { text: string; locale: string }): Promise<{ url: string } | null> {
     try {
-      const lang = LOCALE_TO_SPACE[opts.locale];
-      if (!lang || opts.locale === 'en') return null;
-      const hash = createHash('sha256').update(`space|${lang}|${opts.text}`).digest('hex');
-      const file = path.join(this.cacheDir, opts.locale, `${hash}.wav`);
-      const url = `${config.PUBLIC_BASE_URL}/tts/${opts.locale}/${hash}.wav`;
+      const clip = this.clip(opts);
+      if (!clip) return null;
+      const { lang, file, url } = clip;
       if (fs.existsSync(file)) return { url };
 
       let job = this.inflight.get(file);

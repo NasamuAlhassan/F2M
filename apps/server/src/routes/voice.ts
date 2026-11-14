@@ -7,15 +7,18 @@ import {
   DomainError,
   finishVoiceCall,
   getFarmerByPhone,
+  getInboundCallForSession,
   getLot,
   getVoiceCall,
+  normalizePhone,
   processVoiceListing,
+  startInboundCall,
   t,
 } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { handleVoiceAnswer } from '../ivr/index';
-import { recordResponse, sayResponse } from '../ivr/xml';
+import { sayResponse } from '../ivr/xml';
 
 // Africa's Talking Voice wire format: form-encoded POSTs, XML replies.
 const answerSchema = z.object({
@@ -59,8 +62,20 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/voice/answer', async (req, reply) => {
     const body = answerSchema.parse(req.body ?? {});
-    const { callId } = req.query as { callId?: string };
+    const { callId, hold } = req.query as { callId?: string; hold?: string };
     const phone = body.callerNumber ?? body.phoneNumber ?? '';
+    const callbackUrl = (id: string, extra?: string) => carrierCallbackUrl(`/voice/answer?callId=${id}${extra ? `&${extra}` : ''}`);
+    const answer = (id: string) =>
+      handleVoiceAnswer({
+        callId: id,
+        phone,
+        sessionId: body.sessionId,
+        dtmfDigits: body.dtmfDigits,
+        recordingUrl: body.recordingUrl,
+        transcript: body.transcript,
+        hold: hold === '1',
+        callbackUrl,
+      });
 
     // A voice gateway can only parse XML. Without this the global error
     // handler answers a DomainError with JSON — the caller hears dead air and
@@ -77,21 +92,25 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     async function answerCall() {
-    // No callId = an INBOUND call to the listing line (D-038): one open-ended
-    // recording becomes a marketplace lot. Outbound flows keep their callId.
+    // No callId = an INBOUND call to the listing line. Phase 2: the farmer gets
+    // a call row and the line's menu (sell, my listings, offers waiting), and
+    // every later answer carries that call's id. Outbound flows keep theirs.
     if (!callId) {
       const farmer = getFarmerByPhone(phone);
       const locale = farmer?.locale ?? 'en';
+      const live = getInboundCallForSession(body.sessionId);
+      if (live) return reply.type('application/xml').send(await answer(live.id));
       if (!body.recordingUrl && body.transcript === undefined) {
         if (!farmer) {
           return reply
             .type('application/xml')
             .send(await sayResponse(t(locale, 'voice.list.notRegistered', { code: config.USSD_SHORTCODE }), locale));
         }
-        return reply
-          .type('application/xml')
-          .send(await recordResponse(t(locale, 'voice.list.prompt'), locale, carrierCallbackUrl('/voice/answer')));
+        const call = startInboundCall({ phone: normalizePhone(phone), locale, sessionRef: body.sessionId });
+        return reply.type('application/xml').send(await answer(call.id));
       }
+      // A whole listing in one recording with no call around it (D-038's
+      // one-breath line, still used by older simulator builds): list or refuse.
 
       const result = await processVoiceListing({
         phone,
@@ -116,14 +135,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
       return reply.type('application/xml').send(await sayResponse(t(locale, failKey, { code: config.USSD_SHORTCODE }), locale));
     }
 
-    const xml = await handleVoiceAnswer({
-      callId,
-      phone,
-      sessionId: body.sessionId,
-      dtmfDigits: body.dtmfDigits,
-      callbackUrl: carrierCallbackUrl(`/voice/answer?callId=${callId}`),
-    });
-    return reply.type('application/xml').send(xml);
+    return reply.type('application/xml').send(await answer(callId));
     }
   });
 

@@ -2,6 +2,9 @@ import {
   agreeGrading,
   confirmPickup,
   disputeGrading,
+  DomainError,
+  getJobForContract,
+  suggestTransport,
   formatGhs,
   getCommodityById,
   getContract,
@@ -21,7 +24,7 @@ import {
 } from '@ftm/core';
 import type { UssdScreen } from '../machine';
 import { eq } from 'drizzle-orm';
-import { invalid, listLines, parseSelection } from './common';
+import { DAY_MS, invalid, listLines, parseSelection } from './common';
 import { parseGhs } from './offers';
 
 const MAX_LOTS = 5;
@@ -86,6 +89,9 @@ export const lotDetail: UssdScreen = {
     ctx.data.lotContractId = contract?.id ?? null;
     if (contract?.state === 'FUNDS_HELD') {
       lines.push({ key: 'ussd.lot.pickup' });
+      // Phase 2 (vision §10.2): the farmer can ask for transport by phone too —
+      // the farmer-suggested delivery the buyer approves and funds (D-037).
+      if (!getJobForContract(contract.id)) lines.push({ key: 'ussd.lot.askTransport' });
     } else if (contract?.state === 'GRADED' && contract.finalGrade) {
       // The grade is a number she can argue with: band, payout, and the reason.
       lines.push({
@@ -106,7 +112,7 @@ export const lotDetail: UssdScreen = {
     }
     // A listing on the market can be changed, marked sold, or taken off (Phase 1).
     if (!contract && (lot.status === 'registered' || lot.status === 'matched')) {
-      lines.push({ key: 'ussd.lot.withdraw' }, { key: 'ussd.lot.editPrice' }, { key: 'ussd.lot.editQty' }, { key: 'ussd.lot.sold' });
+      lines.push({ key: 'ussd.lot.withdraw' }, { key: 'ussd.lot.editPrice' }, { key: 'ussd.lot.editQty' }, { key: 'ussd.lot.sold' }, { key: 'ussd.lot.editReady' });
     }
     lines.push({ key: 'ussd.common.back' });
     return lines;
@@ -122,6 +128,7 @@ export const lotDetail: UssdScreen = {
       if (input === '2') return { next: 'lot_edit_price' };
       if (input === '3') return { next: 'lot_edit_qty' };
       if (input === '4') return { next: 'lot_sold_confirm' };
+      if (input === '5') return { next: 'lot_edit_ready' };
       return invalid();
     }
     const contract = getContract(contractId);
@@ -129,6 +136,15 @@ export const lotDetail: UssdScreen = {
     if (contract.state === 'FUNDS_HELD' && input === '1') {
       confirmPickup(contractId, { type: 'farmer', id: ctx.farmer.id });
       return { end: [{ key: 'ussd.pickup.done' }] };
+    }
+    if (contract.state === 'FUNDS_HELD' && input === '2' && !getJobForContract(contractId)) {
+      try {
+        suggestTransport(contractId, ctx.farmer.id);
+      } catch (err) {
+        if (err instanceof DomainError && err.code === 'JOB_EXISTS') return { end: [{ key: 'ussd.lot.transportExists' }] };
+        throw err;
+      }
+      return { end: [{ key: 'ussd.lot.transportAsked' }] };
     }
     if (contract.state === 'GRADED') {
       if (input === '1') {
@@ -210,5 +226,35 @@ export const lotSoldConfirm: UssdScreen = {
     if (input !== '1' || !ctx.farmer) return invalid();
     const lot = markLotSold(String(ctx.data.lotId), ctx.farmer.id);
     return { end: [{ key: 'ussd.lot.soldDone', params: { code: lot.lotCode } }] };
+  },
+};
+
+// Phase 2 (vision §5.5): "update the availability date" — the same choices as the sell flow.
+const READY_CHOICES = [
+  { key: 'ussd.sell.readyNow', days: 0 },
+  { key: 'ussd.sell.readyTomorrow', days: 1 },
+  { key: 'ussd.sell.readyWeek', days: 7 },
+  { key: 'ussd.sell.readyTwoWeeks', days: 14 },
+] as const;
+
+function readyChoices(lotId: string) {
+  const forward = getCommodityById(getLot(lotId).commodityId).clock.allowsForward;
+  return forward ? READY_CHOICES : READY_CHOICES.slice(0, 2); // a perishable is ready today or tomorrow
+}
+
+export const lotEditReady: UssdScreen = {
+  key: 'lot_edit_ready',
+  render: (ctx) => [
+    { key: 'ussd.sell.ready' },
+    ...listLines(readyChoices(String(ctx.data.lotId)).map((c) => t(ctx.locale, c.key)), { hasMore: false }),
+  ],
+  handleInput: (input, ctx) => {
+    if (input === '0') return { next: 'lot_detail' };
+    if (!ctx.farmer) return invalid();
+    const choices = readyChoices(String(ctx.data.lotId));
+    const idx = parseSelection(input, choices.length, 0);
+    if (idx === null) return invalid();
+    const lot = updateLot(String(ctx.data.lotId), ctx.farmer.id, { readyDate: Date.now() + choices[idx]!.days * DAY_MS });
+    return updatedEnd(lot.lotCode);
   },
 };

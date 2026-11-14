@@ -55,9 +55,9 @@ The claim a neighboring marketplace cannot truthfully copy: **a farmer with a ba
 
 ## Evidence on Hand
 
-- A fully working offline demo: `npm run demo` drives register→…→trace across USSD, IVR, and REST wires and exits 0 on balanced books; 247 automated tests.
+- A fully working offline demo: `npm run demo` drives register→…→trace across USSD, IVR, and REST wires and exits 0 on balanced books; 270 automated tests.
 - Seeded demo data only. **There are no real customers, transactions, testimonials, or press yet — never fabricate any.** The first real settled transaction is the milestone being pursued.
-- The living docs trail (`docs/PROJECT.md`, `docs/DECISIONS.md` D-001…D-051, `docs/BUILDLOG.md`) is the authoritative record of what exists and why.
+- The living docs trail (`docs/PROJECT.md`, `docs/DECISIONS.md` D-001…D-052, `docs/BUILDLOG.md`) is the authoritative record of what exists and why.
 
 ## Product Principles
 

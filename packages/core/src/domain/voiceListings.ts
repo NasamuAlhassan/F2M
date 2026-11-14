@@ -24,7 +24,7 @@ export interface ParsedListing {
   declaredBand: GradeBand;
 }
 
-const COMMODITY_SYNONYMS: Record<string, string> = {
+export const COMMODITY_SYNONYMS: Record<string, string> = {
   corn: 'MAIZE',
   peanut: 'GROUNDNUT',
   peanuts: 'GROUNDNUT',
@@ -43,7 +43,7 @@ const NUMBER_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
   eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
   eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
-  sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100,
+  sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, thousand: 1000,
 };
 
 // ASR splits or glues the unit at random: "50 kg", "50kg", "fifty kilos".
@@ -51,10 +51,10 @@ const KG_WORD = /^(kgs?|kilos?|kilograms?)$/;
 const GLUED_KG = /^(\d+)(kgs?|kilos?|kilograms?)$/;
 
 /** The ceiling the USSD quantity screen enforces — one path must not list what the other refuses. */
-const MAX_UNIT_QTY = 100000;
+export const MAX_UNIT_QTY = 100000;
 
 /** A number heard in the sentence, with the tokens it occupies. */
-interface NumberMention {
+export interface NumberMention {
   value: number;
   start: number;
   /** Last token of the number itself; `spanEnd` also covers a trailing "kg". */
@@ -64,21 +64,28 @@ interface NumberMention {
   isWeight: boolean;
 }
 
-const words = (phrase: string): string[] =>
-  phrase.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+export const words = (phrase: string): string[] =>
+  phrase
+    .toLowerCase()
+    // "2,000" is one number; splitting at the comma heard it as 2 and 000.
+    .replace(/(\d),(?=\d{3}\b)/g, '$1')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean);
 
 /**
  * Whole-word match with plural tolerance ("crates" is a crate, "tomatoes" a
  * tomato). Substring matching let "maizena" pass for maize and the letters of
  * "cabbage" pass for "bag".
  */
-const sameWord = (token: string, word: string): boolean => {
+export const sameWord = (token: string, word: string): boolean => {
   const stem = word.replace(/s$/, '');
   return token === stem || token === `${stem}s` || token === `${stem}es`;
 };
 
 /** Where a phrase is first spoken, as a token position; -1 if it never is. */
-function phraseAt(tokens: string[], phrase: string[]): number {
+export function phraseAt(tokens: string[], phrase: string[]): number {
   if (phrase.length === 0) return -1;
   for (let i = 0; i + phrase.length <= tokens.length; i += 1) {
     if (phrase.every((w, k) => sameWord(tokens[i + k]!, w))) return i;
@@ -86,7 +93,7 @@ function phraseAt(tokens: string[], phrase: string[]): number {
   return -1;
 }
 
-function scanNumbers(tokens: string[]): NumberMention[] {
+export function scanNumbers(tokens: string[]): NumberMention[] {
   const found: NumberMention[] = [];
   for (let i = 0; i < tokens.length; i += 1) {
     const glued = GLUED_KG.exec(tokens[i]!);
@@ -99,8 +106,10 @@ function scanNumbers(tokens: string[]): NumberMention[] {
     if (/^\d+$/.test(tokens[i]!)) {
       value = Number(tokens[i]);
     } else if (NUMBER_WORDS[tokens[i]!] !== undefined) {
-      // Compose the whole run — "twenty five" is 25 and "two hundred" is 200.
-      // Stopping at the first word listed a 200-bag harvest as 2.
+      // Compose the whole run — "twenty five" is 25, "two hundred" is 200 and
+      // "two thousand five hundred" is 2,500. Stopping at the first word
+      // listed a 200-bag harvest as 2.
+      let total = 0;
       let running = 0;
       for (let j = i; j < tokens.length; j += 1) {
         const part = NUMBER_WORDS[tokens[j]!];
@@ -109,10 +118,15 @@ function scanNumbers(tokens: string[]): NumberMention[] {
           if (tokens[j] === 'and' && NUMBER_WORDS[tokens[j + 1] ?? ''] !== undefined) continue;
           break;
         }
-        running = part === 100 ? (running || 1) * 100 : running + part;
+        if (part === 1000) {
+          total += (running || 1) * 1000;
+          running = 0;
+        } else {
+          running = part === 100 ? (running || 1) * 100 : running + part;
+        }
         end = j;
       }
-      value = running;
+      value = total + running;
     }
     if (value === null) continue;
     const isWeight = KG_WORD.test(tokens[end + 1] ?? '');
@@ -128,7 +142,7 @@ function scanNumbers(tokens: string[]): NumberMention[] {
  * Anything that stays ambiguous returns null: the farmer gets the "we could not
  * understand" SMS rather than a lot a hundred times her harvest.
  */
-function readQuantity(tokens: string[], numbers: NumberMention[], unitNames: string[], unitKg: number): number | null {
+export function readQuantity(tokens: string[], numbers: NumberMention[], unitNames: string[], unitKg: number): number | null {
   const isUnitWord = (i: number) => unitNames.some((w) => sameWord(tokens[i] ?? '', w));
   // "ten 50 kg bags" — the size sits between the count and its container.
   const pastWeights = (i: number): number => {
@@ -270,6 +284,39 @@ export async function processVoiceListing(input: ProcessVoiceListingInput): Prom
       error: `register: ${(err as Error).message}`,
     });
   }
+}
+
+/**
+ * Keep a guided voice listing's record (Phase 2): every recording the farmer
+ * made in the call, what was heard and what it was read as, beside the lot it
+ * produced, so unclear answers can be reviewed and the models improved
+ * (vision §5.3).
+ */
+export function saveVoiceListing(input: {
+  phone: string;
+  farmerId: string;
+  locale: string;
+  heard: Array<{ transcript: string; english: string; audioRef: string | null }>;
+  parsed: unknown;
+  lotId?: string;
+  error?: string;
+}): VoiceListing {
+  return db
+    .insert(voiceListings)
+    .values({
+      phone: input.phone,
+      farmerId: input.farmerId,
+      locale: input.locale,
+      audioRef: input.heard.map((h) => h.audioRef).filter(Boolean).join(' ') || null,
+      transcript: input.heard.map((h) => h.transcript).join(' | ') || null,
+      translatedText: input.heard.map((h) => h.english).join(' | ') || null,
+      parsed: JSON.stringify(input.parsed),
+      lotId: input.lotId ?? null,
+      status: input.lotId ? 'listed' : 'failed',
+      error: input.error ?? null,
+    })
+    .returning()
+    .get();
 }
 
 export function getVoiceListing(id: string): VoiceListing | undefined {
