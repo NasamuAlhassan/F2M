@@ -36,8 +36,8 @@ export interface CreateDemandInput {
   gpsLng?: number;
 }
 
-export function createDemand(input: CreateDemandInput): Demand {
-  const buyer = db.select().from(buyers).where(eq(buyers.id, input.buyerId)).get();
+export async function createDemand(input: CreateDemandInput): Promise<Demand> {
+  const buyer = (await db.select().from(buyers).where(eq(buyers.id, input.buyerId)))[0];
   if (!buyer) throw notFound('buyer');
   const commodity = getCommodityByCode(input.commodityCode);
   getRegion(input.regionCode);
@@ -77,35 +77,34 @@ export function createDemand(input: CreateDemandInput): Demand {
     throw new DomainError('Provide basePricePerKg or priceTerms', 'INVALID_PRICE_TERMS');
   }
 
-  const demand = db
-    .insert(demands)
-    .values({
-      buyerId: buyer.id,
-      commodityId: commodity.id,
-      quantityKg,
-      remainingKg: quantityKg,
-      minBand,
-      priceTerms: JSON.stringify(priceTerms),
-      windowStart: input.windowStart,
-      windowEnd: input.windowEnd,
-      regionCode: input.regionCode,
-      gpsLat: input.gpsLat ?? buyer.gpsLat,
-      gpsLng: input.gpsLng ?? buyer.gpsLng,
-    })
-    .returning()
-    .get();
+  const demand = (await db
+        .insert(demands)
+        .values({
+          buyerId: buyer.id,
+          commodityId: commodity.id,
+          quantityKg,
+          remainingKg: quantityKg,
+          minBand,
+          priceTerms: JSON.stringify(priceTerms),
+          windowStart: input.windowStart,
+          windowEnd: input.windowEnd,
+          regionCode: input.regionCode,
+          gpsLat: input.gpsLat ?? buyer.gpsLat,
+          gpsLng: input.gpsLng ?? buyer.gpsLng,
+        })
+        .returning())[0]!;
 
   // What the buyer is prepared to pay for the lowest grade they accept is a market signal too (D-053).
   const wantedPerKg = priceTerms[minBand as keyof PriceTerms] as number | undefined;
   if (wantedPerKg && wantedPerKg > 0) {
-    observePrice({ commodityId: commodity.id, regionCode: input.regionCode, pricePerKg: wantedPerKg, source: 'request', refId: demand.id });
+    await observePrice({ commodityId: commodity.id, regionCode: input.regionCode, pricePerKg: wantedPerKg, source: 'request', refId: demand.id });
   }
 
   publishLive({ topic: 'demands', audience: ['all'], ref: { demandId: demand.id } });
 
   // Matching runs the moment demand lands (and again on lot registration + sweep).
-  runMatching({ demandId: demand.id });
-  tryAlertOnNewRequest(demand.id); // farmers who could supply it, and have nothing listed yet (D-055)
+  await runMatching({ demandId: demand.id });
+  await tryAlertOnNewRequest(demand.id); // farmers who could supply it, and have nothing listed yet (D-055)
   return getDemand(demand.id); // re-read: matching may have moved it to partially_matched/fulfilled
 }
 
@@ -114,32 +113,31 @@ export function createDemand(input: CreateDemandInput): Demand {
  * kilograms, window not over, and a real request (never the record behind a
  * negotiated deal). Optionally one crop only.
  */
-export function listOpenRequests(opts: { commodityId?: string; now?: number } = {}): Demand[] {
+export async function listOpenRequests(opts: { commodityId?: string; now?: number } = {}): Promise<Demand[]> {
   const now = opts.now ?? Date.now();
-  return db
-    .select()
-    .from(demands)
-    .where(
-      and(
-        eq(demands.origin, 'request'),
-        inArray(demands.status, ['open', 'partially_matched']),
-        gt(demands.remainingKg, 0),
-        gt(demands.windowEnd, now),
-        ...(opts.commodityId ? [eq(demands.commodityId, opts.commodityId)] : []),
-      ),
-    )
-    .orderBy(desc(demands.createdAt))
-    .all();
+  return (await db
+      .select()
+      .from(demands)
+      .where(
+        and(
+          eq(demands.origin, 'request'),
+          inArray(demands.status, ['open', 'partially_matched']),
+          gt(demands.remainingKg, 0),
+          gt(demands.windowEnd, now),
+          ...(opts.commodityId ? [eq(demands.commodityId, opts.commodityId)] : []),
+        ),
+      )
+      .orderBy(desc(demands.createdAt)));
 }
 
-export function getDemand(id: string): Demand {
-  const demand = db.select().from(demands).where(eq(demands.id, id)).get();
+export async function getDemand(id: string): Promise<Demand> {
+  const demand = (await db.select().from(demands).where(eq(demands.id, id)))[0];
   if (!demand) throw notFound('demand');
   return demand;
 }
 
-export function listDemandsByBuyer(buyerId: string): Demand[] {
-  return db.select().from(demands).where(eq(demands.buyerId, buyerId)).orderBy(desc(demands.createdAt)).all();
+export async function listDemandsByBuyer(buyerId: string): Promise<Demand[]> {
+  return (await db.select().from(demands).where(eq(demands.buyerId, buyerId)).orderBy(desc(demands.createdAt)));
 }
 
 export function demandPriceTerms(demand: Demand): PriceTerms {

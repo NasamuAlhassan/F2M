@@ -13,7 +13,11 @@ import {
   type I18nText,
   type ListingAssist,
   type VoiceCall,
+  deleteSetting,
+  getSetting,
+  setSetting,
 } from '@ftm/core';
+import { waitUntil } from '@vercel/functions';
 import { holdResponse, promptResponse, sayResponse, type IvrInput } from './xml';
 
 /**
@@ -54,7 +58,7 @@ export interface IvrNode {
   /** This step uses 9 itself (a long menu), so 9 is not "hear again" here. */
   ownsNine?: boolean;
   /** Return lines to say-and-hang-up instead of prompting (flow is moot / terminal). */
-  guard?(ctx: IvrCtx): I18nText[] | null;
+  guard?(ctx: IvrCtx): I18nText[] | null | Promise<I18nText[] | null>;
   say(ctx: IvrCtx): I18nText[] | Promise<I18nText[]>;
   onDigits?(digits: string, ctx: IvrCtx): IvrResult | Promise<IvrResult>;
   /** A recording, already heard and translated; null when it could not be understood at all. */
@@ -109,6 +113,23 @@ const HEARING_WAIT_MS = 4000;
 const MAX_HEARING_HOLDS = 6;
 const hearings = new Map<string, { node: string; heard: Promise<Heard | null>; holds: number }>();
 
+/** A hearing's progress in the database, for the instance the redirect reaches (docs/HOSTING.md). */
+interface SavedHearing {
+  node: string;
+  done: boolean;
+  heard?: Heard | null;
+  at: number;
+  holds: number;
+}
+const HEARING_POLL_MS = 500;
+const HEARING_GIVE_UP_MS = 60_000;
+const hearingKey = (callId: string) => `hearing:${callId}`;
+
+async function loadHearing(callId: string): Promise<SavedHearing | null> {
+  const raw = await getSetting(hearingKey(callId));
+  return raw ? (JSON.parse(raw) as SavedHearing) : null;
+}
+
 async function within<T>(p: Promise<T>, ms: number): Promise<{ done: true; value: T } | { done: false }> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<{ done: false }>((resolve) => {
@@ -147,7 +168,7 @@ async function hear(call: VoiceCall, req: VoiceAnswerRequest, nodeKey: string): 
  * nothing (play the prompt), later POSTs carry dtmfDigits or a recording.
  */
 export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string> {
-  const call = (req.callId ? getVoiceCall(req.callId) : undefined) ?? getActiveCallForPhone(req.phone);
+  const call = (req.callId ? await getVoiceCall(req.callId) : undefined) ?? await getActiveCallForPhone(req.phone);
   if (!call || ['completed', 'failed', 'no_answer'].includes(call.status)) {
     // No live call → no locale to speak in; English is the only honest choice.
     return sayResponse(resolveText('en', { key: 'voice.common.goodbye' }), 'en');
@@ -160,13 +181,13 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
   const speak = (lines: I18nText[]) => lines.map((l) => resolveText(call.locale, l)).join(' ');
 
   const end = async (lines: I18nText[], outcome: Record<string, unknown>) => {
-    save();
-    finishVoiceCall(call.id, 'completed', outcome);
+    await save();
+    await finishVoiceCall(call.id, 'completed', outcome);
     return sayResponse(speak(lines), call.locale);
   };
 
   const prompt = async (node: IvrNode): Promise<string> => {
-    const gate = node.guard?.(ctx);
+    const gate = await node.guard?.(ctx);
     if (gate) return end(gate, { result: 'gone' });
     const { xml, pending } = await promptResponse(speak(await node.say(ctx)), call.locale, req.callbackUrl(call.id), node.input);
     const holds = (ctx.state._holds as number | undefined) ?? 0;
@@ -174,11 +195,11 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
       // The farmer's own voice for this step is still being made: a short
       // "one moment" and straight back, rather than a stranger's voice now.
       ctx.state._holds = holds + 1;
-      save();
+      await save();
       return holdResponse(speak([{ key: 'voice.common.moment' }]), call.locale, req.callbackUrl(call.id, 'hold=1'));
     }
     ctx.state._holds = 0;
-    save();
+    await save();
     return xml;
   };
 
@@ -186,14 +207,14 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
     if ('end' in result) return end(result.end, { ...(req.dtmfDigits ? { digits: req.dtmfDigits.trim() } : {}), ...(result.outcome ?? {}) });
     const next = nodes.get(result.next);
     if (!next) throw new Error(`IVR node ${result.next} is not registered`);
-    setCallNode(call.id, next.key);
+    await setCallNode(call.id, next.key);
     return prompt(next);
   };
 
   // First leg: answered — mark in progress, play the entry prompt.
   if (call.status !== 'in_progress' || !call.currentNode) {
-    markCallInProgress(call.id, req.sessionId);
-    setCallNode(call.id, entry);
+    await markCallInProgress(call.id, req.sessionId);
+    await setCallNode(call.id, entry);
     return prompt(nodes.get(entry)!);
   }
 
@@ -202,6 +223,7 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
   /** A recording has been heard (or given up on): hand it to the step it answers. */
   const answered = async (forNode: IvrNode, heard: Heard | null): Promise<string> => {
     hearings.delete(call.id);
+    await deleteSetting(hearingKey(call.id));
     if (heard) {
       // Keep what was said with the call (vision §5.3): reviewable, and data to improve the models.
       const log = ((ctx.state._heard as Heard[] | undefined) ?? []).slice(-11);
@@ -211,23 +233,54 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
   };
 
   /** Wait a little for the hearing; if it is still going, "one moment" and come back. */
+  const hold = () => holdResponse(speak([{ key: 'voice.common.moment' }]), call.locale, req.callbackUrl(call.id, 'hold=1'));
+
   const awaitHearing = async (): Promise<string> => {
-    const pending = hearings.get(call.id)!;
-    const forNode = nodes.get(pending.node)!;
-    const result = await within(pending.heard, HEARING_WAIT_MS);
-    if (result.done) return answered(forNode, result.value);
-    if (pending.holds >= MAX_HEARING_HOLDS) return answered(forNode, null); // asked again, never guessed
-    pending.holds += 1;
-    return holdResponse(speak([{ key: 'voice.common.moment' }]), call.locale, req.callbackUrl(call.id, 'hold=1'));
+    const pending = hearings.get(call.id);
+    if (pending) {
+      // This instance is hearing it: wait for it here.
+      const forNode = nodes.get(pending.node)!;
+      const result = await within(pending.heard, HEARING_WAIT_MS);
+      if (result.done) return answered(forNode, result.value);
+      if (pending.holds >= MAX_HEARING_HOLDS) return answered(forNode, null); // asked again, never guessed
+      pending.holds += 1;
+      return hold();
+    }
+    // Serverless: the redirect may land on another instance than the one hearing the
+    // recording, so the hearing's progress is read from the database (docs/HOSTING.md).
+    const saved = await loadHearing(call.id);
+    if (!saved) return prompt(node);
+    const forNode = nodes.get(saved.node)!;
+    for (let waited = 0; !saved.done && waited < HEARING_WAIT_MS; waited += HEARING_POLL_MS) {
+      await new Promise((r) => setTimeout(r, HEARING_POLL_MS));
+      const now = await loadHearing(call.id);
+      if (now?.done) return answered(forNode, now.heard ?? null);
+    }
+    if (saved.done) return answered(forNode, saved.heard ?? null);
+    if (saved.holds >= MAX_HEARING_HOLDS || Date.now() - saved.at > HEARING_GIVE_UP_MS) return answered(forNode, null);
+    await setSetting(hearingKey(call.id), JSON.stringify({ ...saved, holds: saved.holds + 1 }));
+    return hold();
   };
 
-  if (req.hold) return hearings.has(call.id) ? awaitHearing() : prompt(node);
+  if (req.hold) return hearings.has(call.id) || (await loadHearing(call.id)) ? await awaitHearing() : await prompt(node);
 
   // A recording.
   if (req.recordingUrl || req.transcript !== undefined) {
     ctx.state._misses = 0;
     if (!node.onSpeech) return prompt(node);
-    hearings.set(call.id, { node: node.key, heard: hear(call, req, node.key), holds: 0 });
+    const started: SavedHearing = { node: node.key, done: false, at: Date.now(), holds: 0 };
+    await setSetting(hearingKey(call.id), JSON.stringify(started));
+    const heard = hear(call, req, node.key);
+    // Saved when done, for whichever instance the redirect reaches; kept alive past
+    // this response by waitUntil (a no-op off Vercel, where the process just carries on).
+    waitUntil(
+      heard
+        .then(async (h) => {
+          if (await loadHearing(call.id)) await setSetting(hearingKey(call.id), JSON.stringify({ ...started, done: true, heard: h }));
+        })
+        .catch(() => {}),
+    );
+    hearings.set(call.id, { node: node.key, heard, holds: 0 });
     return awaitHearing();
   }
 
@@ -247,4 +300,9 @@ export async function handleVoiceAnswer(req: VoiceAnswerRequest): Promise<string
   if (!isNumberStep && digits === '0' && node.back) return go({ next: node.back });
   if (!node.onDigits) return prompt(node);
   return go(await node.onDigits(digits, ctx));
+}
+
+/** Test hook: forget this instance's in-memory hearings, as if the next request reached another instance. */
+export function forgetLocalHearings(): void {
+  hearings.clear();
 }

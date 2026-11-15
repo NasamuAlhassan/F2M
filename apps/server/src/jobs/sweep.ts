@@ -44,22 +44,22 @@ export interface SweepResult {
 
 /** One full sweep pass: expiries → missed-pickup refunds → job dispatch upkeep → rematch → releases → payment polling. */
 export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
-  const expiredOffers = expireOffers(now);
-  const threads = sweepOffers(now);
-  const listings = sweepListings(now);
-  const expiredDemands = expireDemands(now);
-  const missedPickupsRefunded = refundMissedPickups(now);
-  const expiredJobOffers = expireJobOffers(now);
-  const staleJobsCancelled = cancelStaleJobs(now);
-  runMatching(); // catch demand/lot pairs that appeared between event-driven runs
+  const expiredOffers = await expireOffers(now);
+  const threads = await sweepOffers(now);
+  const listings = await sweepListings(now);
+  const expiredDemands = await expireDemands(now);
+  const missedPickupsRefunded = await refundMissedPickups(now);
+  const expiredJobOffers = await expireJobOffers(now);
+  const staleJobsCancelled = await cancelStaleJobs(now);
+  await runMatching(); // catch demand/lot pairs that appeared between event-driven runs
   const settlement = await sweepSettlement(now);
   const releasesStarted = await releaseDuePayments();
   const { resolved: paymentsResolved } = await pollPaymentsOnce(now);
   const prices = await refreshPriceFeeds(now);
-  const alerts = sweepAlerts(now);
+  const alerts = await sweepAlerts(now);
   const smsDelivered = await sendPendingNotifications();
   await placePendingVoiceCalls();
-  expireStaleVoiceCalls(now);
+  await expireStaleVoiceCalls(now);
   return {
     expiredOffers,
     expiredDemands,
@@ -82,26 +82,33 @@ export async function sweepOnce(now = Date.now()): Promise<SweepResult> {
 
 export function startSweepJobs(log: FastifyBaseLogger): NodeJS.Timeout[] {
   // Slow lane: offer expiry + rematch + due releases, every 60s.
-  const slow = setInterval(() => {
-    sweepOnce().then(
-      (r) => {
-        const activity =
-          r.expiredOffers + r.expiredDemands + r.missedPickupsRefunded + r.expiredJobOffers + r.staleJobsCancelled + r.releasesStarted +
-          r.offerThreadsExpired + r.offerReminders + r.listingsWarned + r.listingsExpired + r.receiptsAutoConfirmed + r.claimsUnanswered + r.priceRowsPulled + r.priceAlertsSent;
-        if (activity > 0) log.info(r, 'sweep');
-      },
-      (err) => log.error(err, 'sweep failed'),
-    );
+  const slow = setInterval(async () => {
+    await sweepOnce().then(
+            (r) => {
+              const activity =
+                r.expiredOffers + r.expiredDemands + r.missedPickupsRefunded + r.expiredJobOffers + r.staleJobsCancelled + r.releasesStarted +
+                r.offerThreadsExpired + r.offerReminders + r.listingsWarned + r.listingsExpired + r.receiptsAutoConfirmed + r.claimsUnanswered + r.priceRowsPulled + r.priceAlertsSent;
+              if (activity > 0) log.info(r, 'sweep');
+            },
+            (err) => log.error(err, 'sweep failed'),
+          );
   }, 60_000);
   // Fast lane: payment status polling + SMS delivery every 5s — sandbox
   // callbacks are unreliable (D-009), and a farmer's SMS should not wait a minute.
-  const fast = setInterval(() => {
-    pollPaymentsOnce()
-      .then(() => sendPendingNotifications())
-      .then(() => placePendingVoiceCalls())
-      .catch((err) => log.error(err, 'fast sweep failed'));
+  const fast = setInterval(async () => {
+    await pollPaymentsOnce()
+            .then(() => sendPendingNotifications())
+            .then(() => placePendingVoiceCalls())
+            .catch((err) => log.error(err, 'fast sweep failed'));
   }, 5_000);
   slow.unref();
   fast.unref();
   return [slow, fast];
+}
+
+/** The fast lane once: payment checks, then SMS and calls (what the 5-second timer runs locally). */
+export async function fastLaneOnce(): Promise<void> {
+  await pollPaymentsOnce();
+  await sendPendingNotifications();
+  await placePendingVoiceCalls();
 }

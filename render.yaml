@@ -22,7 +22,7 @@ services:
       - key: PORT
         value: 3000
       - key: DATABASE_PATH
-        value: /data/ftm.db
+        value: /data/pglite # a PGlite (Postgres) folder on the disk; docs/HOSTING.md
       - key: STORAGE_DIR
         value: /data/storage
       # Set once the Vercel deploy has a real URL — CORS isn't configured on

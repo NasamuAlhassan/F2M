@@ -1,1 +1,0 @@
-ALTER TABLE `lots` ADD `channel` text DEFAULT 'ussd' NOT NULL;

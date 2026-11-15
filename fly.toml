@@ -26,7 +26,7 @@ primary_region = "lhr"
 
   # Both live on the mounted volume so a redeploy never wipes the pilot's
   # database, produce photos, or cached IVR audio.
-  DATABASE_PATH = "/data/ftm.db"
+  DATABASE_PATH = "/data/pglite" # a PGlite (Postgres) folder on the volume; docs/HOSTING.md
   STORAGE_DIR = "/data/storage"
 
   # The five Ghanaian languages are live (D-049): machine-translated by the

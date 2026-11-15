@@ -4,9 +4,9 @@ import { listLines } from './common';
 
 export const paymentsScreen: UssdScreen = {
   key: 'payments',
-  render: (ctx) => {
+  render: async (ctx) => {
     if (!ctx.farmer) return [{ key: 'ussd.pay.none' }, { key: 'ussd.common.back' }];
-    const recent = listPaymentsForFarmer(ctx.farmer.id, 3);
+    const recent = await listPaymentsForFarmer(ctx.farmer.id, 3);
     if (recent.length === 0) return [{ key: 'ussd.pay.none' }, { key: 'ussd.common.back' }];
     return [
       { key: 'ussd.pay.title' },

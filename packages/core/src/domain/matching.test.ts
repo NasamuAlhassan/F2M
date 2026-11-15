@@ -20,8 +20,8 @@ const storableClock: ClockConfig = { offerTtlMinutes: 1440, distanceDecayKm: 300
 const perishableClock: ClockConfig = { offerTtlMinutes: 120, distanceDecayKm: 50, allowsForward: false, maxWindowDays: 2 };
 const stats = { settled: 0, defaulted: 0 };
 
-function demoBuyerId(): string {
-  return testBuyer().id;
+async function demoBuyerId(): Promise<string> {
+  return (await testBuyer()).id;
 }
 
 describe('scorer (pure)', () => {
@@ -72,107 +72,107 @@ describe('scorer (pure)', () => {
 describe('offer lifecycle (yam fixtures)', () => {
   const now = Date.now();
 
-  it('bids on demand creation in whole units, creates the order on accept, keeps the rest listed', () => {
-    const farmer = registerFarmer({ phone: '0261000001', name: 'Yaw Darko', regionCode: 'BONO_EAST' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'A' }); // 500kg
+  it('bids on demand creation in whole units, creates the order on accept, keeps the rest listed', async () => {
+    const farmer = await registerFarmer({ phone: '0261000001', name: 'Yaw Darko', regionCode: 'BONO_EAST' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'A' }); // 500kg
 
-    const demand = createDemand({
-      buyerId: demoBuyerId(),
-      commodityCode: 'YAM',
-      quantityKg: 300,
-      minBand: 'B',
-      basePricePerKg: 350,
-      windowStart: now,
-      windowEnd: now + 14 * DAY,
-      regionCode: 'GREATER_ACCRA',
-    });
+    const demand = await createDemand({
+          buyerId: await demoBuyerId(),
+          commodityCode: 'YAM',
+          quantityKg: 300,
+          minBand: 'B',
+          basePricePerKg: 350,
+          windowStart: now,
+          windowEnd: now + 14 * DAY,
+          regionCode: 'GREATER_ACCRA',
+        });
     // Whole units only (Phase 1): 300kg buys one 250kg Hundred; 50kg stays wanted.
     expect(demand.status).toBe('partially_matched');
     expect(demand.remainingKg).toBe(50);
 
     // The engine's suggestion is a buyer bid waiting on the farmer — no contract yet.
-    const offer = openOfferFor(farmer.id, lot.id)!;
+    const offer = (await openOfferFor(farmer.id, lot.id))!;
     expect(offer).toBeDefined();
     expect(offer.proposedBy).toBe('buyer');
     expect(offer.units).toBe(1);
     expect(offer.heldDemandKg).toBe(250);
     // Priced at the request's band-A rate (base 350 for min band B → A ≈ 398/kg) per 250kg unit.
     expect(offer.pricePerUnit).toBe(Math.round(350 / 0.88) * 250);
-    expect(listContractsForFarmer(farmer.id)).toHaveLength(0);
-    expect(getLot(lot.id).remainingKg).toBe(500); // an open bid reserves nothing on the listing
+    expect(await listContractsForFarmer(farmer.id)).toHaveLength(0);
+    expect((await getLot(lot.id)).remainingKg).toBe(500); // an open bid reserves nothing on the listing
 
-    const { contractId } = acceptProposal(offer.id, 'farmer', farmer.id);
-    const contract = getContract(contractId);
+    const { contractId } = await acceptProposal(offer.id, 'farmer', farmer.id);
+    const contract = await getContract(contractId);
     expect(contract.state).toBe('ACCEPTED');
     expect(contract.quantityKg).toBe(250);
     expect(contract.agreedTotal).toBe(offer.pricePerUnit);
     expect(contract.holdAmount).toBe(offer.pricePerUnit);
-    expect(getOffer(offer.id).status).toBe('accepted');
+    expect((await getOffer(offer.id)).status).toBe('accepted');
     // A listing with bags left stays on the market (Phase 1).
-    expect(getLot(lot.id).remainingKg).toBe(250);
-    expect(getLot(lot.id).status).toBe('registered');
+    expect((await getLot(lot.id)).remainingKg).toBe(250);
+    expect((await getLot(lot.id)).status).toBe('registered');
 
-    const types = getTrace(lot.id).map((e) => e.type);
+    const types = (await getTrace(lot.id)).map((e) => e.type);
     expect(types).toEqual(['LOT_REGISTERED', 'MATCHED', 'CONTRACT_ACCEPTED']);
 
     // Close the 50kg still wanted, or it would bid on the next test's yam listing.
-    db.update(demands).set({ status: 'cancelled' }).where(eq(demands.id, demand.id)).run();
+    (await db.update(demands).set({ status: 'cancelled' }).where(eq(demands.id, demand.id)));
   });
 
-  it('guards the accept against the wrong farmer', () => {
-    const farmer = registerFarmer({ phone: '0261000002', name: 'Efua Nyame', regionCode: 'VOLTA' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'TUBER', unitQty: 100, declaredBand: 'B' }); // 250kg
-    const demand = createDemand({
-      buyerId: demoBuyerId(),
-      commodityCode: 'YAM',
-      quantityKg: 200,
-      minBand: 'C',
-      basePricePerKg: 300,
-      windowStart: now,
-      windowEnd: now + 10 * DAY,
-      regionCode: 'VOLTA',
-    });
-    const offer = openOfferFor(farmer.id, lot.id)!;
+  it('guards the accept against the wrong farmer', async () => {
+    const farmer = await registerFarmer({ phone: '0261000002', name: 'Efua Nyame', regionCode: 'VOLTA' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'TUBER', unitQty: 100, declaredBand: 'B' }); // 250kg
+    const demand = await createDemand({
+          buyerId: await demoBuyerId(),
+          commodityCode: 'YAM',
+          quantityKg: 200,
+          minBand: 'C',
+          basePricePerKg: 300,
+          windowStart: now,
+          windowEnd: now + 10 * DAY,
+          regionCode: 'VOLTA',
+        });
+    const offer = (await openOfferFor(farmer.id, lot.id))!;
     expect(offer.units).toBe(80); // 80 tubers × 2.5kg
-    expect(getDemand(demand.id).remainingKg).toBe(0); // held by the thread
-    expect(() => acceptProposal(offer.id, 'farmer', 'someone-else')).toThrow(/Not your offer/);
+    expect((await getDemand(demand.id)).remainingKg).toBe(0); // held by the thread
+    await expect((() => acceptProposal(offer.id, 'farmer', 'someone-else'))()).rejects.toThrow(/Not your offer/);
 
     // Rejecting gives the request its kilograms back; the listing never lost any.
-    rejectOffer(offer.id, 'farmer', farmer.id);
-    expect(getOffer(offer.id).status).toBe('rejected');
-    expect(getLot(lot.id).remainingKg).toBe(250);
-    expect(getLot(lot.id).status).toBe('registered');
-    expect(getDemand(demand.id).remainingKg).toBe(200);
+    await rejectOffer(offer.id, 'farmer', farmer.id);
+    expect((await getOffer(offer.id)).status).toBe('rejected');
+    expect((await getLot(lot.id)).remainingKg).toBe(250);
+    expect((await getLot(lot.id)).status).toBe('registered');
+    expect((await getDemand(demand.id)).remainingKg).toBe(200);
   });
 
-  it('expires stale offers via the sweep without re-offering the same lot', () => {
-    const farmer = registerFarmer({ phone: '0261000003', name: 'Kojo Antwi', regionCode: 'ASHANTI' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'TOMATO', unitCode: 'CRATE', unitQty: 5, declaredBand: 'A' }); // 260kg
-    const demand = createDemand({
-      buyerId: demoBuyerId(),
-      commodityCode: 'TOMATO',
-      quantityKg: 200,
-      minBand: 'B',
-      basePricePerKg: 250,
-      windowStart: now,
-      windowEnd: now + DAY,
-      regionCode: 'ASHANTI',
-    });
-    const offer = openOfferFor(farmer.id, lot.id)!;
+  it('expires stale offers via the sweep without re-offering the same lot', async () => {
+    const farmer = await registerFarmer({ phone: '0261000003', name: 'Kojo Antwi', regionCode: 'ASHANTI' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'TOMATO', unitCode: 'CRATE', unitQty: 5, declaredBand: 'A' }); // 260kg
+    const demand = await createDemand({
+          buyerId: await demoBuyerId(),
+          commodityCode: 'TOMATO',
+          quantityKg: 200,
+          minBand: 'B',
+          basePricePerKg: 250,
+          windowStart: now,
+          windowEnd: now + DAY,
+          regionCode: 'ASHANTI',
+        });
+    const offer = (await openOfferFor(farmer.id, lot.id))!;
     expect(offer.units).toBe(3); // 3 × 52kg crates fit the 200kg request
     expect(offer.heldDemandKg).toBe(156);
-    expect(getLot(lot.id).remainingKg).toBe(260);
+    expect((await getLot(lot.id)).remainingKg).toBe(260);
 
     // Tomato offers live 120 minutes; three hours later the sweep expires it.
-    const { expired } = sweepOffers(now + 3 * HOUR);
+    const { expired } = await sweepOffers(now + 3 * HOUR);
     expect(expired).toBeGreaterThanOrEqual(1);
 
-    expect(getOffer(offer.id).status).toBe('expired');
-    expect(getLot(lot.id).remainingKg).toBe(260);
-    expect(getDemand(demand.id).remainingKg).toBe(200); // held kg released
+    expect((await getOffer(offer.id)).status).toBe('expired');
+    expect((await getLot(lot.id)).remainingKg).toBe(260);
+    expect((await getDemand(demand.id)).remainingKg).toBe(200); // held kg released
     // One shot per (lot, demand): rematching does not open a fresh thread here.
-    runMatching({ demandId: demand.id });
-    expect(openOfferFor(farmer.id, lot.id)).toBeUndefined();
-    expect(listOfferEvents(offer.id).map((e) => e.action)).toEqual(['bid', 'expire']);
+    await runMatching({ demandId: demand.id });
+    expect(await openOfferFor(farmer.id, lot.id)).toBeUndefined();
+    expect((await listOfferEvents(offer.id)).map((e) => e.action)).toEqual(['bid', 'expire']);
   });
 });

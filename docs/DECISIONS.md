@@ -534,3 +534,24 @@ The order gains three states: `DELIVERED` (the receipt clock runs), `CLAIMED` an
 **Until Phase 4:** there is no admin role yet, so F2M's decision on a claim is made through a simulator-only route (`POST /api/dev/claims/:id/resolve`), and the review queue is `GET /api/dev/claims`. All money is still simulated until a licensed provider is chosen (Phase 6).
 
 **Rejected:** paying the farmer in full at pickup (the buyer pays before seeing the produce; this was the code until now); holding all the farmer's money until receipt (the owner wanted cash in farmers' hands early); clawing back an advance on a claim (mobile money cannot be pulled back, and it would turn a dispute into a debt); freezing the whole payment on any claim (only the amount in question is held).
+
+## D-058 · 2026-11-14 · Free hosting: Vercel + Supabase, and the backend moves from SQLite to Postgres
+
+**Decision:** With no money for a server, the owner chose Vercel and Supabase on their free plans (`docs/HOSTING.md`). Two Vercel projects: `f2m-web` (`apps/web`) and `f2m-server` (`apps/server`, Fastify as a function). The web's rewrites pass the API, USSD and voice paths to the server, so the browser sees one origin. Supabase holds what must last: Postgres for the data, Storage (public bucket `media`) for photos, recordings and voice clips, Auth as before, and `pg_cron` with `pg_net` for the sweep, calling `POST /api/cron/sweep` every minute and the fast lane every 20 seconds with a secret.
+
+**What it took:**
+- **The database moved from SQLite (better-sqlite3, synchronous) to Postgres**, and every database call is now async. A codemod made the conversion; the TypeScript compiler and typescript-eslint's promise rules caught what it could not. Every existing test passes unchanged in intent.
+- **Tables live in a private schema `f2m`**, because Supabase publishes `public` through its REST API to anyone holding the anon key the web app ships with.
+- **Inside a transaction, `db` is that transaction** (AsyncLocalStorage), so helpers called within one stay inside it. Two bugs this move would otherwise have introduced were found and fixed: ledger postings run in each transition's `also` callback, which was not awaited, and a voice-line change ran without being awaited.
+- **Registries are cached in memory per instance.** Cold starts don't migrate or seed; the server's build (`vercel-build`) does both. Nothing important is kept in module memory between requests: the price-feed clock and a background hearing in progress live in a `settings` table, and `waitUntil` keeps background work alive past a response. The live SSE stream is off on Vercel, where the web polls.
+- **Local development and tests run on PGlite**, a real Postgres in-process, so there is no Docker, no cloud, and it works offline. Tests open an in-memory copy of one migrated, seeded snapshot per run.
+
+**Why:** Render's paid plan was out of reach, and serverless had been ruled out only because the code assumed one long-lived process with a disk (the Dockerfile's comment). Supabase gives the missing durable pieces for free, and the owner already uses it for logins.
+
+**Limits:** Vercel Hobby is for personal, non-commercial use, so real trading needs Pro. Supabase Free allows 500 MB of database and 1 GB of files, and pauses a project after 7 days without activity; the sweep keeps it active. Live updates arrive by polling.
+
+**Rejected:**
+- Render's free tier (it sleeps and wipes its disk);
+- the owner's laptop with a tunnel (online only while the laptop is);
+- Vercel's multi-service import as proposed (it would have run the server as a container and built the web twice);
+- keeping F2M's tables in `public` behind row-level security (a single missed policy would open the data; a private schema is closed by default).

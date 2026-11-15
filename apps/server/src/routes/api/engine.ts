@@ -41,36 +41,34 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
   app.get('/engine/feed', { preHandler: [app.authBuyer] }, async (req) => {
     const buyerId = req.user.sub;
 
-    const lots = db
-      .select()
-      .from(schema.lots)
-      .where(inArray(schema.lots.status, ['registered', 'matched']))
-      .orderBy(desc(schema.lots.createdAt))
-      .all()
-      .filter((l) => l.remainingKg > 0)
-      .slice(0, 20)
-      .map((l) => {
-        const commodity = getCommodityById(l.commodityId);
-        const farmer = getFarmerById(l.farmerId);
-        return {
-          lotCode: l.lotCode,
-          commodityName: t('en', commodity.nameKey),
-          remainingKg: l.remainingKg,
-          declaredBand: l.declaredBand,
-          regionCode: l.regionCode,
-          regionName: t('en', getRegion(l.regionCode).nameKey),
-          readyDate: l.readyDate,
-          farmerName: farmer?.name ?? null,
-          createdAt: l.createdAt,
-        };
-      });
+    const lots = await Promise.all((await db
+              .select()
+              .from(schema.lots)
+              .where(inArray(schema.lots.status, ['registered', 'matched']))
+              .orderBy(desc(schema.lots.createdAt)))
+          .filter((l) => l.remainingKg > 0)
+          .slice(0, 20)
+          .map(async (l) => {
+            const commodity = getCommodityById(l.commodityId);
+            const farmer = await getFarmerById(l.farmerId);
+            return {
+              lotCode: l.lotCode,
+              commodityName: t('en', commodity.nameKey),
+              remainingKg: l.remainingKg,
+              declaredBand: l.declaredBand,
+              regionCode: l.regionCode,
+              regionName: t('en', getRegion(l.regionCode).nameKey),
+              readyDate: l.readyDate,
+              farmerName: farmer?.name ?? null,
+              createdAt: l.createdAt,
+            };
+          }));
 
-    const demands = db
-      .select()
-      .from(schema.demands)
-      .where(gt(schema.demands.remainingKg, 0))
-      .orderBy(desc(schema.demands.createdAt))
-      .all()
+    const demands = (await db
+          .select()
+          .from(schema.demands)
+          .where(gt(schema.demands.remainingKg, 0))
+          .orderBy(desc(schema.demands.createdAt)))
       .filter((d) => d.status === 'open' || d.status === 'partially_matched')
       .slice(0, 20)
       .map((d) => {
@@ -90,43 +88,42 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
         };
       });
 
-    const matches = db
-      .select()
-      .from(schema.contracts)
-      .where(eq(schema.contracts.buyerId, buyerId))
-      .orderBy(desc(schema.contracts.createdAt))
-      .all()
-      .slice(0, 8)
-      .map((c) => {
-        const match = db.select().from(schema.matches).where(eq(schema.matches.id, c.matchId)).get();
-        const breakdown = match ? scoreBreakdownSchema.parse(JSON.parse(match.scoreBreakdown)) : null;
-        const commodity = getCommodityById(c.commodityId);
-        const farmer = getFarmerById(c.farmerId);
-        const lot = db.select().from(schema.lots).where(eq(schema.lots.id, c.lotId)).get();
-        let logisticsEstimate: number | null = null;
-        try {
-          logisticsEstimate = quoteTransportOptions(c.id)[0]?.quoteAmount ?? null;
-        } catch {
-          logisticsEstimate = null;
-        }
-        const terms = contractPriceTerms(c);
-        return {
-          contractId: c.id,
-          state: c.state,
-          scorePct: match ? Math.round(match.score * 100) : null,
-          commodityName: t('en', commodity.nameKey),
-          quantityKg: c.quantityKg,
-          bestPricePerKg: terms[bestBand(terms)] ?? 0,
-          holdAmount: c.holdAmount,
-          farmerName: farmer?.name ?? null,
-          lotCode: lot?.lotCode ?? null,
-          distanceKm: breakdown?.distanceKm ?? null,
-          logisticsEstimate,
-          createdAt: c.createdAt,
-        };
-      });
+    const matches = await Promise.all((await db
+              .select()
+              .from(schema.contracts)
+              .where(eq(schema.contracts.buyerId, buyerId))
+              .orderBy(desc(schema.contracts.createdAt)))
+          .slice(0, 8)
+          .map(async (c) => {
+            const match = (await db.select().from(schema.matches).where(eq(schema.matches.id, c.matchId)))[0];
+            const breakdown = match ? scoreBreakdownSchema.parse(JSON.parse(match.scoreBreakdown)) : null;
+            const commodity = getCommodityById(c.commodityId);
+            const farmer = await getFarmerById(c.farmerId);
+            const lot = (await db.select().from(schema.lots).where(eq(schema.lots.id, c.lotId)))[0];
+            let logisticsEstimate: number | null = null;
+            try {
+              logisticsEstimate = (await quoteTransportOptions(c.id))[0]?.quoteAmount ?? null;
+            } catch {
+              logisticsEstimate = null;
+            }
+            const terms = contractPriceTerms(c);
+            return {
+              contractId: c.id,
+              state: c.state,
+              scorePct: match ? Math.round(match.score * 100) : null,
+              commodityName: t('en', commodity.nameKey),
+              quantityKg: c.quantityKg,
+              bestPricePerKg: terms[bestBand(terms)] ?? 0,
+              holdAmount: c.holdAmount,
+              farmerName: farmer?.name ?? null,
+              lotCode: lot?.lotCode ?? null,
+              distanceKm: breakdown?.distanceKm ?? null,
+              logisticsEstimate,
+              createdAt: c.createdAt,
+            };
+          }));
 
-    const offers = listOffersForBuyer(buyerId, 'open').map((o) => describeOffer(o));
+    const offers = await Promise.all((await listOffersForBuyer(buyerId, 'open')).map((o) => describeOffer(o)));
     return { lots, demands, matches, offers, simulateEnabled: config.PAYMENT_PROVIDER === 'mock' && config.simulatorEnabled };
   });
 
@@ -135,10 +132,10 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
   app.get('/engine/alert-preview', { preHandler: [app.authBuyer] }, async (req) => {
     const { offerId, contractId: legacyContractId, locale } = previewSchema.parse(req.query ?? {});
     if (offerId) {
-      const offer = getOffer(offerId);
+      const offer = await getOffer(offerId);
       if (offer.buyerId !== req.user.sub) throw new DomainError('Not your offer', 'FORBIDDEN', 403);
-      const v = describeOffer(offer);
-      const farmer = getFarmerById(offer.farmerId);
+      const v = await describeOffer(offer);
+      const farmer = await getFarmerById(offer.farmerId);
       const params = {
         buyer: v.buyer.company ?? v.buyer.name,
         units: v.current.units,
@@ -148,8 +145,8 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
         total: formatGhs(v.current.total),
         code: config.USSD_SHORTCODE,
       };
-      const smsRecord = farmer ? listNotificationsForPhone(farmer.phone, 20).find((n) => n.templateKey === 'sms.bidReceived' && n.lotId === offer.lotId) : undefined;
-      const callRecord = farmer ? listVoiceCallsForPhone(farmer.phone, 20).find((c) => c.flow === 'bid' && c.offerId === offer.id) : undefined;
+      const smsRecord = farmer ? (await listNotificationsForPhone(farmer.phone, 20)).find((n) => n.templateKey === 'sms.bidReceived' && n.lotId === offer.lotId) : undefined;
+      const callRecord = farmer ? (await listVoiceCallsForPhone(farmer.phone, 20)).find((c) => c.flow === 'bid' && c.offerId === offer.id) : undefined;
       return {
         locales: AVAILABLE_LOCALES.map((l) => ({ ...l, reviewed: isLocaleReviewed(l.code) })),
         locale,
@@ -164,11 +161,11 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
     }
     if (!legacyContractId) throw new DomainError('Say which offer to preview', 'VALIDATION', 400);
     const contractId = legacyContractId;
-    const contract = getContract(contractId);
+    const contract = await getContract(contractId);
     if (contract.buyerId !== req.user.sub) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
-    const farmer = getFarmerById(contract.farmerId);
+    const farmer = await getFarmerById(contract.farmerId);
     const commodity = getCommodityById(contract.commodityId);
-    const buyer = db.select().from(schema.buyers).where(eq(schema.buyers.id, contract.buyerId)).get();
+    const buyer = (await db.select().from(schema.buyers).where(eq(schema.buyers.id, contract.buyerId)))[0];
     const terms = contractPriceTerms(contract);
     // tDraft: this drawer is the sanctioned PREVIEW surface (D-040) — it shows
     // machine-drafted text the review gate keeps off real farmer channels.
@@ -191,10 +188,10 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
     ];
 
     const smsRecord = farmer
-      ? listNotificationsForPhone(farmer.phone, 20).find((n) => n.templateKey === 'sms.newOffer' && n.contractId === contractId)
+      ? (await listNotificationsForPhone(farmer.phone, 20)).find((n) => n.templateKey === 'sms.newOffer' && n.contractId === contractId)
       : undefined;
     const callRecord = farmer
-      ? listVoiceCallsForPhone(farmer.phone, 20).find((c) => c.flow === 'offer' && c.contractId === contractId)
+      ? (await listVoiceCallsForPhone(farmer.phone, 20)).find((c) => c.flow === 'offer' && c.contractId === contractId)
       : undefined;
 
     return {
@@ -220,13 +217,13 @@ export async function engineRoutes(app: FastifyInstance): Promise<void> {
     }
     const { offerId, contractId } = simulateSchema.parse(req.body ?? {});
     if (offerId) {
-      const offer = getOffer(offerId);
+      const offer = await getOffer(offerId);
       if (offer.buyerId !== req.user.sub) throw new DomainError('Not your offer', 'FORBIDDEN', 403);
       const { contract } = await acceptOfferThread(offerId, 'farmer', offer.farmerId, 'system');
       return { contract: { id: contract.id, state: contract.state } };
     }
     if (!contractId) throw new DomainError('Say which offer to accept', 'VALIDATION', 400);
-    const contract = getContract(contractId);
+    const contract = await getContract(contractId);
     if (contract.buyerId !== req.user.sub) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
     const accepted = await acceptOfferAndHold(contractId, contract.farmerId);
     return { contract: { id: accepted.id, state: accepted.state } };

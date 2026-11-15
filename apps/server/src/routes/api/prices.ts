@@ -44,7 +44,7 @@ export async function priceRoutes(app: FastifyInstance): Promise<void> {
   app.get('/prices/overview', async (req) => {
     const { regionCode } = regionQuery.parse(req.query);
     const now = Date.now();
-    const rows = marketOverview({ regionCode, now }).map((o) => {
+    const rows = (await marketOverview({ regionCode, now })).map((o) => {
       const commodity = getCommodityByCode(o.commodityCode);
       return {
         ...o,
@@ -61,25 +61,25 @@ export async function priceRoutes(app: FastifyInstance): Promise<void> {
     const { regionCode } = regionQuery.parse(req.query);
     const commodity = getCommodityByCode(req.params.code.toUpperCase());
     const now = Date.now();
-    const outlook = seasonalOutlook(commodity.id, now);
+    const outlook = await seasonalOutlook(commodity.id, now);
     return {
       commodityCode: commodity.code,
       commodityName: t('en', commodity.nameKey),
       unit: primaryUnit(commodity.id),
-      estimate: estimatePrice(commodity.id, { regionCode, now }),
-      trend30: priceTrend(commodity.id, { regionCode, windowDays: 30, now }),
-      trend90: priceTrend(commodity.id, { regionCode, windowDays: 90, now }),
-      recent: priceSeries(commodity.id, { regionCode, days: 120, bucketDays: 7, now }),
-      history: priceSeries(commodity.id, { regionCode, days: 365 * 6, bucketDays: 30, now }),
-      markets: (() => {
-        // Market reports first; the seed's reference quotes fill in markets nobody has reported.
-        const reported = latestByMarket(commodity.id, now).map((m) => ({ ...m, kind: 'report' as const }));
-        const named = new Set(reported.map((m) => m.market));
-        const reference = listMarketPrices(commodity.id)
-          .filter((p) => !named.has(p.market))
-          .map((p) => ({ market: p.market, regionCode: p.regionCode, pricePerKg: p.pricePerKg, observedAt: p.recordedAt, source: 'reference' as const, kind: 'reference' as const }));
-        return [...reported, ...reference];
-      })(),
+      estimate: await estimatePrice(commodity.id, { regionCode, now }),
+      trend30: await priceTrend(commodity.id, { regionCode, windowDays: 30, now }),
+      trend90: await priceTrend(commodity.id, { regionCode, windowDays: 90, now }),
+      recent: await priceSeries(commodity.id, { regionCode, days: 120, bucketDays: 7, now }),
+      history: await priceSeries(commodity.id, { regionCode, days: 365 * 6, bucketDays: 30, now }),
+      markets: await (async () => {
+              // Market reports first; the seed's reference quotes fill in markets nobody has reported.
+              const reported = (await latestByMarket(commodity.id, now)).map((m) => ({ ...m, kind: 'report' as const }));
+              const named = new Set(reported.map((m) => m.market));
+              const reference = (await listMarketPrices(commodity.id))
+                .filter((p) => !named.has(p.market))
+                .map((p) => ({ market: p.market, regionCode: p.regionCode, pricePerKg: p.pricePerKg, observedAt: p.recordedAt, source: 'reference' as const, kind: 'reference' as const }));
+              return [...reported, ...reference];
+            })(),
       outlook: outlook
         ? {
             ...outlook,
@@ -89,7 +89,7 @@ export async function priceRoutes(app: FastifyInstance): Promise<void> {
                 : null,
           }
         : null,
-      whereItIs: supplyDemandByRegion(commodity.id, now),
+      whereItIs: await supplyDemandByRegion(commodity.id, now),
       generatedAt: now,
     };
   });
@@ -106,13 +106,13 @@ export async function priceRoutes(app: FastifyInstance): Promise<void> {
         locale: z.string().default('en'),
       })
       .parse(req.query);
-    const g = priceGuidance({
-      commodityCode: q.commodity.toUpperCase(),
-      unitCode: q.unit,
-      regionCode: q.regionCode,
-      price: q.price ?? null,
-      side: q.side,
-    });
+    const g = await priceGuidance({
+          commodityCode: q.commodity.toUpperCase(),
+          unitCode: q.unit,
+          regionCode: q.regionCode,
+          price: q.price ?? null,
+          side: q.side,
+        });
     return {
       ...g,
       message: guidanceText(g, q.locale),
@@ -128,7 +128,7 @@ export async function priceRoutes(app: FastifyInstance): Promise<void> {
     const sent = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
     const ok = token && sent.length === token.length && timingSafeEqual(Buffer.from(sent), Buffer.from(token));
     if (!ok) return reply.code(token ? 401 : 404).send({ error: { code: token ? 'UNAUTHORIZED' : 'NOT_FOUND', message: token ? 'Bad token' : 'Not found' } });
-    const result = ingestFeed(req.body);
+    const result = await ingestFeed(req.body);
     if (result.accepted === 0) throw new DomainError('No usable price rows: ' + JSON.stringify(result.rejected.slice(0, 3)), 'NO_VALID_ROWS', 422);
     return result;
   });

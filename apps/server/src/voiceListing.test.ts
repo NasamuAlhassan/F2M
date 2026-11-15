@@ -66,7 +66,7 @@ describe('voice listing pipeline (M29, D-038)', () => {
 
   it('the listing prompt rides <Play> before <Record> when TTS yields audio (M30)', async () => {
     const phone = '+233207470102';
-    registerFarmer({ phone, name: 'Play Farmer', regionCode: 'NORTHERN' });
+    await registerFarmer({ phone, name: 'Play Farmer', regionCode: 'NORTHERN' });
     setTtsProvider({ name: 'mock', synthesize: async () => ({ url: 'http://localhost:3000/tts/en/rec.mp3' }) });
     try {
       // Phase 2: the line answers with its menu; 1 = sell, which records.
@@ -88,7 +88,7 @@ describe('voice listing pipeline (M29, D-038)', () => {
 
   it('prompt → speech → parsed lot on the marketplace with channel ivr and the phone shown', async () => {
     const phone = '+233207470101';
-    registerFarmer({ phone, name: 'Voice Farmer', regionCode: 'NORTHERN' });
+    await registerFarmer({ phone, name: 'Voice Farmer', regionCode: 'NORTHERN' });
 
     // First leg: the line's menu (Phase 2), keys not a recording.
     const promptXml = await callListingLine(phone);
@@ -100,20 +100,19 @@ describe('voice listing pipeline (M29, D-038)', () => {
     expect(confirmXml).toContain('We listed your');
     expect(confirmXml).toContain('Maize');
 
-    const row = db
-      .select()
-      .from(schema.voiceListings)
-      .where(eq(schema.voiceListings.phone, phone))
-      .all()
+    const row = (await db
+          .select()
+          .from(schema.voiceListings)
+          .where(eq(schema.voiceListings.phone, phone)))
       .find((r) => r.status === 'listed');
     expect(row).toBeDefined();
     expect(row!.transcript).toContain('ten bags of maize');
-    const lot = getLot(row!.lotId!);
+    const lot = await getLot(row!.lotId!);
     expect(lot.channel).toBe('ivr');
     expect(lot.quantityKg).toBe(500); // ten 50kg bags
 
     // SMS receipt — the farmer's only written record of what went live.
-    const receipt = listNotificationsForPhone(phone, 5).find((n) => n.templateKey === 'sms.listingCreated');
+    const receipt = (await listNotificationsForPhone(phone, 5)).find((n) => n.templateKey === 'sms.listingCreated');
     expect(receipt).toBeDefined();
     expect(receipt!.message).toContain('500kg');
     expect(receipt!.message).toContain(lot.lotCode);
@@ -122,7 +121,7 @@ describe('voice listing pipeline (M29, D-038)', () => {
     const market = await app.inject({
       method: 'GET',
       url: '/api/market/lots',
-      headers: { authorization: `Bearer ${testBuyerToken()}` },
+      headers: { authorization: `Bearer ${await testBuyerToken()}` },
     });
     const card = (market.json().lots as Array<{ id: string; channel: string; farmerPhone: string | null }>).find(
       (l) => l.id === lot.id,
@@ -134,18 +133,17 @@ describe('voice listing pipeline (M29, D-038)', () => {
 
   it('unintelligible speech fails honestly: no lot, an SMS pointing to USSD, and the call says so', async () => {
     const phone = '+233207470202';
-    registerFarmer({ phone, name: 'Mumble Farmer', regionCode: 'VOLTA' });
+    await registerFarmer({ phone, name: 'Mumble Farmer', regionCode: 'VOLTA' });
     const xml = await callListingLine(phone, 'ehm the weather is fine thank you');
     expect(xml).toContain('could not understand');
 
-    const row = db
-      .select()
-      .from(schema.voiceListings)
-      .where(eq(schema.voiceListings.phone, phone))
-      .get();
+    const row = (await db
+          .select()
+          .from(schema.voiceListings)
+          .where(eq(schema.voiceListings.phone, phone)))[0];
     expect(row!.status).toBe('failed');
     expect(row!.lotId).toBeNull();
-    const sms = listNotificationsForPhone(phone, 5).find((n) => n.templateKey === 'sms.listingFailed');
+    const sms = (await listNotificationsForPhone(phone, 5)).find((n) => n.templateKey === 'sms.listingFailed');
     expect(sms).toBeDefined();
   });
 

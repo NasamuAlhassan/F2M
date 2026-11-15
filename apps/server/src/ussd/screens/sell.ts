@@ -34,7 +34,7 @@ export const sellCommodity: UssdScreen = {
       { key: 'ussd.common.back' },
     ];
   },
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '0') return { next: 'home' };
     const page = (ctx.data.sellPage as number) ?? 0;
     const all = listCommodities();
@@ -45,7 +45,7 @@ export const sellCommodity: UssdScreen = {
     }
     if (input === '8' && page === 0) {
       if (!ctx.farmer) return invalid();
-      queueVoiceCall({ phone: ctx.farmer.phone, locale: ctx.farmer.locale, flow: 'listing' });
+      await queueVoiceCall({ phone: ctx.farmer.phone, locale: ctx.farmer.locale, flow: 'listing' });
       return { end: [{ key: 'ussd.sell.callingYou' }] };
     }
     const idx = parseSelection(input, pageItems.length, start);
@@ -151,12 +151,12 @@ export const sellReady: UssdScreen = {
 /** The farmer's own asking price per unit (Phase 1) — or 0 to let buyers make offers. */
 export const sellPrice: UssdScreen = {
   key: 'sell_price',
-  render: (ctx) => {
+  render: async (ctx) => {
     const lines: Array<{ key: string; params?: Record<string, string | number> }> = [
       { key: 'ussd.sell.price', params: { unit: t(ctx.locale, `unit.${String(ctx.data.sellUnit)}`) } },
     ];
     // What it has been fetching lately, so the farmer names a price knowing the market (D-053).
-    const g = sellGuidance(ctx, null);
+    const g = await sellGuidance(ctx, null);
     if (g?.messageKey === 'price.hint.range') lines.push({ key: g.messageKey, params: guidanceParams(g) });
     return lines;
   },
@@ -190,12 +190,12 @@ function sellGuidance(ctx: UssdCtx, price: number | null) {
 
 export const sellConfirm: UssdScreen = {
   key: 'sell_confirm',
-  render: (ctx) => [
+  render: async (ctx) => [
     // A price well off the market is flagged before the farmer presses 1 (D-053).
-    ...(() => {
-      const g = ctx.data.sellPrice ? sellGuidance(ctx, Number(ctx.data.sellPrice)) : null;
-      return g && g.verdict !== 'fair' && g.verdict !== 'unknown' ? [{ key: g.messageKey, params: guidanceParams(g) }] : [];
-    })(),
+    ...await (async () => {
+            const g = ctx.data.sellPrice ? await sellGuidance(ctx, Number(ctx.data.sellPrice)) : null;
+            return g && g.verdict !== 'fair' && g.verdict !== 'unknown' ? [{ key: g.messageKey, params: guidanceParams(g) }] : [];
+          })(),
     {
       key: ctx.data.sellPrice ? 'ussd.sell.confirmPrice' : 'ussd.sell.confirm',
       params: {
@@ -209,20 +209,20 @@ export const sellConfirm: UssdScreen = {
     { key: 'ussd.common.confirm' },
     { key: 'ussd.common.cancel' },
   ],
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '2') return { end: [{ key: 'ussd.common.cancelled' }] };
     if (input !== '1') return invalid();
     if (!ctx.farmer) return { end: [{ key: 'ussd.common.error', params: { message: 'not registered' } }] };
-    const lot = registerLot({
-      farmerId: ctx.farmer.id,
-      commodityCode: String(ctx.data.sellCommodity),
-      unitCode: String(ctx.data.sellUnit),
-      unitQty: Number(ctx.data.sellQty),
-      declaredBand: ctx.data.sellBand as GradeBand,
-      readyDate: Date.now() + Number(ctx.data.sellReadyDays) * DAY_MS,
-      askingPricePerUnit: ctx.data.sellPrice ? Number(ctx.data.sellPrice) : undefined,
-      channel: 'ussd', // basic-phone listing — buyers see the phone, not photos (D-036)
-    });
+    const lot = await registerLot({
+          farmerId: ctx.farmer.id,
+          commodityCode: String(ctx.data.sellCommodity),
+          unitCode: String(ctx.data.sellUnit),
+          unitQty: Number(ctx.data.sellQty),
+          declaredBand: ctx.data.sellBand as GradeBand,
+          readyDate: Date.now() + Number(ctx.data.sellReadyDays) * DAY_MS,
+          askingPricePerUnit: ctx.data.sellPrice ? Number(ctx.data.sellPrice) : undefined,
+          channel: 'ussd', // basic-phone listing — buyers see the phone, not photos (D-036)
+        });
     return {
       end: [
         {

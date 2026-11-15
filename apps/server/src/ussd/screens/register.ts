@@ -83,17 +83,17 @@ export const regConfirm: UssdScreen = {
     { key: 'ussd.common.confirm' },
     { key: 'ussd.common.cancel' },
   ],
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '2') return { end: [{ key: 'ussd.common.cancelled' }] };
     if (input !== '1') return invalid();
     try {
-      const farmer = registerFarmer({
-        phone: ctx.phone,
-        name: String(ctx.data.regName),
-        regionCode: String(ctx.data.regRegion),
-        district: (ctx.data.regDistrict as string | null) ?? undefined,
-        locale: typeof ctx.data.locale === 'string' ? ctx.data.locale : undefined, // the lang_welcome choice persists here
-      });
+      const farmer = await registerFarmer({
+              phone: ctx.phone,
+              name: String(ctx.data.regName),
+              regionCode: String(ctx.data.regRegion),
+              district: (ctx.data.regDistrict as string | null) ?? undefined,
+              locale: typeof ctx.data.locale === 'string' ? ctx.data.locale : undefined, // the lang_welcome choice persists here
+            });
       return { end: [{ key: 'ussd.reg.done', params: { name: farmer.name } }] };
     } catch (err) {
       if (err instanceof DomainError && err.code === 'FARMER_EXISTS') {

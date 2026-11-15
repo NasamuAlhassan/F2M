@@ -35,7 +35,7 @@ const nextBuyerPhone = () => `+2332074953${String(++buyerSeq).padStart(2, '0')}`
 beforeAll(async () => {
   setPaymentProvider(new MockPaymentProvider(0));
   app = await buildServer({ logger: false });
-  buyerToken = testBuyerToken();
+  buyerToken = await testBuyerToken();
 });
 afterAll(async () => {
   setPaymentProvider(null);
@@ -43,25 +43,23 @@ afterAll(async () => {
 });
 
 // A clean groundnut market per test: leftovers would be matched by the engine.
-beforeEach(() => {
-  const groundnut = db.select().from(schema.commodities).all().find((c) => c.code === 'GROUNDNUT')!;
-  db.update(schema.demands)
-    .set({ status: 'cancelled' })
-    .where(and(eq(schema.demands.commodityId, groundnut.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
-    .run();
-  db.update(schema.lots)
-    .set({ status: 'withdrawn' })
-    .where(and(eq(schema.lots.commodityId, groundnut.id), inArray(schema.lots.status, ['registered', 'matched'])))
-    .run();
+beforeEach(async () => {
+  const groundnut = (await db.select().from(schema.commodities)).find((c) => c.code === 'GROUNDNUT')!;
+  (await db.update(schema.demands)
+        .set({ status: 'cancelled' })
+        .where(and(eq(schema.demands.commodityId, groundnut.id), inArray(schema.demands.status, ['open', 'partially_matched']))));
+  (await db.update(schema.lots)
+        .set({ status: 'withdrawn' })
+        .where(and(eq(schema.lots.commodityId, groundnut.id), inArray(schema.lots.status, ['registered', 'matched']))));
 });
 
-function seller(name = 'Groundnut Farmer'): { farmer: Farmer; token: string } {
-  const farmer = registerFarmer({ phone: nextFarmerPhone(), name, regionCode: 'NORTHERN' });
-  return { farmer, token: testToken('farmer', farmer.id, farmer.phone) };
+async function seller(name = 'Groundnut Farmer'): Promise<{ farmer: Farmer; token: string }> {
+  const farmer = await registerFarmer({ phone: nextFarmerPhone(), name, regionCode: 'NORTHERN' });
+  return { farmer, token: await testToken('farmer', farmer.id, farmer.phone) };
 }
 
-function strangerBuyerToken(): string {
-  const buyer = registerBuyer({ phone: nextBuyerPhone(), name: 'Nosy Buyer', company: 'Elsewhere Ltd', regionCode: 'VOLTA' });
+async function strangerBuyerToken(): Promise<string> {
+  const buyer = await registerBuyer({ phone: nextBuyerPhone(), name: 'Nosy Buyer', company: 'Elsewhere Ltd', regionCode: 'VOLTA' });
   return testToken('buyer', buyer.id, buyer.phone!);
 }
 
@@ -106,8 +104,8 @@ async function dial(phone: string, inputs: string[]): Promise<string[]> {
 
 describe('REST negotiation', () => {
   it('runs bid → farmer counter → buyer accept end to end, and both sides see the deal', async () => {
-    const { farmer, token: farmerToken } = seller();
-    const lot = groundnutLot(farmer.id, 10, { askingPricePerUnit: 70000 });
+    const { farmer, token: farmerToken } = await seller();
+    const lot = await groundnutLot(farmer.id, 10, { askingPricePerUnit: 70000 });
 
     const bid = await call('POST', `/api/lots/${lot.id}/bids`, buyerToken, { units: 4, pricePerUnit: 60000 });
     expect(bid.statusCode).toBe(201);
@@ -139,8 +137,8 @@ describe('REST negotiation', () => {
     expect(accept.statusCode).toBe(200);
     const contractId = accept.json().contract.id as string;
     expect(accept.json().contract.state).toBe('ACCEPTED');
-    expect(getContract(contractId)).toMatchObject({ agreedTotal: 264000, holdAmount: 264000, quantityKg: 200, lotId: lot.id });
-    expect(getLot(lot.id).remainingKg).toBe(300);
+    expect(await getContract(contractId)).toMatchObject({ agreedTotal: 264000, holdAmount: 264000, quantityKg: 200, lotId: lot.id });
+    expect((await getLot(lot.id)).remainingKg).toBe(300);
 
     const buyerView = await call('GET', `/api/offers/${offerId}`, buyerToken);
     expect(buyerView.json().offer).toMatchObject({ status: 'accepted', turn: null, contractId });
@@ -152,8 +150,8 @@ describe('REST negotiation', () => {
   });
 
   it('refuses a bad bid with a readable error', async () => {
-    const { farmer } = seller();
-    const lot = groundnutLot(farmer.id, 2);
+    const { farmer } = await seller();
+    const lot = await groundnutLot(farmer.id, 2);
     const tooMany = await call('POST', `/api/lots/${lot.id}/bids`, buyerToken, { units: 3, pricePerUnit: 60000 });
     expect(tooMany.statusCode).toBe(409);
     expect(tooMany.json().error).toMatchObject({ code: 'NOT_ENOUGH_LEFT', message: expect.stringMatching(/Only 2 50kg bags left/) });
@@ -167,8 +165,8 @@ describe('REST negotiation', () => {
 
 describe('who may see and move a thread', () => {
   it('keeps each side to its own threads and its own routes', async () => {
-    const { farmer, token: farmerToken } = seller();
-    const lot = groundnutLot(farmer.id, 10);
+    const { farmer, token: farmerToken } = await seller();
+    const lot = await groundnutLot(farmer.id, 10);
     const bid = await call('POST', `/api/lots/${lot.id}/bids`, buyerToken, { units: 2, pricePerUnit: 60000 });
     const offerId = bid.json().offer.id as string;
 
@@ -179,11 +177,11 @@ describe('who may see and move a thread', () => {
     expect((await call('POST', `/api/offers/${offerId}/accept`, farmerToken, {})).statusCode).toBe(401);
 
     // A buyer who is not in the thread can neither read nor move it.
-    const nosy = strangerBuyerToken();
+    const nosy = await strangerBuyerToken();
     expect((await call('GET', `/api/offers/${offerId}`, nosy)).statusCode).toBe(403);
     expect((await call('POST', `/api/offers/${offerId}/withdraw`, nosy, {})).statusCode).toBe(403);
     // Nor can another farmer.
-    const { token: otherFarmer } = seller('Other Farmer');
+    const { token: otherFarmer } = await seller('Other Farmer');
     expect((await call('GET', `/api/farmer/offers/${offerId}`, otherFarmer)).statusCode).toBe(403);
     expect((await call('POST', `/api/farmer/offers/${offerId}/accept`, otherFarmer, {})).statusCode).toBe(403);
 
@@ -196,20 +194,20 @@ describe('who may see and move a thread', () => {
 
 describe('buyer requests on the farmer web', () => {
   it('lists an open request and lets the farmer offer on it', async () => {
-    const buyer = testBuyer();
-    const { farmer, token: farmerToken } = seller();
+    const buyer = await testBuyer();
+    const { farmer, token: farmerToken } = await seller();
     // Ready after the request's window, so the engine leaves this pair alone and the farmer answers by hand.
-    const lot = groundnutLot(farmer.id, 10, { readyDate: Date.now() + 40 * DAY });
-    const request = createDemand({
-      buyerId: buyer.id,
-      commodityCode: 'GROUNDNUT',
-      quantityKg: 400,
-      minBand: 'B',
-      basePricePerKg: 1300,
-      windowStart: Date.now(),
-      windowEnd: Date.now() + 30 * DAY,
-      regionCode: 'NORTHERN',
-    });
+    const lot = await groundnutLot(farmer.id, 10, { readyDate: Date.now() + 40 * DAY });
+    const request = await createDemand({
+          buyerId: buyer.id,
+          commodityCode: 'GROUNDNUT',
+          quantityKg: 400,
+          minBand: 'B',
+          basePricePerKg: 1300,
+          windowStart: Date.now(),
+          windowEnd: Date.now() + 30 * DAY,
+          regionCode: 'NORTHERN',
+        });
     expect(request.remainingKg).toBe(400);
 
     const list = await call('GET', '/api/farmer/requests', farmerToken);
@@ -243,8 +241,8 @@ describe('buyer requests on the farmer web', () => {
 
 describe('managing a listing on the farmer web', () => {
   it('PATCH changes quantity and price per unit, and refuses junk, strangers and going below what is sold', async () => {
-    const { farmer, token: farmerToken } = seller();
-    const lot = groundnutLot(farmer.id, 10);
+    const { farmer, token: farmerToken } = await seller();
+    const lot = await groundnutLot(farmer.id, 10);
 
     const patched = await call('PATCH', `/api/farmer/lots/${lot.id}`, farmerToken, { units: 12, askingPricePerUnit: 72000, community: 'Tolon' });
     expect(patched.statusCode).toBe(200);
@@ -252,7 +250,7 @@ describe('managing a listing on the farmer web', () => {
 
     expect((await call('PATCH', `/api/farmer/lots/${lot.id}`, farmerToken, { colour: 'red' })).statusCode).toBe(400);
     expect((await call('PATCH', `/api/farmer/lots/${lot.id}`, buyerToken, { units: 3 })).statusCode).toBe(401);
-    const { token: otherFarmer } = seller('Not Mine');
+    const { token: otherFarmer } = await seller('Not Mine');
     expect((await call('PATCH', `/api/farmer/lots/${lot.id}`, otherFarmer, { units: 3 })).statusCode).toBe(403);
 
     const bid = await call('POST', `/api/lots/${lot.id}/bids`, buyerToken, { units: 5, pricePerUnit: 70000 });
@@ -263,8 +261,8 @@ describe('managing a listing on the farmer web', () => {
   });
 
   it('POST /sold takes the listing off the market and closes the open bid on it', async () => {
-    const { farmer, token: farmerToken } = seller();
-    const lot = groundnutLot(farmer.id, 10);
+    const { farmer, token: farmerToken } = await seller();
+    const lot = await groundnutLot(farmer.id, 10);
     const bid = await call('POST', `/api/lots/${lot.id}/bids`, buyerToken, { units: 2, pricePerUnit: 60000 });
     const offerId = bid.json().offer.id as string;
 
@@ -282,8 +280,8 @@ describe('managing a listing on the farmer web', () => {
 
 describe('USSD: answering a bid with a counter', () => {
   it('walks My offers → the bid → Counter → price → keep units → confirm', async () => {
-    const { farmer } = seller('Abena Keypad');
-    const lot = groundnutLot(farmer.id, 10);
+    const { farmer } = await seller('Abena Keypad');
+    const lot = await groundnutLot(farmer.id, 10);
     const bid = await call('POST', `/api/lots/${lot.id}/bids`, buyerToken, { units: 4, pricePerUnit: 60000 });
     const offerId = bid.json().offer.id as string;
 
@@ -299,7 +297,7 @@ describe('USSD: answering a bid with a counter', () => {
     expect(askUnits).toContain('Send 0 to keep 4');
     expect(confirm).toContain('Offer 4 50kg bag of Groundnut at GHS 650.00 each (GHS 2600.00)?');
     expect(done).toMatch(/^END Sent to /);
-    expect(done).toContain(testBuyer().company!);
+    expect(done).toContain((await testBuyer()).company!);
 
     const view = await call('GET', `/api/offers/${offerId}`, buyerToken);
     expect(view.json().offer).toMatchObject({ turn: 'buyer', current: { units: 4, pricePerUnit: 65000, by: 'farmer' } });

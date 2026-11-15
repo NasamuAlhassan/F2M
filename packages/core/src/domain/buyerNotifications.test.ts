@@ -39,47 +39,45 @@ afterAll(() => {
 describe('buyer notification center (M15)', () => {
   it('fans out through the whole journey: accept, funds, driver, transit, grade, delivery, settle', async () => {
     const yam = getCommodityByCode('YAM');
-    db.update(demands)
-      .set({ status: 'cancelled' })
-      .where(and(eq(demands.commodityId, yam.id), inArray(demands.status, ['open', 'partially_matched'])))
-      .run();
-    db.update(lots)
-      .set({ status: 'withdrawn' })
-      .where(and(eq(lots.commodityId, yam.id), eq(lots.status, 'registered')))
-      .run();
-    db.update(driversTable).set({ active: false }).run();
+    (await db.update(demands)
+            .set({ status: 'cancelled' })
+            .where(and(eq(demands.commodityId, yam.id), inArray(demands.status, ['open', 'partially_matched']))));
+    (await db.update(lots)
+            .set({ status: 'withdrawn' })
+            .where(and(eq(lots.commodityId, yam.id), eq(lots.status, 'registered'))));
+    (await db.update(driversTable).set({ active: false }));
 
-    const buyer = testBuyer();
+    const buyer = await testBuyer();
 
-    const farmer = registerFarmer({ phone: '+233209334455', name: 'Notif Farmer', regionCode: 'BONO_EAST' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
-    const driver = registerDriver({
-      phone: '+233549334455',
-      name: 'Notif Driver',
-      regionCode: 'BONO_EAST',
-      vehicleClassCode: 'van',
-      pin: '2468',
-    });
+    const farmer = await registerFarmer({ phone: '+233209334455', name: 'Notif Farmer', regionCode: 'BONO_EAST' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+    const driver = await registerDriver({
+          phone: '+233549334455',
+          name: 'Notif Driver',
+          regionCode: 'BONO_EAST',
+          vehicleClassCode: 'van',
+          pin: '2468',
+        });
     void driver;
-    createDemand({
-      buyerId: buyer.id,
-      commodityCode: 'YAM',
-      quantityKg: 500,
-      minBand: 'B',
-      basePricePerKg: 400,
-      windowStart: Date.now(),
-      windowEnd: Date.now() + 7 * DAY,
-      regionCode: 'GREATER_ACCRA',
-    });
+    await createDemand({
+            buyerId: buyer.id,
+            commodityCode: 'YAM',
+            quantityKg: 500,
+            minBand: 'B',
+            basePricePerKg: 400,
+            windowStart: Date.now(),
+            windowEnd: Date.now() + 7 * DAY,
+            regionCode: 'GREATER_ACCRA',
+          });
 
     // The farmer accepting the engine's bid creates the order (Phase 1).
     const order = await acceptFor(farmer.id, lot.id); // → notif.dealAgreed
     await pollPaymentsOnce(); // → notif.fundsHeld
 
-    const job = requestTransport(order.id, buyer.id);
+    const job = await requestTransport(order.id, buyer.id);
     await acceptJob(job.id, driver.id); // → notif.driverAssigned
     await pollPaymentsOnce(); // job FUNDS_HELD (no buyer notif — their own fee)
-    confirmJobPickup(job.id, driver.id); // → notif.inTransit (+ contract PICKUP_CONFIRMED)
+    await confirmJobPickup(job.id, driver.id); // → notif.inTransit (+ contract PICKUP_CONFIRMED)
 
     const photo = await sharp({ create: { width: 300, height: 200, channels: 3, background: { r: 160, g: 120, b: 60 } } })
       .jpeg()
@@ -90,7 +88,7 @@ describe('buyer notification center (M15)', () => {
     await agreeGrading(order.id, farmer.id);
     await pollPaymentsOnce(); // → notif.settled + notif.driverPaid
 
-    const keys = listBuyerNotifications(buyer.id, 100).map((n) => n.templateKey);
+    const keys = (await listBuyerNotifications(buyer.id, 100)).map((n) => n.templateKey);
     for (const expected of [
       'notif.dealAgreed',
       'notif.fundsHeld',
@@ -102,32 +100,31 @@ describe('buyer notification center (M15)', () => {
     ]) {
       expect(keys).toContain(expected);
     }
-    const graded = listBuyerNotifications(buyer.id, 100).find((n) => n.templateKey === 'notif.graded')!;
+    const graded = (await listBuyerNotifications(buyer.id, 100)).find((n) => n.templateKey === 'notif.graded')!;
     expect(graded.message).toContain('Graded B');
     expect(graded.message).toContain('clean tubers');
   });
 
-  it('scopes unread counts and mark-read to the owning buyer', () => {
-    const buyer = testBuyer();
-    expect(unreadNotificationCount(buyer.id)).toBeGreaterThan(0);
+  it('scopes unread counts and mark-read to the owning buyer', async () => {
+    const buyer = await testBuyer();
+    expect(await unreadNotificationCount(buyer.id)).toBeGreaterThan(0);
 
-    const other = db
-      .insert(buyers)
-      .values({
-        phone: '+233555000777',
-        name: 'Other Buyer',
-        momoMsisdn: '233555000777',
-        regionCode: 'ASHANTI',
-      })
-      .returning()
-      .get();
+    const other = (await db
+              .insert(buyers)
+              .values({
+                phone: '+233555000777',
+                name: 'Other Buyer',
+                momoMsisdn: '233555000777',
+                regionCode: 'ASHANTI',
+              })
+              .returning())[0]!;
 
     // The other buyer cannot clear the demo buyer's rows.
-    expect(markNotificationsRead(other.id)).toBe(0);
-    expect(unreadNotificationCount(buyer.id)).toBeGreaterThan(0);
+    expect(await markNotificationsRead(other.id)).toBe(0);
+    expect(await unreadNotificationCount(buyer.id)).toBeGreaterThan(0);
 
-    const cleared = markNotificationsRead(buyer.id);
+    const cleared = await markNotificationsRead(buyer.id);
     expect(cleared).toBeGreaterThan(0);
-    expect(unreadNotificationCount(buyer.id)).toBe(0);
+    expect(await unreadNotificationCount(buyer.id)).toBe(0);
   });
 });

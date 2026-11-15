@@ -21,8 +21,17 @@ const envSchema = z
     // Web logins (D-047): the server verifies Supabase tokens against this
     // project's public keys. The same value the browser uses, so one setting.
     VITE_SUPABASE_URL: z.string().optional(),
-    DATABASE_PATH: z.string().default('data/ftm.db'),
+    // Supabase Postgres (transaction pooler URL, port 6543) in production. Unset → PGlite at
+    // DATABASE_PATH (a folder; ':memory:' for tests). docs/HOSTING.md.
+    DATABASE_URL: blankIsUnset(z.string().url().optional()),
+    DATABASE_PATH: z.string().default('data/pglite'),
     STORAGE_DIR: z.string().default('apps/server/storage'),
+    // Where photos, recordings and voice clips go (docs/HOSTING.md): 'disk' under STORAGE_DIR,
+    // or 'supabase' — the public 'media' bucket, written with the server-only service key.
+    STORAGE_PROVIDER: z.enum(['disk', 'supabase']).default('disk'),
+    SUPABASE_SERVICE_ROLE_KEY: blankIsUnset(z.string().optional()),
+    // The secret Supabase's pg_cron sends to POST /api/cron/sweep. Unset = the endpoint is closed.
+    CRON_SECRET: blankIsUnset(z.string().min(16).optional()),
     DISPUTE_WINDOW_MINUTES: z.coerce.number().default(10),
     // Phase 3 settlement (the owner's rules, docs/PHASE3.md): the share of the
     // agreed total paid to the farmer at pickup, how long a buyer has to confirm
@@ -129,6 +138,9 @@ const envSchema = z
     }
     if (env.VOICE_PROVIDER === 'at' && (!env.AT_API_KEY || !env.AT_VOICE_NUMBER)) {
       ctx.addIssue({ code: 'custom', message: 'VOICE_PROVIDER=at requires AT_API_KEY and AT_VOICE_NUMBER' });
+    }
+    if (env.STORAGE_PROVIDER === 'supabase' && (!env.SUPABASE_SERVICE_ROLE_KEY || !env.VITE_SUPABASE_URL)) {
+      ctx.addIssue({ code: 'custom', message: 'STORAGE_PROVIDER=supabase requires SUPABASE_SERVICE_ROLE_KEY and VITE_SUPABASE_URL' });
     }
     if (env.SIMULATOR_ENABLED === 'false' && !env.CARRIER_WEBHOOK_TOKEN) {
       ctx.addIssue({

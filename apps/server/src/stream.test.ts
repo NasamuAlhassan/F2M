@@ -59,16 +59,16 @@ describe('GET /api/stream', () => {
   });
 
   it('tells a signed-in person when the market changes, naming only the topic', async () => {
-    const stream = await connect(testBuyerToken());
-    const farmer = registerFarmer({ phone: '+233207540001', name: 'Live Farmer', regionCode: 'ASHANTI' });
-    registerLot({ farmerId: farmer.id, commodityCode: 'PLANTAIN', unitCode: 'BUNCH', unitQty: 3, declaredBand: 'B' });
+    const stream = await connect(await testBuyerToken());
+    const farmer = await registerFarmer({ phone: '+233207540001', name: 'Live Farmer', regionCode: 'ASHANTI' });
+    await registerLot({ farmerId: farmer.id, commodityCode: 'PLANTAIN', unitCode: 'BUNCH', unitQty: 3, declaredBand: 'B' });
     const topics = await stream.next();
     expect(topics).toContain('market');
     stream.close();
   });
 
   it('sends a burst of changes as one message', async () => {
-    const stream = await connect(testBuyerToken());
+    const stream = await connect(await testBuyerToken());
     for (let i = 0; i < 5; i += 1) publishLive({ topic: 'prices', audience: ['all'] });
     publishLive({ topic: 'market', audience: ['all'] });
     const first = await stream.next();
@@ -77,10 +77,10 @@ describe('GET /api/stream', () => {
   });
 
   it('delivers a private event only to the person it is for', async () => {
-    const stream = await connect(testBuyerToken());
+    const stream = await connect(await testBuyerToken());
     publishLive({ topic: 'notifications', audience: ['buyer:someone-else'] });
     expect(await stream.next(600)).toBeNull();
-    publishLive({ topic: 'notifications', audience: [`buyer:${testBuyer().id}`] });
+    publishLive({ topic: 'notifications', audience: [`buyer:${(await testBuyer()).id}`] });
     expect(await stream.next()).toEqual(['notifications']);
     stream.close();
   });
@@ -88,7 +88,7 @@ describe('GET /api/stream', () => {
   it('stops listening for a person who disconnects', async () => {
     await new Promise((r) => setTimeout(r, 300)); // let earlier tests' streams finish closing
     const before = liveListenerCount();
-    const stream = await connect(testBuyerToken());
+    const stream = await connect(await testBuyerToken());
     expect(liveListenerCount()).toBe(before + 1);
     stream.close();
     await new Promise((r) => setTimeout(r, 300));

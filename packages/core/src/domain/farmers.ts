@@ -40,35 +40,34 @@ export interface RegisterFarmerInput {
   locale?: string;
 }
 
-export function registerFarmer(input: RegisterFarmerInput): Farmer {
+export async function registerFarmer(input: RegisterFarmerInput): Promise<Farmer> {
   const phone = normalizePhone(input.phone);
   getRegion(input.regionCode); // throws on unknown region
   if (!input.name.trim()) throw new DomainError('Name is required', 'INVALID_NAME');
   if (input.locale !== undefined) assertLocale(input.locale);
-  const existing = getFarmerByPhone(phone);
+  const existing = await getFarmerByPhone(phone);
   if (existing) throw new DomainError('This phone number is already registered', 'FARMER_EXISTS', 409);
-  const farmer = db
-    .insert(farmers)
-    .values({
-      phone,
-      name: input.name.trim(),
-      regionCode: input.regionCode,
-      district: input.district?.trim() || null,
-      gpsLat: input.gpsLat ?? null,
-      gpsLng: input.gpsLng ?? null,
-      momoMsisdn: toMsisdn(phone),
-      locale: input.locale ?? 'en',
-    })
-    .returning()
-    .get();
+  const farmer = (await db
+        .insert(farmers)
+        .values({
+          phone,
+          name: input.name.trim(),
+          regionCode: input.regionCode,
+          district: input.district?.trim() || null,
+          gpsLat: input.gpsLat ?? null,
+          gpsLng: input.gpsLng ?? null,
+          momoMsisdn: toMsisdn(phone),
+          locale: input.locale ?? 'en',
+        })
+        .returning())[0]!;
   // The USSD END screen evaporates when the session closes; the SMS receipt is
   // the farmer's written record — and the first proof their chosen language works.
-  queueSms({
-    phone: farmer.phone,
-    locale: farmer.locale,
-    templateKey: 'sms.registered',
-    params: { name: farmer.name, code: config.USSD_SHORTCODE },
-  });
+  await queueSms({
+        phone: farmer.phone,
+        locale: farmer.locale,
+        templateKey: 'sms.registered',
+        params: { name: farmer.name, code: config.USSD_SHORTCODE },
+      });
   return farmer;
 }
 
@@ -76,8 +75,8 @@ export interface UpdateFarmerProfileInput {
   locale?: string;
 }
 
-export function updateFarmerProfile(farmerId: string, input: UpdateFarmerProfileInput): Farmer {
-  const farmer = getFarmerById(farmerId);
+export async function updateFarmerProfile(farmerId: string, input: UpdateFarmerProfileInput): Promise<Farmer> {
+  const farmer = await getFarmerById(farmerId);
   if (!farmer) throw notFound('farmer');
   const updates: Partial<typeof farmers.$inferInsert> = {};
   if (input.locale !== undefined) {
@@ -85,19 +84,19 @@ export function updateFarmerProfile(farmerId: string, input: UpdateFarmerProfile
     updates.locale = input.locale;
   }
   if (Object.keys(updates).length === 0) return farmer;
-  return db.update(farmers).set(updates).where(eq(farmers.id, farmerId)).returning().get()!;
+  return (await db.update(farmers).set(updates).where(eq(farmers.id, farmerId)).returning())[0]!;
 }
 
-export function getFarmerByPhone(rawPhone: string): Farmer | undefined {
+export async function getFarmerByPhone(rawPhone: string): Promise<Farmer | undefined> {
   let phone: string;
   try {
     phone = normalizePhone(rawPhone);
   } catch {
     return undefined;
   }
-  return db.select().from(farmers).where(eq(farmers.phone, phone)).get();
+  return (await db.select().from(farmers).where(eq(farmers.phone, phone)))[0];
 }
 
-export function getFarmerById(id: string): Farmer | undefined {
-  return db.select().from(farmers).where(eq(farmers.id, id)).get();
+export async function getFarmerById(id: string): Promise<Farmer | undefined> {
+  return (await db.select().from(farmers).where(eq(farmers.id, id)))[0];
 }

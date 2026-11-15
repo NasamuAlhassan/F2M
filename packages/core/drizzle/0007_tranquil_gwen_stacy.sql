@@ -1,1 +1,0 @@
-ALTER TABLE `drivers` ADD `route_regions` text DEFAULT '[]' NOT NULL;

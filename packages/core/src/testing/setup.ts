@@ -1,12 +1,12 @@
-import fs from 'node:fs';
-
-// Point core at a throwaway DB BEFORE config/client load, then migrate + seed.
-// Runs once per vitest worker (singleFork keeps DB-backed suites serialized).
+// Point core at a throwaway database BEFORE config/client load, then migrate + seed.
+// Runs for each test file: an in-memory Postgres (PGlite, docs/HOSTING.md), so
+// every file starts from the same clean, seeded database and nothing is left on disk.
 // Every setting a test depends on is pinned here, so `npm test` behaves the
 // same whatever the developer's own .env switches on (real providers, live
 // languages, the simulator off). Values already in the environment win over
 // .env, so setting them before config loads is enough.
-process.env.DATABASE_PATH = `data/test-${process.pid}.db`;
+process.env.DATABASE_PATH = ':memory:';
+process.env.DATABASE_URL = ''; // set-but-empty: .env cannot fill it in, and config reads it as unset
 Object.assign(process.env, {
   GRADING_PROVIDER: 'mock',
   PAYMENT_PROVIDER: 'mock',
@@ -20,19 +20,22 @@ Object.assign(process.env, {
   PUBLIC_BASE_URL: 'http://localhost:3000',
 });
 
-const { config } = await import('../config');
-for (const suffix of ['', '-wal', '-shm']) {
-  fs.rmSync(config.databasePath + suffix, { force: true });
+if (process.env.FTM_TEST_SNAPSHOT) {
+  // The database was opened from the run's snapshot: migrated and seeded already.
+  const { loadRegistries } = await import('../domain/registries');
+  await loadRegistries();
+} else {
+  const { runMigrations } = await import('../db/migrate');
+  await runMigrations();
+  const { seed } = await import('../db/seed');
+  await seed();
 }
-
-const { runMigrations } = await import('../db/migrate');
-runMigrations();
-const { seed } = await import('../db/seed');
-await seed();
 
 // Tests never reach the real Supabase project: bearer tokens are test tokens,
 // and the shared test buyer exists up front like the old seeded demo buyer did.
 const { setTokenVerifier } = await import('../auth/tokens');
 const { testBuyer, testTokenVerifier } = await import('./fixtures');
 setTokenVerifier(testTokenVerifier);
-testBuyer();
+await testBuyer();
+
+export {}; // a module: top-level await above

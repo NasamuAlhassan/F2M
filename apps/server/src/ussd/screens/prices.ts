@@ -36,17 +36,17 @@ export const pricesCommodity: UssdScreen = {
 
 export const pricesShow: UssdScreen = {
   key: 'prices_show',
-  render: (ctx) => {
+  render: async (ctx) => {
     const commodity = getCommodityByCode(String(ctx.data.pricesCommodity));
-    const prices = listMarketPrices(commodity.id);
+    const prices = await listMarketPrices(commodity.id);
     // The live number first — from recent deals and reports, with its direction (D-053).
-    const live = estimatePrice(commodity.id, { regionCode: ctx.farmer?.regionCode });
+    const live = await estimatePrice(commodity.id, { regionCode: ctx.farmer?.regionCode });
     const liveLine =
       live && live.confidence !== 'reference'
         ? [
             {
               key: 'ussd.prices.market',
-              params: { price: formatGhs(live.pricePerKg), trend: trendText(priceTrend(commodity.id, { regionCode: ctx.farmer?.regionCode }), ctx.locale) },
+              params: { price: formatGhs(live.pricePerKg), trend: trendText(await priceTrend(commodity.id, { regionCode: ctx.farmer?.regionCode }), ctx.locale) },
             },
           ]
         : [];

@@ -24,7 +24,7 @@ let buyerToken: string;
 beforeAll(async () => {
   setPaymentProvider(new MockPaymentProvider(0));
   app = await buildServer({ logger: false });
-  buyerToken = testBuyerToken();
+  buyerToken = await testBuyerToken();
 });
 afterAll(async () => {
   setPaymentProvider(null);
@@ -40,45 +40,43 @@ async function post(url: string, payload: unknown, token?: string) {
   });
 }
 
-function yamJanitor() {
-  const yam = db.select().from(schema.commodities).all().find((c) => c.code === 'YAM')!;
-  db.update(schema.demands)
-    .set({ status: 'cancelled' })
-    .where(and(eq(schema.demands.commodityId, yam.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
-    .run();
-  db.update(schema.lots)
-    .set({ status: 'withdrawn' })
-    .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered')))
-    .run();
+async function yamJanitor() {
+  const yam = (await db.select().from(schema.commodities)).find((c) => c.code === 'YAM')!;
+  (await db.update(schema.demands)
+        .set({ status: 'cancelled' })
+        .where(and(eq(schema.demands.commodityId, yam.id), inArray(schema.demands.status, ['open', 'partially_matched']))));
+  (await db.update(schema.lots)
+        .set({ status: 'withdrawn' })
+        .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered'))));
 }
 
 /** A web login acting as the farmer registered on this phone (D-047). */
-function farmerToken(phone: string): string {
-  const farmer = getFarmerByPhone(phone)!;
+async function farmerToken(phone: string): Promise<string> {
+  const farmer = (await getFarmerByPhone(phone))!;
   return testToken('farmer', farmer.id, farmer.phone);
 }
 
 describe('farmer web portal (M22)', () => {
   it('logs in and accepts a bid from the web — full parity with USSD', async () => {
-    yamJanitor();
+    await yamJanitor();
     const phone = '+233207460101';
-    const buyer = testBuyer();
-    const farmer = registerFarmer({ phone, name: 'Portal Farmer', regionCode: 'BONO_EAST' });
-    registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
-    createDemand({
-      buyerId: buyer.id,
-      commodityCode: 'YAM',
-      quantityKg: 600,
-      minBand: 'B',
-      basePricePerKg: 400,
-      windowStart: Date.now(),
-      windowEnd: Date.now() + 7 * DAY,
-      regionCode: 'GREATER_ACCRA',
-    });
+    const buyer = await testBuyer();
+    const farmer = await registerFarmer({ phone, name: 'Portal Farmer', regionCode: 'BONO_EAST' });
+    await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+    await createDemand({
+            buyerId: buyer.id,
+            commodityCode: 'YAM',
+            quantityKg: 600,
+            minBand: 'B',
+            basePricePerKg: 400,
+            windowStart: Date.now(),
+            windowEnd: Date.now() + 7 * DAY,
+            regionCode: 'GREATER_ACCRA',
+          });
     // Phase 1: the engine's match is an offer thread waiting on her, shown in offerThreads.
-    const waiting = openOfferFor(farmer.id)!;
+    const waiting = (await openOfferFor(farmer.id))!;
 
-    const token = farmerToken(phone);
+    const token = await farmerToken(phone);
     const dash = await app.inject({ method: 'GET', url: '/api/farmer/dashboard', headers: { authorization: `Bearer ${token}` } });
     expect(dash.statusCode).toBe(200);
     const body = dash.json();
@@ -92,15 +90,15 @@ describe('farmer web portal (M22)', () => {
     const accept = await post(`/api/farmer/offers/${waiting.id}/accept`, {}, token);
     expect(accept.statusCode).toBe(200);
     const contractId = accept.json().contract.id;
-    expect(getContract(contractId).state).toBe('ACCEPTED');
-    expect(getContract(contractId).holdAmount).toBe(200000);
-    expect(listContractsForFarmer(farmer.id).map((c) => c.id)).toEqual([contractId]);
+    expect((await getContract(contractId)).state).toBe('ACCEPTED');
+    expect((await getContract(contractId)).holdAmount).toBe(200000);
+    expect((await listContractsForFarmer(farmer.id)).map((c) => c.id)).toEqual([contractId]);
   });
 
   it('lists a lot from the web with an ask price the marketplace then shows', async () => {
-    yamJanitor();
+    await yamJanitor();
     const phone = '+233207460202';
-    const farmer = registerFarmer({ phone, name: 'Web Lister', regionCode: 'ASHANTI' });
+    const farmer = await registerFarmer({ phone, name: 'Web Lister', regionCode: 'ASHANTI' });
     const token = await farmerToken(phone);
 
     const res = await post(
@@ -125,9 +123,9 @@ describe('farmer web portal (M22)', () => {
   });
 
   it('stamps the listing channel per surface and shows the phone only for basic-phone listings (D-036)', async () => {
-    yamJanitor();
+    await yamJanitor();
     const phone = '+233207460404';
-    const farmer = registerFarmer({ phone, name: 'Channel Farmer', regionCode: 'ASHANTI' });
+    const farmer = await registerFarmer({ phone, name: 'Channel Farmer', regionCode: 'ASHANTI' });
     const token = await farmerToken(phone);
 
     // Web listing → channel 'web', NO phone on the marketplace card.
@@ -136,7 +134,7 @@ describe('farmer web portal (M22)', () => {
     expect(webRes.json().lot.channel).toBe('web');
 
     // Core default (the USSD path) → channel 'ussd', phone shown to buyers.
-    const ussdLot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 1, declaredBand: 'B' });
+    const ussdLot = await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 1, declaredBand: 'B' });
     expect(ussdLot.channel).toBe('ussd');
 
     // Listing photo upload lands as card art on the web lot.
@@ -183,20 +181,20 @@ describe('farmer web portal (M22)', () => {
 
 describe('public trace (M24, D-033)', () => {
   it('serves the chain of custody without auth — and without phones or money', async () => {
-    yamJanitor();
-    const buyer = testBuyer();
-    const farmer = registerFarmer({ phone: '+233207460303', name: 'Trace Farmer', regionCode: 'NORTHERN' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
-    createDemand({
-      buyerId: buyer.id,
-      commodityCode: 'YAM',
-      quantityKg: 600,
-      minBand: 'B',
-      basePricePerKg: 400,
-      windowStart: Date.now(),
-      windowEnd: Date.now() + 7 * DAY,
-      regionCode: 'GREATER_ACCRA',
-    });
+    await yamJanitor();
+    const buyer = await testBuyer();
+    const farmer = await registerFarmer({ phone: '+233207460303', name: 'Trace Farmer', regionCode: 'NORTHERN' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+    await createDemand({
+            buyerId: buyer.id,
+            commodityCode: 'YAM',
+            quantityKg: 600,
+            minBand: 'B',
+            basePricePerKg: 400,
+            windowStart: Date.now(),
+            windowEnd: Date.now() + 7 * DAY,
+            regionCode: 'GREATER_ACCRA',
+          });
     await acceptFor(farmer.id); // the deal is struck, so the trace carries the order too
 
     const res = await app.inject({ method: 'GET', url: `/api/public/trace/${lot.id}` }); // no token
@@ -227,7 +225,7 @@ describe('public trace (M24, D-033)', () => {
 describe('farmer language profile (M30, D-040)', () => {
   it('PATCH /farmer/profile sets the locale, the dashboard exposes it, and junk is refused', async () => {
     const phone = '+233207460505';
-    registerFarmer({ phone, name: 'Lang Farmer', regionCode: 'NORTHERN' });
+    await registerFarmer({ phone, name: 'Lang Farmer', regionCode: 'NORTHERN' });
     const token = await farmerToken(phone);
 
     let dash = await app.inject({ method: 'GET', url: '/api/farmer/dashboard', headers: { authorization: `Bearer ${token}` } });

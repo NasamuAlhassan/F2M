@@ -6,12 +6,12 @@ import { DomainError, notFound } from './errors';
 import { assertLocale, getFarmerByPhone, normalizePhone, toMsisdn } from './farmers';
 import { getRegion } from './registries';
 
-export function listVehicleClasses(): VehicleClass[] {
-  return db.select().from(vehicleClasses).orderBy(asc(vehicleClasses.sortOrder)).all();
+export async function listVehicleClasses(): Promise<VehicleClass[]> {
+  return (await db.select().from(vehicleClasses).orderBy(asc(vehicleClasses.sortOrder)));
 }
 
-export function getVehicleClass(code: string): VehicleClass {
-  const vc = db.select().from(vehicleClasses).where(eq(vehicleClasses.code, code)).get();
+export async function getVehicleClass(code: string): Promise<VehicleClass> {
+  const vc = (await db.select().from(vehicleClasses).where(eq(vehicleClasses.code, code)))[0];
   if (!vc) throw notFound(`vehicle class ${code}`);
   return vc;
 }
@@ -27,49 +27,48 @@ export interface RegisterDriverInput {
   locale?: string;
 }
 
-export function registerDriver(input: RegisterDriverInput): Driver {
+export async function registerDriver(input: RegisterDriverInput): Promise<Driver> {
   const phone = normalizePhone(input.phone);
   getRegion(input.regionCode);
-  getVehicleClass(input.vehicleClassCode);
+  await getVehicleClass(input.vehicleClassCode);
   if (!input.name.trim()) throw new DomainError('Name is required', 'INVALID_NAME');
   if (input.pin !== undefined && !/^\d{4}$/.test(input.pin)) throw new DomainError('PIN must be 4 digits', 'INVALID_PIN');
   if (input.locale !== undefined) assertLocale(input.locale);
-  if (getDriverByPhone(phone)) {
+  if (await getDriverByPhone(phone)) {
     throw new DomainError('This phone number is already registered as a driver', 'DRIVER_EXISTS', 409);
   }
   // One role per phone in v1 — a farmer phone cannot double as a driver phone.
-  if (getFarmerByPhone(phone)) {
+  if (await getFarmerByPhone(phone)) {
     throw new DomainError('This phone number is already registered as a farmer', 'ROLE_TAKEN', 409);
   }
-  return db
-    .insert(drivers)
-    .values({
-      phone,
-      name: input.name.trim(),
-      regionCode: input.regionCode,
-      vehicleClassCode: input.vehicleClassCode,
-      pinHash: input.pin !== undefined ? bcrypt.hashSync(input.pin, 8) : null,
-      momoMsisdn: toMsisdn(phone),
-      gpsLat: input.gpsLat ?? null,
-      gpsLng: input.gpsLng ?? null,
-      locale: input.locale ?? 'en',
-    })
-    .returning()
-    .get();
+  return (await db
+        .insert(drivers)
+        .values({
+          phone,
+          name: input.name.trim(),
+          regionCode: input.regionCode,
+          vehicleClassCode: input.vehicleClassCode,
+          pinHash: input.pin !== undefined ? bcrypt.hashSync(input.pin, 8) : null,
+          momoMsisdn: toMsisdn(phone),
+          gpsLat: input.gpsLat ?? null,
+          gpsLng: input.gpsLng ?? null,
+          locale: input.locale ?? 'en',
+        })
+        .returning())[0]!;
 }
 
-export function getDriverByPhone(rawPhone: string): Driver | undefined {
+export async function getDriverByPhone(rawPhone: string): Promise<Driver | undefined> {
   let phone: string;
   try {
     phone = normalizePhone(rawPhone);
   } catch {
     return undefined;
   }
-  return db.select().from(drivers).where(eq(drivers.phone, phone)).get();
+  return (await db.select().from(drivers).where(eq(drivers.phone, phone)))[0];
 }
 
-export function getDriverById(id: string): Driver | undefined {
-  return db.select().from(drivers).where(eq(drivers.id, id)).get();
+export async function getDriverById(id: string): Promise<Driver | undefined> {
+  return (await db.select().from(drivers).where(eq(drivers.id, id)))[0];
 }
 
 export function driverRouteRegions(driver: Driver): string[] {
@@ -88,12 +87,12 @@ export interface UpdateDriverProfileInput {
   locale?: string; // SMS + call language (D-040)
 }
 
-export function updateDriverProfile(driverId: string, input: UpdateDriverProfileInput): Driver {
-  const driver = getDriverById(driverId);
+export async function updateDriverProfile(driverId: string, input: UpdateDriverProfileInput): Promise<Driver> {
+  const driver = await getDriverById(driverId);
   if (!driver) throw notFound('driver');
   const updates: Partial<typeof drivers.$inferInsert> = {};
   if (input.vehicleClassCode !== undefined) {
-    getVehicleClass(input.vehicleClassCode); // throws on unknown
+    await getVehicleClass(input.vehicleClassCode); // throws on unknown
     updates.vehicleClassCode = input.vehicleClassCode;
   }
   if (input.active !== undefined) updates.active = input.active;
@@ -106,5 +105,5 @@ export function updateDriverProfile(driverId: string, input: UpdateDriverProfile
     updates.locale = input.locale;
   }
   if (Object.keys(updates).length === 0) return driver;
-  return db.update(drivers).set(updates).where(eq(drivers.id, driverId)).returning().get()!;
+  return (await db.update(drivers).set(updates).where(eq(drivers.id, driverId)).returning())[0]!;
 }

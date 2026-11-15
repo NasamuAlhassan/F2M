@@ -54,29 +54,28 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/public/trace/:lotId', async (req) => {
     const { lotId } = req.params as { lotId: string };
-    const lot = getLot(lotId); // 404s on unknown
+    const lot = await getLot(lotId); // 404s on unknown
     const commodity = getCommodityById(lot.commodityId);
-    const farmer = getFarmerById(lot.farmerId);
-    const unit = db.select().from(schema.units).where(eq(schema.units.id, lot.unitId)).get();
+    const farmer = await getFarmerById(lot.farmerId);
+    const unit = (await db.select().from(schema.units).where(eq(schema.units.id, lot.unitId)))[0];
 
     // The latest completed grading across this lot's contracts = the certificate.
-    const contracts = db.select().from(schema.contracts).where(eq(schema.contracts.lotId, lot.id)).all();
+    const contracts = (await db.select().from(schema.contracts).where(eq(schema.contracts.lotId, lot.id)));
     const grading = contracts.length
-      ? db
-          .select()
-          .from(schema.gradings)
-          .where(
-            inArray(
-              schema.gradings.contractId,
-              contracts.map((c) => c.id),
-            ),
-          )
-          .orderBy(desc(schema.gradings.createdAt))
-          .all()
+      ? (await db
+                  .select()
+                  .from(schema.gradings)
+                  .where(
+                    inArray(
+                      schema.gradings.contractId,
+                      contracts.map((c) => c.id),
+                    ),
+                  )
+                  .orderBy(desc(schema.gradings.createdAt)))
           .find((g) => g.gradeBand !== null)
       : undefined;
 
-    const events = getTrace(lot.id).map((e) => {
+    const events = (await getTrace(lot.id)).map((e) => {
       const allowed = PUBLIC_PAYLOAD_FIELDS[e.type] ?? [];
       const raw = (e.payload ?? {}) as Record<string, unknown>;
       const payload: Record<string, unknown> = {};

@@ -1,14 +1,13 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { desc, eq } from 'drizzle-orm';
 import sharp from 'sharp';
-import { config } from '../config';
 import { db } from '../db/client';
 import { lots as lotsTable, photos, type Photo } from '../db/schema';
 import { getContract } from './contracts';
 import { DomainError, notFound } from './errors';
 import { appendLotEvent } from './trace';
 import type { GradingImage } from '../providers/grading/index';
+import { getMediaStore } from '../storage/index';
 
 const PHOTO_STATES = ['FUNDS_HELD', 'PICKUP_CONFIRMED', 'DISPUTED'] as const;
 
@@ -21,7 +20,7 @@ export async function addPhoto(opts: {
   buffer: Buffer;
   actor: { type: 'farmer' | 'buyer'; id: string };
 }): Promise<Photo> {
-  const contract = getContract(opts.contractId);
+  const contract = await getContract(opts.contractId);
   if (!(PHOTO_STATES as readonly string[]).includes(contract.state)) {
     throw new DomainError(`Cannot add photos to a contract in ${contract.state}`, 'INVALID_STATE', 409);
   }
@@ -33,29 +32,26 @@ export async function addPhoto(opts: {
     .toBuffer();
 
   const fileName = `${crypto.randomUUID()}.jpg`;
-  const dir = path.join(config.storageDir, 'photos', contract.lotId);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, fileName), processed);
+  await getMediaStore().put(path.posix.join('photos', contract.lotId, fileName), processed, 'image/jpeg');
 
-  return db.transaction((tx) => {
-    const photo = tx
-      .insert(photos)
-      .values({
-        lotId: contract.lotId,
-        contractId: contract.id,
-        path: path.posix.join('photos', contract.lotId, fileName), // posix — it becomes a URL
-        mime: 'image/jpeg',
-        bytes: processed.byteLength,
-      })
-      .returning()
-      .get();
-    appendLotEvent(tx, {
-      lotId: contract.lotId,
-      type: 'PHOTO_ADDED',
-      actorType: opts.actor.type,
-      actorId: opts.actor.id,
-      payload: { photoId: photo.id, bytes: processed.byteLength },
-    });
+  return db.transaction(async (tx) => {
+    const photo = (await tx
+              .insert(photos)
+              .values({
+                lotId: contract.lotId,
+                contractId: contract.id,
+                path: path.posix.join('photos', contract.lotId, fileName), // posix — it becomes a URL
+                mime: 'image/jpeg',
+                bytes: processed.byteLength,
+              })
+              .returning())[0]!;
+    await appendLotEvent(tx, {
+            lotId: contract.lotId,
+            type: 'PHOTO_ADDED',
+            actorType: opts.actor.type,
+            actorId: opts.actor.id,
+            payload: { photoId: photo.id, bytes: processed.byteLength },
+          });
     return photo;
   });
 }
@@ -66,7 +62,7 @@ export async function addPhoto(opts: {
  * no contractId, which is what distinguishes card art from grading evidence.
  */
 export async function addLotPhoto(opts: { lotId: string; farmerId: string; buffer: Buffer }): Promise<Photo> {
-  const lot = db.select().from(lotsTable).where(eq(lotsTable.id, opts.lotId)).get();
+  const lot = (await db.select().from(lotsTable).where(eq(lotsTable.id, opts.lotId)))[0];
   if (!lot) throw notFound('lot');
   if (lot.farmerId !== opts.farmerId) throw new DomainError('Not your lot', 'FORBIDDEN', 403);
   if (!['registered', 'matched'].includes(lot.status)) {
@@ -80,55 +76,52 @@ export async function addLotPhoto(opts: { lotId: string; farmerId: string; buffe
     .toBuffer();
 
   const fileName = `${crypto.randomUUID()}.jpg`;
-  const dir = path.join(config.storageDir, 'photos', lot.id);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, fileName), processed);
+  await getMediaStore().put(path.posix.join('photos', lot.id, fileName), processed, 'image/jpeg');
 
-  return db.transaction((tx) => {
-    const photo = tx
-      .insert(photos)
-      .values({
-        lotId: lot.id,
-        contractId: null,
-        path: path.posix.join('photos', lot.id, fileName),
-        mime: 'image/jpeg',
-        bytes: processed.byteLength,
-      })
-      .returning()
-      .get();
-    appendLotEvent(tx, {
-      lotId: lot.id,
-      type: 'PHOTO_ADDED',
-      actorType: 'farmer',
-      actorId: opts.farmerId,
-      payload: { photoId: photo.id, bytes: processed.byteLength, stage: 'listing' },
-    });
+  return db.transaction(async (tx) => {
+    const photo = (await tx
+              .insert(photos)
+              .values({
+                lotId: lot.id,
+                contractId: null,
+                path: path.posix.join('photos', lot.id, fileName),
+                mime: 'image/jpeg',
+                bytes: processed.byteLength,
+              })
+              .returning())[0]!;
+    await appendLotEvent(tx, {
+            lotId: lot.id,
+            type: 'PHOTO_ADDED',
+            actorType: 'farmer',
+            actorId: opts.farmerId,
+            payload: { photoId: photo.id, bytes: processed.byteLength, stage: 'listing' },
+          });
     return photo;
   });
 }
 
 /** Listing photos only — the card art (no contractId; pickup photos have one). */
-export function listListingPhotos(lotId: string): Photo[] {
-  return db
-    .select()
-    .from(photos)
-    .where(eq(photos.lotId, lotId))
-    .orderBy(desc(photos.createdAt))
-    .all()
+export async function listListingPhotos(lotId: string): Promise<Photo[]> {
+  return (await db
+      .select()
+      .from(photos)
+      .where(eq(photos.lotId, lotId))
+      .orderBy(desc(photos.createdAt)))
     .filter((p) => p.contractId === null);
 }
 
-export function listPhotosForContract(contractId: string): Photo[] {
-  return db.select().from(photos).where(eq(photos.contractId, contractId)).orderBy(desc(photos.createdAt)).all();
+export async function listPhotosForContract(contractId: string): Promise<Photo[]> {
+  return (await db.select().from(photos).where(eq(photos.contractId, contractId)).orderBy(desc(photos.createdAt)));
 }
 
-export function listPhotosForLot(lotId: string): Photo[] {
-  return db.select().from(photos).where(eq(photos.lotId, lotId)).orderBy(desc(photos.createdAt)).all();
+export async function listPhotosForLot(lotId: string): Promise<Photo[]> {
+  return (await db.select().from(photos).where(eq(photos.lotId, lotId)).orderBy(desc(photos.createdAt)));
 }
 
 /** Read a stored photo back as a grading-request image. */
-export function photoAsGradingImage(photo: Photo): GradingImage {
-  const abs = path.join(config.storageDir, ...photo.path.split('/'));
-  if (!fs.existsSync(abs)) throw notFound(`photo file ${photo.path}`);
-  return { mime: photo.mime, base64: fs.readFileSync(abs).toString('base64') };
+export async function photoAsGradingImage(photo: Photo): Promise<GradingImage> {
+  // From the media store (disk locally, Supabase Storage on Vercel).
+  const bytes = await getMediaStore().read(photo.path);
+  if (!bytes) throw notFound(`photo file ${photo.path}`);
+  return { mime: photo.mime, base64: bytes.toString('base64') };
 }

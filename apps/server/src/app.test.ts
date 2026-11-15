@@ -14,7 +14,7 @@ const bearer = (t: string) => ({ authorization: `Bearer ${t}` });
 
 beforeAll(async () => {
   app = await buildServer({ logger: false });
-  token = testBuyerToken();
+  token = await testBuyerToken();
 });
 afterAll(async () => {
   await app.close();
@@ -104,7 +104,7 @@ describe('API spine (M1)', () => {
   });
 
   it('links a farmer who registered by USSD instead of duplicating them, and keeps one role per phone', async () => {
-    const ussdFarmer = registerFarmer({ phone: '0201113334', name: 'Ama USSD', regionCode: 'VOLTA' });
+    const ussdFarmer = await registerFarmer({ phone: '0201113334', name: 'Ama USSD', regionCode: 'VOLTA' });
     const linked = await app.inject({
       method: 'POST',
       url: '/api/account/register',
@@ -114,7 +114,7 @@ describe('API spine (M1)', () => {
     expect(linked.statusCode).toBe(201);
     expect(linked.json().account.id).toBe(ussdFarmer.id); // the same lots, the same history
 
-    registerFarmer({ phone: '0201115556', name: 'Yaw Farmer', regionCode: 'VOLTA' });
+    await registerFarmer({ phone: '0201115556', name: 'Yaw Farmer', regionCode: 'VOLTA' });
     const asBuyer = await app.inject({
       method: 'POST',
       url: '/api/account/register',
@@ -215,11 +215,11 @@ describe('API spine (M1)', () => {
     expect(events[0]!.type).toBe('LOT_REGISTERED');
     expect(events[0]!.payload.unit).toBe('OLONKA');
 
-    const stranger = registerBuyer({ phone: '0555000999', name: 'Stranger', regionCode: 'ASHANTI' });
+    const stranger = await registerBuyer({ phone: '0555000999', name: 'Stranger', regionCode: 'ASHANTI' });
     const res = await app.inject({
       method: 'GET',
       url: `/api/lots/${lotId}/trace`,
-      headers: bearer(testToken('buyer', stranger.id, stranger.phone!)),
+      headers: bearer(await testToken('buyer', stranger.id, stranger.phone!)),
     });
     expect(res.statusCode).toBe(403);
   });

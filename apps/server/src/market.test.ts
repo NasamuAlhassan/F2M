@@ -29,7 +29,7 @@ interface MarketLotRow {
 
 beforeAll(async () => {
   app = await buildServer({ logger: false });
-  token = testBuyerToken();
+  token = await testBuyerToken();
 });
 afterAll(async () => {
   await app.close();
@@ -48,18 +48,16 @@ async function getLots(): Promise<MarketLotRow[]> {
 describe('marketplace lots (M21)', () => {
   it('lists open lots as browsable cards with units, market-reference pricing, and distance', async () => {
     // Yam lane janitor: park existing open yam lots so ours is deterministic.
-    const yam = db.select().from(schema.commodities).all().find((c) => c.code === 'YAM')!;
-    db.update(schema.demands)
-      .set({ status: 'cancelled' })
-      .where(and(eq(schema.demands.commodityId, yam.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
-      .run();
-    db.update(schema.lots)
-      .set({ status: 'withdrawn' })
-      .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered')))
-      .run();
+    const yam = (await db.select().from(schema.commodities)).find((c) => c.code === 'YAM')!;
+    (await db.update(schema.demands)
+            .set({ status: 'cancelled' })
+            .where(and(eq(schema.demands.commodityId, yam.id), inArray(schema.demands.status, ['open', 'partially_matched']))));
+    (await db.update(schema.lots)
+            .set({ status: 'withdrawn' })
+            .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered'))));
 
-    const farmer = registerFarmer({ phone: '+233207450101', name: 'Market Farmer', regionCode: 'BONO_EAST' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+    const farmer = await registerFarmer({ phone: '+233207450101', name: 'Market Farmer', regionCode: 'BONO_EAST' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
 
     const rows = await getLots();
     const row = rows.find((r) => r.id === lot.id);
@@ -80,7 +78,7 @@ describe('marketplace lots (M21)', () => {
     expect(['SAME_DAY', 'FORWARD']).toContain(row!.listingType);
 
     // Withdrawn lots disappear from the marketplace.
-    db.update(schema.lots).set({ status: 'withdrawn' }).where(eq(schema.lots.id, lot.id)).run();
+    (await db.update(schema.lots).set({ status: 'withdrawn' }).where(eq(schema.lots.id, lot.id)));
     const after = await getLots();
     expect(after.find((r) => r.id === lot.id)).toBeUndefined();
   });

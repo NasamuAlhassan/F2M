@@ -7,7 +7,7 @@ export async function registryRoutes(app: FastifyInstance): Promise<void> {
     const commodities = listCommodities();
     const byId = new Map(commodities.map((c) => [c.id, c]));
     return {
-      prices: listAllMarketPrices().map((p) => ({
+      prices: (await listAllMarketPrices()).map((p) => ({
         commodityCode: byId.get(p.commodityId)?.code ?? '?',
         commodityName: t('en', byId.get(p.commodityId)?.nameKey ?? ''),
         market: p.market,
@@ -36,7 +36,7 @@ export async function registryRoutes(app: FastifyInstance): Promise<void> {
         })),
       })),
       regions: listRegions().map((r) => ({ code: r.code, name: t('en', r.nameKey), lat: r.lat, lng: r.lng })),
-      vehicleClasses: listVehicleClasses().map((v) => ({
+      vehicleClasses: (await listVehicleClasses()).map((v) => ({
         code: v.code,
         name: t('en', v.nameKey),
         capacityKg: v.capacityKg,

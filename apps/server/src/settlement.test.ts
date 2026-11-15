@@ -70,13 +70,12 @@ afterAll(async () => {
   setGradingProvider(null);
   await app.close();
 });
-beforeEach(() => {
+beforeEach(async () => {
   // A stray open sorghum request would make the engine bid on our listings too.
-  const sorghum = db.select().from(schema.commodities).all().find((c) => c.code === 'SORGHUM')!;
-  db.update(schema.demands)
-    .set({ status: 'cancelled' })
-    .where(and(eq(schema.demands.commodityId, sorghum.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
-    .run();
+  const sorghum = (await db.select().from(schema.commodities)).find((c) => c.code === 'SORGHUM')!;
+  (await db.update(schema.demands)
+        .set({ status: 'cancelled' })
+        .where(and(eq(schema.demands.commodityId, sorghum.id), inArray(schema.demands.status, ['open', 'partially_matched']))));
 });
 
 function post(url: string, body: unknown, token?: string) {
@@ -103,18 +102,18 @@ async function photo(): Promise<Buffer> {
 }
 
 async function fundedOrder() {
-  const buyer = testBuyer();
-  const farmer = registerFarmer({ phone: farmerPhone(), name: 'Sorghum Farmer', regionCode: 'NORTHERN' });
-  const lot = registerLot({ farmerId: farmer.id, commodityCode: 'SORGHUM', unitCode: 'BAG_100KG', unitQty: UNITS, declaredBand: 'B' });
-  placeBid({ buyerId: buyer.id, lotId: lot.id, units: UNITS, pricePerUnit: PRICE });
+  const buyer = await testBuyer();
+  const farmer = await registerFarmer({ phone: farmerPhone(), name: 'Sorghum Farmer', regionCode: 'NORTHERN' });
+  const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'SORGHUM', unitCode: 'BAG_100KG', unitQty: UNITS, declaredBand: 'B' });
+  await placeBid({ buyerId: buyer.id, lotId: lot.id, units: UNITS, pricePerUnit: PRICE });
   const order = await acceptFor(farmer.id, lot.id);
   await pollPaymentsOnce();
-  expect(getContract(order.id)).toMatchObject({ state: 'FUNDS_HELD', agreedTotal: TOTAL });
+  expect(await getContract(order.id)).toMatchObject({ state: 'FUNDS_HELD', agreedTotal: TOTAL });
   return { buyer, farmer, lot, contractId: order.id };
 }
 
 async function grade(contractId: string) {
-  await addPhoto({ contractId, buffer: await photo(), actor: { type: 'buyer', id: testBuyer().id } });
+  await addPhoto({ contractId, buffer: await photo(), actor: { type: 'buyer', id: (await testBuyer()).id } });
   await runGrading(contractId);
   await pollPaymentsOnce(); // the advance lands
 }
@@ -122,26 +121,26 @@ async function grade(contractId: string) {
 /** No transport job: graded, the farmer agrees, the buyer's 24 h clock runs. */
 async function deliveredOrder() {
   const order = await fundedOrder();
-  confirmPickup(order.contractId, { type: 'farmer', id: order.farmer.id });
+  await confirmPickup(order.contractId, { type: 'farmer', id: order.farmer.id });
   await grade(order.contractId);
   await agreeGrading(order.contractId, order.farmer.id);
-  expect(getContract(order.contractId).state).toBe('DELIVERED');
+  expect((await getContract(order.contractId)).state).toBe('DELIVERED');
   return order;
 }
 
 /** A funded order with a hired driver whose fee is secured, before pickup. */
 async function orderWithDriver() {
   const order = await fundedOrder();
-  const driver = registerDriver({ phone: driverPhone(), name: 'Sorghum Driver', regionCode: 'NORTHERN', vehicleClassCode: 'van', pin: '1234' });
-  const requested = requestTransport(order.contractId, order.buyer.id, undefined, driver.id);
+  const driver = await registerDriver({ phone: driverPhone(), name: 'Sorghum Driver', regionCode: 'NORTHERN', vehicleClassCode: 'van', pin: '1234' });
+  const requested = await requestTransport(order.contractId, order.buyer.id, undefined, driver.id);
   await acceptJob(requested.id, driver.id);
   await pollPaymentsOnce();
-  expect(getJob(requested.id).state).toBe('FUNDS_HELD');
-  return { ...order, driver, job: getJob(requested.id) };
+  expect((await getJob(requested.id)).state).toBe('FUNDS_HELD');
+  return { ...order, driver, job: await getJob(requested.id) };
 }
 
-function otherBuyerToken(phone: string): string {
-  const other = registerBuyer({ phone, name: 'Other Buyer', regionCode: 'GREATER_ACCRA' });
+async function otherBuyerToken(phone: string): Promise<string> {
+  const other = await registerBuyer({ phone, name: 'Other Buyer', regionCode: 'GREATER_ACCRA' });
   return testToken('buyer', other.id, other.phone!);
 }
 
@@ -158,8 +157,8 @@ async function dial(phone: string, inputs: string[]): Promise<string[]> {
 }
 
 /** The keypress that opens this lot on USSD My lots. */
-function lotKey(farmerId: string, lotId: string): string {
-  return String(listLotsByFarmer(farmerId).slice(0, 5).findIndex((l) => l.id === lotId) + 1);
+async function lotKey(farmerId: string, lotId: string): Promise<string> {
+  return String((await listLotsByFarmer(farmerId)).slice(0, 5).findIndex((l) => l.id === lotId) + 1);
 }
 
 const said = (xml: string) => [...xml.matchAll(/<Say[^>]*>([^<]*)<\/Say>/g)].map((m) => m[1]).join(' ').replaceAll('&amp;', '&');
@@ -205,7 +204,7 @@ class Call {
 describe('receipt over REST', () => {
   it('the order page shows where the money stands; only its buyer can confirm receipt, which settles it', async () => {
     const { contractId } = await deliveredOrder();
-    const token = testBuyerToken();
+    const token = await testBuyerToken();
 
     const before = await get(`/api/contracts/${contractId}`, token);
     expect(before.statusCode).toBe(200);
@@ -221,9 +220,9 @@ describe('receipt over REST', () => {
     expect(before.json().settlement.receiptDueAt).toBeGreaterThan(Date.now());
     expect(before.json().claims).toEqual([]);
 
-    const stranger = await post(`/api/contracts/${contractId}/receive`, {}, otherBuyerToken('+233207497480'));
+    const stranger = await post(`/api/contracts/${contractId}/receive`, {}, await otherBuyerToken('+233207497480'));
     expect(stranger.statusCode).toBe(403);
-    expect(getContract(contractId).state).toBe('DELIVERED');
+    expect((await getContract(contractId)).state).toBe('DELIVERED');
 
     const received = await post(`/api/contracts/${contractId}/receive`, {}, token);
     expect(received.statusCode).toBe(200);
@@ -240,15 +239,15 @@ describe('receipt over REST', () => {
 describe('claims over REST', () => {
   it('a claim is checked, shown on the order, refused by the farmer, and decided on the simulator route', async () => {
     const { farmer, contractId } = await deliveredOrder();
-    const token = testBuyerToken();
+    const token = await testBuyerToken();
     const url = `/api/contracts/${contractId}/claims`;
 
     expect((await post(url, { reason: 'too_expensive', deduction: 1000 }, token)).statusCode).toBe(400);
-    expect((await post(url, { reason: 'short_weight', deduction: 1000 }, otherBuyerToken('+233207497481'))).statusCode).toBe(403);
+    expect((await post(url, { reason: 'short_weight', deduction: 1000 }, await otherBuyerToken('+233207497481'))).statusCode).toBe(403);
     const tooMuch = await post(url, { reason: 'short_weight', deduction: TOTAL - ADVANCE + 1 }, token);
     expect(tooMuch.statusCode).toBe(409);
     expect(tooMuch.json().error.code).toBe('DEDUCTION_TOO_LARGE');
-    expect(getContract(contractId).state).toBe('DELIVERED');
+    expect((await getContract(contractId)).state).toBe('DELIVERED');
 
     const filed = await post(url, { reason: 'short_weight', note: 'one bag short', deduction: 40_000 }, token);
     expect(filed.statusCode).toBe(201);
@@ -260,12 +259,12 @@ describe('claims over REST', () => {
     expect(page.claims[0]).toMatchObject({ id: claimId, reason: 'short_weight', note: 'one bag short', proposedDeduction: 40_000, status: 'awaiting_farmer', reviewStatus: 'pending' });
 
     // The farmer's side.
-    const farmerToken = testToken('farmer', farmer.id, farmer.phone);
+    const farmerToken = await testToken('farmer', farmer.id, farmer.phone);
     const mine = (await get('/api/farmer/claims', farmerToken)).json().claims as Array<{ id: string; contractState: string }>;
     expect(mine.find((c) => c.id === claimId)?.contractState).toBe('CLAIMED');
 
-    const neighbour = registerFarmer({ phone: farmerPhone(), name: 'Neighbour', regionCode: 'NORTHERN' });
-    const notHers = await post(`/api/farmer/claims/${claimId}/answer`, { accept: false }, testToken('farmer', neighbour.id, neighbour.phone));
+    const neighbour = await registerFarmer({ phone: farmerPhone(), name: 'Neighbour', regionCode: 'NORTHERN' });
+    const notHers = await post(`/api/farmer/claims/${claimId}/answer`, { accept: false }, await testToken('farmer', neighbour.id, neighbour.phone));
     expect(notHers.statusCode).toBe(403);
 
     const refused = await post(`/api/farmer/claims/${claimId}/answer`, { accept: false }, farmerToken);
@@ -285,15 +284,15 @@ describe('claims over REST', () => {
     const done = (await get(`/api/contracts/${contractId}`, token)).json();
     expect(done.contract.state).toBe('SETTLED');
     expect(done.settlement).toMatchObject({ paidToFarmer: TOTAL - 10_000, deduction: 10_000, onTheWay: 0 });
-    expect(contractEscrowBalance(contractId)).toBe(0); // the 10,000 went back to the buyer
+    expect(await contractEscrowBalance(contractId)).toBe(0); // the 10,000 went back to the buyer
   });
 });
 
 describe('the farmer answers a claim by phone', () => {
   it('on USSD: My lots → the order → 2 refuses, the undisputed part goes out', async () => {
     const { buyer, farmer, lot, contractId } = await deliveredOrder();
-    const claim = fileClaim({ contractId, buyerId: buyer.id, reason: 'quality', deduction: 30_000 });
-    const key = lotKey(farmer.id, lot.id);
+    const claim = await fileClaim({ contractId, buyerId: buyer.id, reason: 'quality', deduction: 30_000 });
+    const key = await lotKey(farmer.id, lot.id);
 
     const [, , detail] = await dial(farmer.phone, ['3', key]);
     expect(detail).toContain('The buyer says the quality is not as agreed. They ask to deduct GHS 300.00.');
@@ -302,7 +301,7 @@ describe('the farmer answers a claim by phone', () => {
 
     const screens = await dial(farmer.phone, ['3', key, '2']);
     expect(screens.at(-1)).toMatch(/^END You refused\. GHS 1800\.00 is on its way to your MoMo now/);
-    expect(getClaim(claim.id)).toMatchObject({ status: 'awaiting_review', farmerAnswer: 'refused' });
+    expect(await getClaim(claim.id)).toMatchObject({ status: 'awaiting_review', farmerAnswer: 'refused' });
 
     const [, , later] = await dial(farmer.phone, ['3', key]);
     expect(later).toContain('F2M is reviewing it');
@@ -310,8 +309,8 @@ describe('the farmer answers a claim by phone', () => {
 
   it('on the claim call: she hears it, presses 4 to hear it again, then 1 to accept, and the order settles', async () => {
     const { buyer, farmer, contractId } = await deliveredOrder();
-    const claim = fileClaim({ contractId, buyerId: buyer.id, reason: 'short_weight', deduction: 20_000 });
-    const queued = listVoiceCallsForPhone(farmer.phone, 10).find((c) => c.flow === 'claim' && c.contractId === contractId);
+    const claim = await fileClaim({ contractId, buyerId: buyer.id, reason: 'short_weight', deduction: 20_000 });
+    const queued = (await listVoiceCallsForPhone(farmer.phone, 10)).find((c) => c.flow === 'claim' && c.contractId === contractId);
     expect(queued).toBeDefined();
 
     const call = new Call(farmer.phone);
@@ -326,18 +325,18 @@ describe('the farmer answers a claim by phone', () => {
     await call.press('1');
     expect(call.ended).toBe(true);
     expect(call.text).toContain('You accepted. GHS 1900.00 is on its way to your mobile money.');
-    expect(getClaim(claim.id).status).toBe('accepted');
+    expect((await getClaim(claim.id)).status).toBe('accepted');
     await landAll();
-    expect(getContract(contractId).state).toBe('SETTLED');
+    expect((await getContract(contractId)).state).toBe('SETTLED');
   });
 });
 
 describe('driver milestones', () => {
   it('over REST: at pickup, loaded, set off, arrived — each only by the job’s own driver and in order', async () => {
     const { farmer, contractId, driver, job } = await orderWithDriver();
-    const token = testToken('driver', driver.id, driver.phone);
-    const stranger = registerDriver({ phone: driverPhone(), name: 'Stranger', regionCode: 'NORTHERN', vehicleClassCode: 'van', pin: '1234' });
-    const strangerToken = testToken('driver', stranger.id, stranger.phone);
+    const token = await testToken('driver', driver.id, driver.phone);
+    const stranger = await registerDriver({ phone: driverPhone(), name: 'Stranger', regionCode: 'NORTHERN', vehicleClassCode: 'van', pin: '1234' });
+    const strangerToken = await testToken('driver', stranger.id, stranger.phone);
     const route = (step: string) => `/api/jobs/${job.id}/${step}`;
 
     expect((await post(route('at-pickup'), {}, strangerToken)).statusCode).toBe(403);
@@ -346,11 +345,11 @@ describe('driver milestones', () => {
     const atPickup = await post(route('at-pickup'), {}, token);
     expect(atPickup.statusCode).toBe(200);
     expect(atPickup.json().job.state).toBe('FUNDS_HELD');
-    expect(listNotificationsForPhone(farmer.phone, 10).some((n) => n.templateKey === 'sms.driverAtPickup')).toBe(true);
+    expect((await listNotificationsForPhone(farmer.phone, 10)).some((n) => n.templateKey === 'sms.driverAtPickup')).toBe(true);
 
     expect((await post(route('pickup'), {}, token)).json().job.state).toBe('PICKED_UP');
     await grade(contractId);
-    expect(getContract(contractId).state).toBe('GRADED');
+    expect((await getContract(contractId)).state).toBe('GRADED');
 
     const departed = await post(route('departed'), {}, token);
     expect(departed.statusCode).toBe(200);
@@ -360,13 +359,13 @@ describe('driver milestones', () => {
     const arrived = await post(route('arrived'), {}, token);
     expect(arrived.statusCode).toBe(200);
     expect(arrived.json().job.state).toBe('ARRIVED');
-    expect(getContract(contractId).state).toBe('DELIVERED');
+    expect((await getContract(contractId)).state).toBe('DELIVERED');
 
     // The buyer's receipt pays the driver and settles the order.
-    expect((await post(`/api/contracts/${contractId}/receive`, {}, testBuyerToken())).statusCode).toBe(200);
+    expect((await post(`/api/contracts/${contractId}/receive`, {}, await testBuyerToken())).statusCode).toBe(200);
     await landAll();
-    expect(getJob(job.id).state).toBe('PAID');
-    expect(getContract(contractId).state).toBe('SETTLED');
+    expect((await getJob(job.id)).state).toBe('PAID');
+    expect((await getContract(contractId)).state).toBe('SETTLED');
   });
 
   it('on USSD: My job → 2 at pickup; after loading, 1 set off and 2 arrived', async () => {
@@ -378,7 +377,7 @@ describe('driver milestones', () => {
     expect((await dial(driver.phone, ['2', '2'])).at(-1)).toBe(`END Job ${job.jobCode}: the farmer and buyer know you are at the pickup point.`);
 
     expect((await dial(driver.phone, ['2', '1'])).at(-1)).toMatch(/pickup confirmed/);
-    expect(getJob(job.id).state).toBe('PICKED_UP');
+    expect((await getJob(job.id)).state).toBe('PICKED_UP');
     await grade(contractId);
 
     const [, moving] = await dial(driver.phone, ['2']);
@@ -387,8 +386,8 @@ describe('driver milestones', () => {
     expect((await dial(driver.phone, ['2', '1'])).at(-1)).toBe(`END Job ${job.jobCode}: the buyer knows you are on your way.`);
     expect((await dial(driver.phone, ['2', '2'])).at(-1)).toMatch(new RegExp(`^END Job ${job.jobCode}: arrived\\. You are paid when the buyer confirms`));
 
-    expect(getJob(job.id).state).toBe('ARRIVED');
-    expect(getContract(contractId).state).toBe('DELIVERED');
+    expect((await getJob(job.id)).state).toBe('ARRIVED');
+    expect((await getContract(contractId)).state).toBe('DELIVERED');
     const [, after] = await dial(driver.phone, ['2']);
     expect(after).toContain('Arrived - waiting for the buyer');
   });

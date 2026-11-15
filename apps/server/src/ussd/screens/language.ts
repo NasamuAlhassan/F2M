@@ -44,12 +44,12 @@ export const langWelcome: UssdScreen = {
 export const langSettings: UssdScreen = {
   key: 'lang_settings',
   render: () => localeLines('ussd.lang.settings', true),
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '0') return { next: ctx.farmer ? 'home' : 'driver_home' };
     const pick = pickLocale(input);
     if (!pick) return invalid();
-    if (ctx.farmer) updateFarmerProfile(ctx.farmer.id, { locale: pick.code });
-    else if (ctx.driver) updateDriverProfile(ctx.driver.id, { locale: pick.code });
+    if (ctx.farmer) await updateFarmerProfile(ctx.farmer.id, { locale: pick.code });
+    else if (ctx.driver) await updateDriverProfile(ctx.driver.id, { locale: pick.code });
     ctx.data.locale = pick.code;
     ctx.locale = pick.code; // the confirmation itself speaks the NEW language
     return { end: [{ key: 'ussd.lang.done', params: { language: pick.endonym } }] };

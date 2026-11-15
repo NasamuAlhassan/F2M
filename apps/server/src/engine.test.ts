@@ -26,7 +26,7 @@ let token: string;
 beforeAll(async () => {
   setPaymentProvider(new MockPaymentProvider(0));
   app = await buildServer({ logger: false });
-  token = testBuyerToken();
+  token = await testBuyerToken();
 });
 afterAll(async () => {
   setPaymentProvider(null);
@@ -40,30 +40,28 @@ async function get<T>(url: string): Promise<T> {
 }
 
 async function offeredContract(phone: string) {
-  const yam = db.select().from(schema.commodities).all().find((c) => c.code === 'YAM')!;
-  db.update(schema.demands)
-    .set({ status: 'cancelled' })
-    .where(and(eq(schema.demands.commodityId, yam.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
-    .run();
-  db.update(schema.lots)
-    .set({ status: 'withdrawn' })
-    .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered')))
-    .run();
-  const buyer = testBuyer();
-  const farmer = registerFarmer({ phone, name: 'Engine Farmer', regionCode: 'BONO_EAST' });
-  registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
-  createDemand({
-    buyerId: buyer.id,
-    commodityCode: 'YAM',
-    quantityKg: 600, // 500kg lot fills it partially — the demand stays on the active feed
-    minBand: 'B',
-    basePricePerKg: 400,
-    windowStart: Date.now(),
-    windowEnd: Date.now() + 7 * DAY,
-    regionCode: 'GREATER_ACCRA',
-  });
+  const yam = (await db.select().from(schema.commodities)).find((c) => c.code === 'YAM')!;
+  (await db.update(schema.demands)
+        .set({ status: 'cancelled' })
+        .where(and(eq(schema.demands.commodityId, yam.id), inArray(schema.demands.status, ['open', 'partially_matched']))));
+  (await db.update(schema.lots)
+        .set({ status: 'withdrawn' })
+        .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered'))));
+  const buyer = await testBuyer();
+  const farmer = await registerFarmer({ phone, name: 'Engine Farmer', regionCode: 'BONO_EAST' });
+  await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+  await createDemand({
+        buyerId: buyer.id,
+        commodityCode: 'YAM',
+        quantityKg: 600, // 500kg lot fills it partially — the demand stays on the active feed
+        minBand: 'B',
+        basePricePerKg: 400,
+        windowStart: Date.now(),
+        windowEnd: Date.now() + 7 * DAY,
+        regionCode: 'GREATER_ACCRA',
+      });
   // Phase 1: the engine's match is a bid (offer thread) waiting on the farmer, not an OFFERED contract.
-  return { farmer, offer: openOfferFor(farmer.id)! };
+  return { farmer, offer: (await openOfferFor(farmer.id))! };
 }
 
 describe('AI engine section (M19)', () => {
@@ -154,18 +152,18 @@ describe('AI engine section (M19)', () => {
       });
 
     // Another buyer cannot accept on this buyer's thread.
-    const stranger = registerBuyer({ phone: '0555000444', name: 'Other Buyer', regionCode: 'ASHANTI' });
-    const refused = await simulate(testToken('buyer', stranger.id, stranger.phone!));
+    const stranger = await registerBuyer({ phone: '0555000444', name: 'Other Buyer', regionCode: 'ASHANTI' });
+    const refused = await simulate(await testToken('buyer', stranger.id, stranger.phone!));
     expect(refused.statusCode).toBe(403);
-    expect(getOffer(offer.id).status).toBe('open');
+    expect((await getOffer(offer.id)).status).toBe('open');
 
     const res = await simulate(token);
     expect(res.statusCode).toBe(200);
     expect(res.json().contract.state).toBe('ACCEPTED');
-    const accepted = getOffer(offer.id);
+    const accepted = await getOffer(offer.id);
     expect(accepted.status).toBe('accepted');
     expect(accepted.contractId).toBe(res.json().contract.id);
-    expect(getContract(res.json().contract.id).agreedTotal).toBe(200000);
+    expect((await getContract(res.json().contract.id)).agreedTotal).toBe(200000);
   });
 
   it('falls back to English for keys the simulation catalogs do not cover', async () => {

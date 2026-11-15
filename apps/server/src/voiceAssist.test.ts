@@ -113,7 +113,7 @@ function farmer() {
 
 async function startCallback(phone: string): Promise<Call> {
   await ussd(phone, ['1', '8']); // Sell → 8: F2M rings back for a voice listing
-  const queued = listVoiceCallsForPhone(phone, 5).find((c) => c.flow === 'listing' && c.status === 'pending')!;
+  const queued = (await listVoiceCallsForPhone(phone, 5)).find((c) => c.flow === 'listing' && c.status === 'pending')!;
   const call = new Call(phone);
   await call.answer(queued.id);
   return call;
@@ -125,7 +125,7 @@ const ANSWER = { unit: 'BAG_50KG', quantity: 10, priceCedisPerUnit: 400, readyIn
 
 describe('the assist inside a guided voice listing', () => {
   it('with it off, the call asks for the price, exactly as before', async () => {
-    const f = farmer();
+    const f = await farmer();
     const call = await startCallback(f.phone);
     await call.say(SENTENCE);
     expect(call.text).toContain('How do you measure your Maize?'); // the bag size is always asked
@@ -136,7 +136,7 @@ describe('the assist inside a guided voice listing', () => {
   it('with it on, fills the price she said, still asks the bag size, and reads it all back before 1', async () => {
     const model = scripted(ANSWER);
     setLlmProvider(model);
-    const f = farmer();
+    const f = await farmer();
     const call = await startCallback(f.phone);
     await call.say(SENTENCE);
 
@@ -150,21 +150,21 @@ describe('the assist inside a guided voice listing', () => {
     while (!call.text.includes('Press 1 to publish it') && guard++ < 12) await call.press('1');
     expect(call.text).toContain('You are listing 10 50kg bag of Maize');
     expect(call.text).toContain('GHS 400.00'); // what the model supplied is read back...
-    expect(listLotsByFarmer(f.id)).toHaveLength(0); // ...and nothing is live yet
+    expect(await listLotsByFarmer(f.id)).toHaveLength(0); // ...and nothing is live yet
 
     await call.press('1');
-    const [lot] = listLotsByFarmer(f.id);
+    const [lot] = await listLotsByFarmer(f.id);
     expect(lot).toMatchObject({ unitQty: 10, askingPricePerUnit: 40_000, channel: 'ivr' });
 
     // The saved record says which fields the model supplied.
-    const record = db.select().from(schema.voiceListings).where(eq(schema.voiceListings.lotId, lot!.id)).get()!;
+    const record = (await db.select().from(schema.voiceListings).where(eq(schema.voiceListings.lotId, lot!.id)))[0]!;
     expect(JSON.parse(record.parsed!).aiFilled).toEqual(['pricePerUnit']);
   });
 
   it('reads only the first, whole-listing sentence — never the short answers after it', async () => {
     const model = scripted(ANSWER);
     setLlmProvider(model);
-    const f = farmer();
+    const f = await farmer();
     const call = await startCallback(f.phone);
     await call.say('I have ten bags, four hundred each'); // no crop heard: nothing for the model to add
     expect(model.asked).toHaveLength(0); // it does not name a crop for her
@@ -176,7 +176,7 @@ describe('the assist inside a guided voice listing', () => {
   it('is read once for a listing started from the line menu, which is not a callback', async () => {
     const model = scripted(ANSWER);
     setLlmProvider(model);
-    const f = farmer();
+    const f = await farmer();
     const call = new Call(f.phone);
     await call.dialLine();
     await call.press('1'); // "Press 1 to sell produce"

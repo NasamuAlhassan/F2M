@@ -34,16 +34,16 @@ const counterOf = (ctx: IvrCtx): Counter => (ctx.state.counter ??= {}) as Counte
 
 const GONE_CODES = ['OFFER_CLOSED', 'OFFER_EXPIRED', 'NOT_YOUR_TURN', 'LOT_CLOSED', 'NOT_ENOUGH_LEFT', 'FORBIDDEN'];
 
-function bidGuard(ctx: IvrCtx): I18nText[] | null {
+async function bidGuard(ctx: IvrCtx): Promise<I18nText[] | null> {
   const id = offerIdOf(ctx);
   if (!id) return [{ key: 'voice.offer.gone' }];
-  const offer = getOffer(id);
+  const offer = await getOffer(id);
   if (offer.status !== 'open' || offer.turn !== 'farmer') return [{ key: 'voice.offer.gone' }];
   return null;
 }
 
-function view(ctx: IvrCtx) {
-  return describeOffer(getOffer(offerIdOf(ctx)!));
+async function view(ctx: IvrCtx) {
+  return describeOffer(await getOffer(offerIdOf(ctx)!));
 }
 
 /** Done with this offer: on the listing line go back to the list, on an offer call say goodbye. */
@@ -63,10 +63,10 @@ function gone(ctx: IvrCtx): IvrResult {
 
 const main: IvrNode = {
   key: 'bid_main',
-  guard: (ctx) => (fromLine(ctx) ? null : bidGuard(ctx)),
-  say: (ctx) => {
-    if (bidGuard(ctx)) return [{ key: 'voice.offer.gone' }, { key: 'voice.bid.backToList' }];
-    const v = view(ctx);
+  guard: async (ctx) => (fromLine(ctx) ? null : await bidGuard(ctx)),
+  say: async (ctx) => {
+    if (await bidGuard(ctx)) return [{ key: 'voice.offer.gone' }, { key: 'voice.bid.backToList' }];
+    const v = await view(ctx);
     return [
       ...takeFlash(ctx),
       {
@@ -84,17 +84,17 @@ const main: IvrNode = {
     ];
   },
   onDigits: async (digits, ctx) => {
-    if (bidGuard(ctx)) return fromLine(ctx) ? { next: 'line_offers' } : gone(ctx);
-    const farmer = farmerOf(ctx);
+    if (await bidGuard(ctx)) return fromLine(ctx) ? { next: 'line_offers' } : gone(ctx);
+    const farmer = await farmerOf(ctx);
     const offerId = offerIdOf(ctx)!;
     if (!farmer) return { end: [{ key: 'voice.common.goodbye' }], outcome: { result: 'no_context' } };
     try {
       if (digits === '1') {
         const { offer } = await acceptOfferThread(offerId, 'farmer', farmer.id, 'ivr');
-        return finish(ctx, 'voice.bid.accepted', { total: formatGhs(describeOffer(offer).current.total) }, { result: 'accepted' });
+        return finish(ctx, 'voice.bid.accepted', { total: formatGhs((await describeOffer(offer)).current.total) }, { result: 'accepted' });
       }
       if (digits === '2') {
-        rejectOffer(offerId, 'farmer', farmer.id, 'ivr');
+        await rejectOffer(offerId, 'farmer', farmer.id, 'ivr');
         return finish(ctx, 'voice.bid.rejected', {}, { result: 'rejected' });
       }
     } catch (err) {
@@ -114,7 +114,7 @@ const counterPrice: IvrNode = {
   key: 'bid_counter_price',
   input: 'numberOrSpeech',
   guard: bidGuard,
-  say: (ctx) => [...takeFlash(ctx), { key: 'voice.bid.askPrice', params: { unit: unitSay(ctx, view(ctx).lot.unitCode) } }, HINT_NUMBER],
+  say: async (ctx) => [...takeFlash(ctx), { key: 'voice.bid.askPrice', params: { unit: unitSay(ctx, (await view(ctx)).lot.unitCode) } }, HINT_NUMBER],
   onDigits: (digits, ctx) => {
     const price = typedPrice(digits);
     if (!price) {
@@ -124,8 +124,8 @@ const counterPrice: IvrNode = {
     counterOf(ctx).pricePerUnit = price;
     return { next: 'bid_counter_units' };
   },
-  onSpeech: (heard, ctx) => {
-    const got = heard ? parseCounterAnswer(heard.english, view(ctx).lot.commodityCode) : {};
+  onSpeech: async (heard, ctx) => {
+    const got = heard ? parseCounterAnswer(heard.english, (await view(ctx)).lot.commodityCode) : {};
     if (!got.pricePerUnit) {
       flash(ctx, 'voice.common.sorry');
       return { next: 'bid_counter_price' };
@@ -140,8 +140,8 @@ const counterUnits: IvrNode = {
   key: 'bid_counter_units',
   input: 'number',
   guard: bidGuard,
-  say: (ctx) => {
-    const v = view(ctx);
+  say: async (ctx) => {
+    const v = await view(ctx);
     return [...takeFlash(ctx), { key: 'voice.bid.askUnits', params: { units: v.current.units, unit: unitSay(ctx, v.lot.unitCode) } }, HINT_NUMBER];
   },
   onDigits: (digits, ctx) => {
@@ -160,8 +160,8 @@ const counterConfirm: IvrNode = {
   key: 'bid_counter_confirm',
   guard: bidGuard,
   back: 'bid_counter_price',
-  say: (ctx) => {
-    const v = view(ctx);
+  say: async (ctx) => {
+    const v = await view(ctx);
     const c = counterOf(ctx);
     const units = c.units ?? v.current.units;
     return [
@@ -178,29 +178,29 @@ const counterConfirm: IvrNode = {
       HINT_KEY,
     ];
   },
-  onDigits: (digits, ctx) => {
+  onDigits: async (digits, ctx) => {
     if (digits === '2') {
       ctx.state.counter = {};
       return { next: 'bid_counter_price' };
     }
     if (digits !== '1') return { next: 'bid_counter_confirm' };
-    const farmer = farmerOf(ctx)!;
+    const farmer = (await farmerOf(ctx))!;
     const offerId = offerIdOf(ctx)!;
     const c = counterOf(ctx);
     try {
-      const sent = counterOffer(offerId, 'farmer', farmer.id, { units: c.units, pricePerUnit: c.pricePerUnit! }, 'ivr');
-      const v = describeOffer(sent);
+      const sent = await counterOffer(offerId, 'farmer', farmer.id, { units: c.units, pricePerUnit: c.pricePerUnit! }, 'ivr');
+      const v = await describeOffer(sent);
       return finish(ctx, 'voice.bid.counterSent', { buyer: v.buyer.company ?? v.buyer.name }, { result: 'countered' });
     } catch (err) {
       if (!(err instanceof DomainError)) throw err;
       if (err.code === 'NOT_ENOUGH_LEFT') {
-        const lot = getLot(view(ctx).lot.id);
-        flash(ctx, 'voice.bid.onlyLeft', { n: unitsAvailable(lot), unit: unitSay(ctx, view(ctx).lot.unitCode) });
+        const lot = await getLot((await view(ctx)).lot.id);
+        flash(ctx, 'voice.bid.onlyLeft', { n: await unitsAvailable(lot), unit: unitSay(ctx, (await view(ctx)).lot.unitCode) });
         delete counterOf(ctx).units;
         return { next: 'bid_counter_units' };
       }
       if (err.code === 'MORE_THAN_NEEDED') {
-        flash(ctx, 'voice.bid.requestLimit', { units: view(ctx).current.units });
+        flash(ctx, 'voice.bid.requestLimit', { units: (await view(ctx)).current.units });
         delete counterOf(ctx).units;
         return { next: 'bid_counter_units' };
       }

@@ -1,1 +1,0 @@
-ALTER TABLE `commodities` ADD `sort_order` integer DEFAULT 100 NOT NULL;

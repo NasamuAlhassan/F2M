@@ -24,6 +24,7 @@ import {
   type GradeBand,
   type Offer,
   type Party,
+  mediaUrl,
 } from '@ftm/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -46,14 +47,14 @@ const counterSchema = z.object({
 });
 const statusQuery = z.object({ status: z.enum(['open', 'closed']).optional() });
 
-const photoUrl = (lotId: string): string | null => {
-  const photo = listListingPhotos(lotId)[0];
-  return photo ? `/${photo.path}` : null;
+const photoUrl = async (lotId: string): Promise<string | null> => {
+  const photo = (await listListingPhotos(lotId))[0];
+  return photo ? mediaUrl(photo.path) : null;
 };
 export const offerView = (offer: Offer) => describeOffer(offer, { photoUrl });
 
-function ownedOffer(req: FastifyRequest, party: Party, id: string): Offer {
-  const offer = getOffer(id);
+async function ownedOffer(req: FastifyRequest, party: Party, id: string): Promise<Offer> {
+  const offer = await getOffer(id);
   const owner = party === 'buyer' ? offer.buyerId : offer.farmerId;
   if (owner !== req.user.sub) throw new DomainError('Not your offer', 'FORBIDDEN', 403);
   return offer;
@@ -62,33 +63,33 @@ function ownedOffer(req: FastifyRequest, party: Party, id: string): Offer {
 function moveRoutes(app: FastifyInstance, prefix: string, party: Party, guard: typeof app.authBuyer): void {
   app.get(`${prefix}/offers`, { preHandler: [guard] }, async (req) => {
     const { status } = statusQuery.parse(req.query ?? {});
-    const list = party === 'buyer' ? listOffersForBuyer(req.user.sub, status) : listOffersForFarmer(req.user.sub, status);
-    return { offers: list.map(offerView) };
+    const list = party === 'buyer' ? await listOffersForBuyer(req.user.sub, status) : await listOffersForFarmer(req.user.sub, status);
+    return { offers: await Promise.all(list.map(offerView)) };
   });
   app.get(`${prefix}/offers/:id`, { preHandler: [guard] }, async (req) => {
     const { id } = req.params as { id: string };
-    return { offer: offerView(ownedOffer(req, party, id)) };
+    return { offer: await offerView(await ownedOffer(req, party, id)) };
   });
   app.post(`${prefix}/offers/:id/counter`, { preHandler: [guard] }, async (req) => {
     const { id } = req.params as { id: string };
-    ownedOffer(req, party, id);
-    return { offer: offerView(counterOffer(id, party, req.user.sub, counterSchema.parse(req.body ?? {}))) };
+    await ownedOffer(req, party, id);
+    return { offer: await offerView(await counterOffer(id, party, req.user.sub, counterSchema.parse(req.body ?? {}))) };
   });
   app.post(`${prefix}/offers/:id/accept`, { preHandler: [guard] }, async (req) => {
     const { id } = req.params as { id: string };
-    ownedOffer(req, party, id);
+    await ownedOffer(req, party, id);
     const { offer, contract } = await acceptOfferThread(id, party, req.user.sub);
-    return { offer: offerView(offer), contract: { id: contract.id, state: contract.state } };
+    return { offer: await offerView(offer), contract: { id: contract.id, state: contract.state } };
   });
   app.post(`${prefix}/offers/:id/reject`, { preHandler: [guard] }, async (req) => {
     const { id } = req.params as { id: string };
-    ownedOffer(req, party, id);
-    return { offer: offerView(rejectOffer(id, party, req.user.sub)) };
+    await ownedOffer(req, party, id);
+    return { offer: await offerView(await rejectOffer(id, party, req.user.sub)) };
   });
   app.post(`${prefix}/offers/:id/withdraw`, { preHandler: [guard] }, async (req) => {
     const { id } = req.params as { id: string };
-    ownedOffer(req, party, id);
-    return { offer: offerView(withdrawOffer(id, party, req.user.sub)) };
+    await ownedOffer(req, party, id);
+    return { offer: await offerView(await withdrawOffer(id, party, req.user.sub)) };
   });
 }
 
@@ -96,8 +97,8 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
   // ── buyer ──
   app.post('/lots/:lotId/bids', { preHandler: [app.authBuyer] }, async (req, reply) => {
     const { lotId } = req.params as { lotId: string };
-    const offer = placeBid({ buyerId: req.user.sub, lotId, ...proposalSchema.parse(req.body ?? {}) });
-    return reply.code(201).send({ offer: offerView(offer) });
+    const offer = await placeBid({ buyerId: req.user.sub, lotId, ...proposalSchema.parse(req.body ?? {}) });
+    return reply.code(201).send({ offer: await offerView(offer) });
   });
   moveRoutes(app, '', 'buyer', app.authBuyer);
 
@@ -106,29 +107,29 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
 
   // Open buyer requests, nearest first — what the market wants right now.
   app.get('/farmer/requests', { preHandler: [app.authFarmer] }, async (req) => {
-    const farmer = getFarmerById(req.user.sub)!;
+    const farmer = (await getFarmerById(req.user.sub))!;
     const here = resolvePoint(farmer.gpsLat, farmer.gpsLng, farmer.regionCode);
     const now = Date.now();
-    const requests = listOpenRequests({ now })
-      .map((d) => {
-        const commodity = getCommodityById(d.commodityId);
-        const buyer = db.select().from(schema.buyers).where(eq(schema.buyers.id, d.buyerId)).get();
-        const terms = priceTermsSchema.parse(JSON.parse(d.priceTerms));
-        return {
-          id: d.id,
-          commodityCode: commodity.code,
-          commodityName: t('en', commodity.nameKey),
-          remainingKg: d.remainingKg,
-          minBand: d.minBand,
-          targetPricePerKg: terms[d.minBand as GradeBand] ?? null,
-          windowStart: d.windowStart,
-          windowEnd: d.windowEnd,
-          regionCode: d.regionCode,
-          regionName: t('en', getRegion(d.regionCode).nameKey),
-          buyerName: buyer?.company ?? buyer?.name ?? 'Buyer',
-          distanceKm: Math.round(haversineKm(here, resolvePoint(d.gpsLat, d.gpsLng, d.regionCode))),
-        };
-      })
+    const requests = (await Promise.all((await listOpenRequests({ now }))
+          .map(async (d) => {
+            const commodity = getCommodityById(d.commodityId);
+            const buyer = (await db.select().from(schema.buyers).where(eq(schema.buyers.id, d.buyerId)))[0];
+            const terms = priceTermsSchema.parse(JSON.parse(d.priceTerms));
+            return {
+              id: d.id,
+              commodityCode: commodity.code,
+              commodityName: t('en', commodity.nameKey),
+              remainingKg: d.remainingKg,
+              minBand: d.minBand,
+              targetPricePerKg: terms[d.minBand as GradeBand] ?? null,
+              windowStart: d.windowStart,
+              windowEnd: d.windowEnd,
+              regionCode: d.regionCode,
+              regionName: t('en', getRegion(d.regionCode).nameKey),
+              buyerName: buyer?.company ?? buyer?.name ?? 'Buyer',
+              distanceKm: Math.round(haversineKm(here, resolvePoint(d.gpsLat, d.gpsLng, d.regionCode))),
+            };
+          })))
       .sort((a, b) => a.distanceKm - b.distanceKm);
     return { requests };
   });
@@ -136,7 +137,7 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
   app.post('/farmer/requests/:id/offers', { preHandler: [app.authFarmer] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = proposalSchema.extend({ lotId: z.string().min(1) }).parse(req.body ?? {});
-    const offer = offerOnRequest({ farmerId: req.user.sub, demandId: id, ...body });
-    return reply.code(201).send({ offer: offerView(offer) });
+    const offer = await offerOnRequest({ farmerId: req.user.sub, demandId: id, ...body });
+    return reply.code(201).send({ offer: await offerView(offer) });
   });
 }

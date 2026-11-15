@@ -10,10 +10,10 @@ export async function dealRoutes(app: FastifyInstance): Promise<void> {
   app.get('/deals', { preHandler: [app.authAnyRole] }, async (req) => {
     const login = { kind: req.user.kind, sub: req.user.sub };
     return {
-      deals: listDealsFor(login).map((id) => {
-        const view = getDealView(id, dealRoleOf(getContract(id), login)!);
-        return { ...view.deal, viewer: view.viewer, next: view.next, people: view.people, money: view.money };
-      }),
+      deals: await Promise.all((await listDealsFor(login)).map(async (id) => {
+                const view = await getDealView(id, (await dealRoleOf(await getContract(id), login))!);
+                return { ...view.deal, viewer: view.viewer, next: view.next, people: view.people, money: view.money };
+              })),
     };
   });
 
@@ -21,7 +21,7 @@ export async function dealRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     let role = null;
     try {
-      role = dealRoleOf(getContract(id), { kind: req.user.kind, sub: req.user.sub });
+      role = await dealRoleOf(await getContract(id), { kind: req.user.kind, sub: req.user.sub });
     } catch {
       role = null;
     }

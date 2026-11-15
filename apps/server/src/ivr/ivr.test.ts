@@ -34,16 +34,14 @@ afterAll(async () => {
   await app.close();
 });
 
-function isolateYamLane(): void {
-  const yam = db.select().from(schema.commodities).all().find((c) => c.code === 'YAM')!;
-  db.update(schema.demands)
-    .set({ status: 'cancelled' })
-    .where(and(eq(schema.demands.commodityId, yam.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
-    .run();
-  db.update(schema.lots)
-    .set({ status: 'withdrawn' })
-    .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered')))
-    .run();
+async function isolateYamLane(): Promise<void> {
+  const yam = (await db.select().from(schema.commodities)).find((c) => c.code === 'YAM')!;
+  (await db.update(schema.demands)
+        .set({ status: 'cancelled' })
+        .where(and(eq(schema.demands.commodityId, yam.id), inArray(schema.demands.status, ['open', 'partially_matched']))));
+  (await db.update(schema.lots)
+        .set({ status: 'withdrawn' })
+        .where(and(eq(schema.lots.commodityId, yam.id), eq(schema.lots.status, 'registered'))));
 }
 
 /**
@@ -52,21 +50,21 @@ function isolateYamLane(): void {
  * request's grade-B price, GHS 4.00/kg × 250kg = GHS 1000.00 each.
  */
 async function openBid(phone: string) {
-  isolateYamLane();
-  const buyer = testBuyer();
-  const farmer = registerFarmer({ phone, name: `Voice ${phone.slice(-4)}`, regionCode: 'NORTHERN' });
-  registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
-  createDemand({
-    buyerId: buyer.id,
-    commodityCode: 'YAM',
-    quantityKg: 500,
-    minBand: 'B',
-    basePricePerKg: 400,
-    windowStart: Date.now(),
-    windowEnd: Date.now() + 7 * DAY,
-    regionCode: 'GREATER_ACCRA',
-  });
-  const offer = openOfferFor(farmer.id)!;
+  await isolateYamLane();
+  const buyer = await testBuyer();
+  const farmer = await registerFarmer({ phone, name: `Voice ${phone.slice(-4)}`, regionCode: 'NORTHERN' });
+  await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+  await createDemand({
+        buyerId: buyer.id,
+        commodityCode: 'YAM',
+        quantityKg: 500,
+        minBand: 'B',
+        basePricePerKg: 400,
+        windowStart: Date.now(),
+        windowEnd: Date.now() + 7 * DAY,
+        regionCode: 'GREATER_ACCRA',
+      });
+  const offer = (await openOfferFor(farmer.id))!;
   return { farmer, offer };
 }
 
@@ -90,16 +88,16 @@ describe('voice/IVR (M16)', () => {
     const { farmer, offer } = await openBid(phone);
 
     // SMS fallback is unconditional (Phase 1: the bid SMS, not the old sms.newOffer)…
-    expect(listNotificationsForPhone(farmer.phone).some((n) => n.templateKey === 'sms.bidReceived')).toBe(true);
+    expect((await listNotificationsForPhone(farmer.phone)).some((n) => n.templateKey === 'sms.bidReceived')).toBe(true);
     // …and the voice call is queued, tied to the offer thread rather than a contract.
-    let calls = listVoiceCallsForPhone(farmer.phone);
+    let calls = await listVoiceCallsForPhone(farmer.phone);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.flow).toBe('bid');
     expect(calls[0]!.offerId).toBe(offer.id);
     expect(calls[0]!.status).toBe('pending');
 
     await placePendingVoiceCalls();
-    calls = listVoiceCallsForPhone(farmer.phone);
+    calls = await listVoiceCallsForPhone(farmer.phone);
     expect(calls[0]!.status).toBe('placing');
   });
 
@@ -107,7 +105,7 @@ describe('voice/IVR (M16)', () => {
     const phone = '+233207770302';
     const { farmer, offer } = await openBid(phone);
     await placePendingVoiceCalls();
-    const call = listVoiceCallsForPhone(farmer.phone)[0]!;
+    const call = (await listVoiceCallsForPhone(farmer.phone))[0]!;
 
     // Answered: the prompt speaks the proposal in the listing's unit and gathers one digit.
     const prompt = await voiceLeg(call.id, phone, 's1');
@@ -125,12 +123,12 @@ describe('voice/IVR (M16)', () => {
     expect(accepted).not.toContain('<GetDigits');
     expect(accepted).toContain('The deal is agreed for GHS 2000.00');
 
-    const closed = getOffer(offer.id);
+    const closed = await getOffer(offer.id);
     expect(closed.status).toBe('accepted');
-    const contract = getContract(closed.contractId!);
+    const contract = await getContract(closed.contractId!);
     expect(contract.state).toBe('ACCEPTED');
     expect(contract.agreedTotal).toBe(200000);
-    const done = listVoiceCallsForPhone(farmer.phone)[0]!;
+    const done = (await listVoiceCallsForPhone(farmer.phone))[0]!;
     expect(done.status).toBe('completed');
   });
 
@@ -138,23 +136,23 @@ describe('voice/IVR (M16)', () => {
     const phone = '+233207770307';
     const { farmer, offer } = await openBid(phone);
     await placePendingVoiceCalls();
-    const call = listVoiceCallsForPhone(farmer.phone)[0]!;
+    const call = (await listVoiceCallsForPhone(farmer.phone))[0]!;
     await voiceLeg(call.id, phone, 's7');
     await voiceLeg(call.id, phone, 's7', '1');
     // The call that agreed the deal belongs in the chain of custody, as it did for 'offer' calls.
-    expect(getTrace(offer.lotId).map((e) => e.type)).toContain('VOICE_CALL');
+    expect((await getTrace(offer.lotId)).map((e) => e.type)).toContain('VOICE_CALL');
   });
 
   it('lets the farmer press 2 to reject', async () => {
     const phone = '+233207770303';
     const { farmer, offer } = await openBid(phone);
     await placePendingVoiceCalls();
-    const call = listVoiceCallsForPhone(farmer.phone)[0]!;
+    const call = (await listVoiceCallsForPhone(farmer.phone))[0]!;
     await voiceLeg(call.id, phone, 's2');
     const rejected = await voiceLeg(call.id, phone, 's2', '2');
     expect(rejected).toContain('You turned down the offer');
-    expect(getOffer(offer.id).status).toBe('rejected');
-    expect(listContractsForFarmer(farmer.id)).toHaveLength(0); // no order was ever made
+    expect((await getOffer(offer.id)).status).toBe('rejected');
+    expect(await listContractsForFarmer(farmer.id)).toHaveLength(0); // no order was ever made
   });
 
   it('says goodbye gracefully when the bid is already answered', async () => {
@@ -162,7 +160,7 @@ describe('voice/IVR (M16)', () => {
     const { farmer } = await openBid(phone);
     await acceptFor(farmer.id); // accepted via USSD before the call landed
     await placePendingVoiceCalls();
-    const call = listVoiceCallsForPhone(farmer.phone).find((c) => c.flow === 'bid')!;
+    const call = (await listVoiceCallsForPhone(farmer.phone)).find((c) => c.flow === 'bid')!;
     const gone = await voiceLeg(call.id, phone, 's3');
     expect(gone).not.toContain('<GetDigits');
     expect(gone).toContain('no longer available');
@@ -172,7 +170,7 @@ describe('voice/IVR (M16)', () => {
     const phone = '+233207770306';
     const { farmer } = await openBid(phone);
     await placePendingVoiceCalls();
-    const call = listVoiceCallsForPhone(farmer.phone)[0]!;
+    const call = (await listVoiceCallsForPhone(farmer.phone))[0]!;
     setTtsProvider({ name: 'mock', synthesize: async () => ({ url: 'http://localhost:3000/tts/en/abc.mp3' }) });
     try {
       const prompt = await voiceLeg(call.id, phone, 's6');
@@ -190,14 +188,14 @@ describe('voice/IVR (M16)', () => {
     const phone = '+233207770305';
     const { farmer } = await openBid(phone);
     await placePendingVoiceCalls(); // attempt 1 → placing
-    expireStaleVoiceCalls(Date.now() + 3 * 60 * 1000); // → back to pending (earlier tests' strays may expire too)
-    expect(listVoiceCallsForPhone(farmer.phone)[0]!.status).toBe('pending');
+    await expireStaleVoiceCalls(Date.now() + 3 * 60 * 1000); // → back to pending (earlier tests' strays may expire too)
+    expect((await listVoiceCallsForPhone(farmer.phone))[0]!.status).toBe('pending');
 
     await placePendingVoiceCalls(); // attempt 2 → placing
-    expireStaleVoiceCalls(Date.now() + 6 * 60 * 1000); // → no_answer, final
-    const call = listVoiceCallsForPhone(farmer.phone)[0]!;
+    await expireStaleVoiceCalls(Date.now() + 6 * 60 * 1000); // → no_answer, final
+    const call = (await listVoiceCallsForPhone(farmer.phone))[0]!;
     expect(call.status).toBe('no_answer');
     expect(call.attempts).toBe(2);
-    expect(listNotificationsForPhone(farmer.phone).some((n) => n.templateKey === 'sms.bidReceived')).toBe(true);
+    expect((await listNotificationsForPhone(farmer.phone)).some((n) => n.templateKey === 'sms.bidReceived')).toBe(true);
   });
 });

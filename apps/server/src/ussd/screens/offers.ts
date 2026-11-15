@@ -24,8 +24,8 @@ import { invalid, listLines, parseSelection } from './common';
 
 const MAX_LISTED = 5;
 
-function sortedOpen(farmerId: string): Offer[] {
-  return listOffersForFarmer(farmerId, 'open').sort((a, b) => Number(b.turn === 'farmer') - Number(a.turn === 'farmer'));
+async function sortedOpen(farmerId: string): Promise<Offer[]> {
+  return (await listOffersForFarmer(farmerId, 'open')).sort((a, b) => Number(b.turn === 'farmer') - Number(a.turn === 'farmer'));
 }
 
 /** Pesewas from what a farmer types: "2000", "2000.50", "2,000". */
@@ -47,8 +47,8 @@ function expiresLabel(ctx: UssdCtx, expiresAt: number | null): I18nText[] {
 }
 
 /** "{units} {unit}" in the farmer's language — the listing's own unit. */
-function view(ctx: UssdCtx, offer: Offer) {
-  const v = describeOffer(offer);
+async function view(ctx: UssdCtx, offer: Offer) {
+  const v = await describeOffer(offer);
   return {
     v,
     unit: t(ctx.locale, `unit.${v.lot.unitCode}`),
@@ -70,23 +70,23 @@ function gone(err: unknown): { end: I18nText[] } | null {
 
 export const offersList: UssdScreen = {
   key: 'offers_list',
-  render: (ctx) => {
+  render: async (ctx) => {
     if (!ctx.farmer) return [{ key: 'ussd.offers.none' }, { key: 'ussd.common.back' }];
-    const open = sortedOpen(ctx.farmer.id).slice(0, MAX_LISTED);
+    const open = (await sortedOpen(ctx.farmer.id)).slice(0, MAX_LISTED);
     ctx.data.offerIds = open.map((o) => o.id);
     if (open.length === 0) return [{ key: 'ussd.offers.none' }, { key: 'ussd.common.back' }];
     return [
       { key: 'ussd.offers.title' },
       ...listLines(
-        open.map((o) => {
-          const { v, unit, commodity } = view(ctx, o);
-          return t(ctx.locale, o.turn === 'farmer' ? 'ussd.offers.itemYourTurn' : 'ussd.offers.itemWaiting', {
-            units: v.current.units,
-            unit,
-            commodity,
-            price: formatGhs(v.current.pricePerUnit),
-          });
-        }),
+        await Promise.all(open.map(async (o) => {
+                    const { v, unit, commodity } = await view(ctx, o);
+                    return t(ctx.locale, o.turn === 'farmer' ? 'ussd.offers.itemYourTurn' : 'ussd.offers.itemWaiting', {
+                      units: v.current.units,
+                      unit,
+                      commodity,
+                      price: formatGhs(v.current.pricePerUnit),
+                    });
+                  })),
         { hasMore: false },
       ),
     ];
@@ -103,9 +103,9 @@ export const offersList: UssdScreen = {
 
 export const offerDetail: UssdScreen = {
   key: 'offer_detail',
-  render: (ctx) => {
-    const offer = getOffer(String(ctx.data.offerId));
-    const { v, unit, commodity, buyer } = view(ctx, offer);
+  render: async (ctx) => {
+    const offer = await getOffer(String(ctx.data.offerId));
+    const { v, unit, commodity, buyer } = await view(ctx, offer);
     if (offer.status !== 'open') return [{ key: 'ussd.offer.gone' }, { key: 'ussd.common.back' }];
     const params = {
       buyer,
@@ -137,21 +137,21 @@ export const offerDetail: UssdScreen = {
     if (input === '0') return { next: 'offers_list' };
     if (!ctx.farmer) return invalid();
     const offerId = String(ctx.data.offerId);
-    const offer = getOffer(offerId);
+    const offer = await getOffer(offerId);
     try {
       if (offer.turn === 'farmer') {
         if (input === '1') {
           const { offer: done } = await acceptOfferThread(offerId, 'farmer', ctx.farmer.id, 'ussd');
-          const { v, unit, commodity } = view(ctx, done);
+          const { v, unit, commodity } = await view(ctx, done);
           return { end: [{ key: 'ussd.offer.agreed', params: { units: v.current.units, unit, commodity, total: formatGhs(v.current.total) } }] };
         }
         if (input === '2') return { next: 'offer_counter_price' };
         if (input === '3') {
-          rejectOffer(offerId, 'farmer', ctx.farmer.id, 'ussd');
+          await rejectOffer(offerId, 'farmer', ctx.farmer.id, 'ussd');
           return { end: [{ key: 'ussd.offer.rejected' }] };
         }
       } else if (input === '1') {
-        withdrawOffer(offerId, 'farmer', ctx.farmer.id, 'ussd');
+        await withdrawOffer(offerId, 'farmer', ctx.farmer.id, 'ussd');
         return { end: [{ key: 'ussd.offer.withdrawn' }] };
       }
     } catch (err) {
@@ -165,8 +165,8 @@ export const offerDetail: UssdScreen = {
 
 export const offerCounterPrice: UssdScreen = {
   key: 'offer_counter_price',
-  render: (ctx) => {
-    const { v, unit } = view(ctx, getOffer(String(ctx.data.offerId)));
+  render: async (ctx) => {
+    const { v, unit } = await view(ctx, await getOffer(String(ctx.data.offerId)));
     return [{ key: 'ussd.offer.counterPrice', params: { unit, price: formatGhs(v.current.pricePerUnit) } }];
   },
   handleInput: (input, ctx) => {
@@ -179,12 +179,12 @@ export const offerCounterPrice: UssdScreen = {
 
 export const offerCounterUnits: UssdScreen = {
   key: 'offer_counter_units',
-  render: (ctx) => {
-    const { v, unit } = view(ctx, getOffer(String(ctx.data.offerId)));
+  render: async (ctx) => {
+    const { v, unit } = await view(ctx, await getOffer(String(ctx.data.offerId)));
     return [{ key: 'ussd.offer.counterUnits', params: { unit, units: v.current.units } }];
   },
-  handleInput: (input, ctx) => {
-    const offer = getOffer(String(ctx.data.offerId));
+  handleInput: async (input, ctx) => {
+    const offer = await getOffer(String(ctx.data.offerId));
     const n = Number(input.trim());
     if (!Number.isInteger(n) || n < 0) return { error: { key: 'ussd.sell.qtyInvalid' } };
     ctx.data.counterUnits = n === 0 ? offer.units : n;
@@ -194,8 +194,8 @@ export const offerCounterUnits: UssdScreen = {
 
 export const offerCounterConfirm: UssdScreen = {
   key: 'offer_counter_confirm',
-  render: (ctx) => {
-    const { unit, commodity } = view(ctx, getOffer(String(ctx.data.offerId)));
+  render: async (ctx) => {
+    const { unit, commodity } = await view(ctx, await getOffer(String(ctx.data.offerId)));
     const units = Number(ctx.data.counterUnits);
     const price = Number(ctx.data.counterPrice);
     return [
@@ -204,18 +204,18 @@ export const offerCounterConfirm: UssdScreen = {
       { key: 'ussd.common.cancel' },
     ];
   },
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '2') return { next: 'offer_detail' };
     if (input !== '1' || !ctx.farmer) return invalid();
     try {
-      const sent = counterOffer(
-        String(ctx.data.offerId),
-        'farmer',
-        ctx.farmer.id,
-        { units: Number(ctx.data.counterUnits), pricePerUnit: Number(ctx.data.counterPrice) },
-        'ussd',
-      );
-      return { end: [{ key: 'ussd.offer.counterSent', params: { buyer: view(ctx, sent).buyer } }] };
+      const sent = await counterOffer(
+              String(ctx.data.offerId),
+              'farmer',
+              ctx.farmer.id,
+              { units: Number(ctx.data.counterUnits), pricePerUnit: Number(ctx.data.counterPrice) },
+              'ussd',
+            );
+      return { end: [{ key: 'ussd.offer.counterSent', params: { buyer: (await view(ctx, sent)).buyer } }] };
     } catch (err) {
       const polite = gone(err);
       if (polite) return polite;

@@ -6,8 +6,15 @@ import { accessToken } from './session';
  * Live updates (D-054). The server's `/api/stream` says which topics changed;
  * here each topic refreshes the queries that show it. The stream carries no
  * data, so a missed or malformed message can only make a screen a few seconds
- * stale — the polling every page already does stays as the safety net.
+ * stale.
+ *
+ * Hosted serverless, instances do not share memory, so the stream may be
+ * missing or may miss another instance's changes. Polling is the fallback:
+ * the open page's queries refresh every 20 s while the stream is down, and
+ * every 60 s while it is up, only when the tab is visible and online.
  */
+const POLL_DOWN_MS = 20_000;
+const POLL_UP_MS = 60_000;
 const REFRESH: Record<string, string[]> = {
   market: ['market-lots', 'farmer-dashboard', 'price-overview', 'engine-feed'],
   prices: ['price-overview', 'price-crop', 'price-check'],
@@ -80,12 +87,28 @@ export function useLiveUpdates(enabled: boolean): boolean {
         setLive(false);
         if (controller.signal.aborted) return;
         attempt += 1;
-        await new Promise((r) => setTimeout(r, Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5))));
+        // A stream that keeps failing is probably not there at all (serverless
+        // hosting): ask again only every 5 minutes, and let polling carry the page.
+        const pause = attempt > 5 ? 300_000 : Math.min(30_000, 1000 * 2 ** attempt);
+        await new Promise((r) => setTimeout(r, pause));
       }
     }
     void run();
     return () => controller.abort();
   }, [enabled, queryClient]);
+
+  // The fallback: refetch whatever the open page is showing.
+  useEffect(() => {
+    if (!enabled) return;
+    const id = window.setInterval(
+      () => {
+        if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+        void queryClient.invalidateQueries({ type: 'active' });
+      },
+      live ? POLL_UP_MS : POLL_DOWN_MS,
+    );
+    return () => window.clearInterval(id);
+  }, [enabled, live, queryClient]);
 
   return live;
 }

@@ -49,42 +49,41 @@ afterAll(async () => {
   setGradingProvider(null);
   await app.close();
 });
-beforeEach(() => {
-  const cowpea = db.select().from(schema.commodities).all().find((c) => c.code === 'COWPEA')!;
-  db.update(schema.demands)
-    .set({ status: 'cancelled' })
-    .where(and(eq(schema.demands.commodityId, cowpea.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
-    .run();
+beforeEach(async () => {
+  const cowpea = (await db.select().from(schema.commodities)).find((c) => c.code === 'COWPEA')!;
+  (await db.update(schema.demands)
+        .set({ status: 'cancelled' })
+        .where(and(eq(schema.demands.commodityId, cowpea.id), inArray(schema.demands.status, ['open', 'partially_matched']))));
 });
 
 const view = (id: string, token: string) => app.inject({ method: 'GET', url: `/api/deals/${id}`, headers: { authorization: `Bearer ${token}` } });
 
 /** A cowpea sale carried by a driver, graded, with the driver at the buyer's door. */
 async function arrivedDeal() {
-  const buyer = testBuyer();
-  const farmer = registerFarmer({ phone: phone(), name: 'Ama Cowpea', regionCode: 'UPPER_EAST', district: 'Bawku' });
-  const lot = registerLot({ farmerId: farmer.id, commodityCode: 'COWPEA', unitCode: 'BAG_100KG', unitQty: 4, declaredBand: 'A' });
-  placeBid({ buyerId: buyer.id, lotId: lot.id, units: 4, pricePerUnit: 95_000 });
+  const buyer = await testBuyer();
+  const farmer = await registerFarmer({ phone: phone(), name: 'Ama Cowpea', regionCode: 'UPPER_EAST', district: 'Bawku' });
+  const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'COWPEA', unitCode: 'BAG_100KG', unitQty: 4, declaredBand: 'A' });
+  await placeBid({ buyerId: buyer.id, lotId: lot.id, units: 4, pricePerUnit: 95_000 });
   const order = await acceptFor(farmer.id, lot.id);
   await pollPaymentsOnce();
-  const driver = registerDriver({ phone: phone(), name: 'Kofi Van', regionCode: 'UPPER_EAST', vehicleClassCode: 'van', pin: '1234' });
-  const job = requestTransport(order.id, buyer.id, undefined, driver.id);
+  const driver = await registerDriver({ phone: phone(), name: 'Kofi Van', regionCode: 'UPPER_EAST', vehicleClassCode: 'van', pin: '1234' });
+  const job = await requestTransport(order.id, buyer.id, undefined, driver.id);
   await acceptJob(job.id, driver.id);
   await pollPaymentsOnce();
-  confirmJobPickup(job.id, driver.id);
+  await confirmJobPickup(job.id, driver.id);
   const buffer = await sharp({ create: { width: 800, height: 600, channels: 3, background: { r: 200, g: 180, b: 150 } } }).jpeg().toBuffer();
   await addPhoto({ contractId: order.id, buffer, actor: { type: 'buyer', id: buyer.id } });
   await runGrading(order.id);
   await pollPaymentsOnce(); // the advance lands
-  driverArrived(getJob(job.id).id, driver.id);
-  expect(getContract(order.id).state).toBe('DELIVERED');
+  await driverArrived((await getJob(job.id)).id, driver.id);
+  expect((await getContract(order.id)).state).toBe('DELIVERED');
   return {
     contractId: order.id,
     farmer,
     driver,
-    buyerToken: testBuyerToken(),
-    farmerToken: testToken('farmer', farmer.id, farmer.phone),
-    driverToken: testToken('driver', driver.id, driver.phone),
+    buyerToken: await testBuyerToken(),
+    farmerToken: await testToken('farmer', farmer.id, farmer.phone),
+    driverToken: await testToken('driver', driver.id, driver.phone),
   };
 }
 
@@ -96,7 +95,7 @@ describe('the deal page', () => {
     const body = res.json();
     expect(body.viewer).toBe('buyer');
     expect(body.next).toMatchObject({ actor: 'buyer', action: 'confirm_receipt' });
-    expect(body.next.dueAt).toBe(getContract(d.contractId).receiptDueAt);
+    expect(body.next.dueAt).toBe((await getContract(d.contractId)).receiptDueAt);
     expect(body.money).toMatchObject({ total: 380_000, advance: 114_000, paidToFarmer: 114_000, stillHeld: 266_000 });
     expect(body.deal).toMatchObject({ crop: { code: 'COWPEA' }, unit: { code: 'BAG_100KG', qty: 4 }, declaredGrade: 'A', finalGrade: 'B' });
 
@@ -142,8 +141,8 @@ describe('the deal page', () => {
 
   it('is invisible to anyone else: 404, not 403', async () => {
     const d = await arrivedDeal();
-    const stranger = registerBuyer({ phone: phone(), name: 'Other Buyer', company: 'Elsewhere Ltd', regionCode: 'ASHANTI' });
-    const res = await view(d.contractId, testToken('buyer', stranger.id, stranger.phone!));
+    const stranger = await registerBuyer({ phone: phone(), name: 'Other Buyer', company: 'Elsewhere Ltd', regionCode: 'ASHANTI' });
+    const res = await view(d.contractId, await testToken('buyer', stranger.id, stranger.phone!));
     expect(res.statusCode).toBe(404);
     expect((await view('no-such-deal', d.buyerToken)).statusCode).toBe(404);
   });

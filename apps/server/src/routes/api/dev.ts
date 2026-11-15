@@ -17,7 +17,7 @@ export async function devRoutes(app: FastifyInstance): Promise<void> {
     return { claim: await resolveClaim(id, { deduction: body.deduction, note: body.note, reviewer: 'simulator' }) };
   });
 
-  app.get('/dev/claims', async () => ({ claims: listClaimsForReview() }));
+  app.get('/dev/claims', async () => ({ claims: await listClaimsForReview() }));
 
   app.post('/dev/sweep', async (req) => {
     const { now } = sweepSchema.parse(req.body ?? {});
@@ -28,7 +28,7 @@ export async function devRoutes(app: FastifyInstance): Promise<void> {
   // the simulator has to say so, or the session outlives the caller's intent.
   app.post('/dev/ussd-end', async (req) => {
     const { sessionId } = z.object({ sessionId: z.string().min(1) }).parse(req.body ?? {});
-    endUssdSession(sessionId);
+    await endUssdSession(sessionId);
     return { ok: true };
   });
 
@@ -43,7 +43,7 @@ export async function devRoutes(app: FastifyInstance): Promise<void> {
       return { calls: [] };
     }
     return {
-      calls: listVoiceCallsForPhone(normalized).map((c) => ({
+      calls: (await listVoiceCallsForPhone(normalized)).map((c) => ({
         id: c.id,
         flow: c.flow,
         status: c.status,
@@ -63,7 +63,7 @@ export async function devRoutes(app: FastifyInstance): Promise<void> {
       return { messages: [] };
     }
     return {
-      messages: listNotificationsForPhone(normalized).map((n) => ({
+      messages: (await listNotificationsForPhone(normalized)).map((n) => ({
         message: n.message,
         status: n.status,
         createdAt: n.createdAt,

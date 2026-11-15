@@ -21,7 +21,7 @@ export const ACCOUNTS = {
 };
 
 /** Post a balanced journal. Every journal MUST sum to zero (D-010). */
-export function postJournal(tx: DbLike, contractId: string, lines: JournalLine[], jobId?: string): string {
+export async function postJournal(tx: DbLike, contractId: string, lines: JournalLine[], jobId?: string): Promise<string> {
   const journalId = crypto.randomUUID();
   // A journal where nothing moved has nothing to record — refunding a hold of
   // zero, say. Throwing on it stranded the contract instead: runGrading commits
@@ -44,47 +44,45 @@ export function postJournal(tx: DbLike, contractId: string, lines: JournalLine[]
     throw new DomainError(`Journal does not balance: ${debits} != ${credits}`, 'UNBALANCED_JOURNAL', 500);
   }
   for (const line of lines) {
-    tx.insert(ledgerEntries)
-      .values({
-        journalId,
-        account: line.account,
-        debit: line.debit ?? 0,
-        credit: line.credit ?? 0,
-        contractId,
-        jobId: jobId ?? null,
-        memoKey: line.memoKey ?? null,
-      })
-      .run();
+    (await tx.insert(ledgerEntries)
+            .values({
+              journalId,
+              account: line.account,
+              debit: line.debit ?? 0,
+              credit: line.credit ?? 0,
+              contractId,
+              jobId: jobId ?? null,
+              memoKey: line.memoKey ?? null,
+            }));
   }
   return journalId;
 }
 
-export function jobEscrowBalance(jobId: string): number {
+export async function jobEscrowBalance(jobId: string): Promise<number> {
   return accountBalance(ACCOUNTS.escrowJob(jobId));
 }
 
 /** Credit-minus-debit balance (escrow and payable accounts are liabilities). */
-export function accountBalance(account: string): number {
-  return db
-    .select()
-    .from(ledgerEntries)
-    .where(eq(ledgerEntries.account, account))
-    .all()
+export async function accountBalance(account: string): Promise<number> {
+  return (await db
+      .select()
+      .from(ledgerEntries)
+      .where(eq(ledgerEntries.account, account)))
     .reduce((sum, e) => sum + e.credit - e.debit, 0);
 }
 
-export function contractLedger(contractId: string): LedgerEntry[] {
-  return db.select().from(ledgerEntries).where(eq(ledgerEntries.contractId, contractId)).all();
+export async function contractLedger(contractId: string): Promise<LedgerEntry[]> {
+  return (await db.select().from(ledgerEntries).where(eq(ledgerEntries.contractId, contractId)));
 }
 
-export function contractEscrowBalance(contractId: string): number {
+export async function contractEscrowBalance(contractId: string): Promise<number> {
   return accountBalance(ACCOUNTS.escrow(contractId));
 }
 
 /** Test invariant helper: every journal in the book sums to zero. */
-export function allJournalsBalanced(): boolean {
+export async function allJournalsBalanced(): Promise<boolean> {
   const byJournal = new Map<string, number>();
-  for (const e of db.select().from(ledgerEntries).all()) {
+  for (const e of (await db.select().from(ledgerEntries))) {
     byJournal.set(e.journalId, (byJournal.get(e.journalId) ?? 0) + e.debit - e.credit);
   }
   return [...byJournal.values()].every((v) => v === 0);

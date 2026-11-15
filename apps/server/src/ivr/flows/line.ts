@@ -26,29 +26,29 @@ import { cropSay, DAY_MS, farmerOf, flash, HINT_KEY, HINT_NUMBER, priceSay, take
  * same moves as the USSD "My lots" screen.
  */
 
-const openLots = (ctx: IvrCtx): Lot[] =>
-  listLotsByFarmer(farmerOf(ctx)!.id).filter((l) => (l.status === 'registered' || l.status === 'matched') && l.remainingKg > 0);
+const openLots = async (ctx: IvrCtx): Promise<Lot[]> =>
+  (await listLotsByFarmer((await farmerOf(ctx))!.id)).filter((l) => (l.status === 'registered' || l.status === 'matched') && l.remainingKg > 0);
 
-const waitingOffers = (ctx: IvrCtx) => listOffersForFarmer(farmerOf(ctx)!.id, 'open').filter((o) => o.turn === 'farmer');
+const waitingOffers = async (ctx: IvrCtx) => (await listOffersForFarmer((await farmerOf(ctx))!.id, 'open')).filter((o) => o.turn === 'farmer');
 
-function currentLot(ctx: IvrCtx): Lot | undefined {
+async function currentLot(ctx: IvrCtx): Promise<Lot | undefined> {
   const id = ctx.state.lotId as string | undefined;
   if (!id) return undefined;
-  const lot = getLot(id);
+  const lot = await getLot(id);
   return lot.status === 'registered' || lot.status === 'matched' ? lot : undefined;
 }
 
-const unitCodeOf = (lot: Lot) => db.select().from(schema.units).where(eq(schema.units.id, lot.unitId)).get()!.code;
+const unitCodeOf = async (lot: Lot) => (await db.select().from(schema.units).where(eq(schema.units.id, lot.unitId)))[0]!.code;
 
 // ── the menu ─────────────────────────────────────────────────────────────
 const menu: IvrNode = {
   key: 'line_menu',
-  guard: (ctx) => (farmerOf(ctx) ? null : [{ key: 'voice.list.notRegistered', params: { code: config.USSD_SHORTCODE } }]),
-  say: (ctx) => {
-    const waiting = waitingOffers(ctx).length;
+  guard: async (ctx) => (await farmerOf(ctx) ? null : [{ key: 'voice.list.notRegistered', params: { code: config.USSD_SHORTCODE } }]),
+  say: async (ctx) => {
+    const waiting = (await waitingOffers(ctx)).length;
     return [
       ...takeFlash(ctx),
-      { key: 'voice.line.welcome', params: { name: farmerOf(ctx)!.name } },
+      { key: 'voice.line.welcome', params: { name: (await farmerOf(ctx))!.name } },
       { key: 'voice.line.menu' },
       ...(waiting > 0 ? [{ key: 'voice.line.offersWaiting', params: { n: waiting } }] : []),
       { key: 'voice.common.hintAgain' },
@@ -70,14 +70,14 @@ const menu: IvrNode = {
 };
 
 // ── my listings ──────────────────────────────────────────────────────────
-function lotLine(ctx: IvrCtx, lot: Lot, n: number, count: number): I18nText {
-  const unit = unitSay(ctx, unitCodeOf(lot));
+async function lotLine(ctx: IvrCtx, lot: Lot, n: number, count: number): Promise<I18nText> {
+  const unit = unitSay(ctx, await unitCodeOf(lot));
   return {
     key: lot.askingPricePerUnit ? 'voice.line.lotPriced' : 'voice.line.lotOpen',
     params: {
       n,
       count,
-      units: unitsAvailable(lot),
+      units: await unitsAvailable(lot),
       unit,
       commodity: cropSay(ctx, getCommodityById(lot.commodityId).code),
       price: lot.askingPricePerUnit ? priceSay(lot.askingPricePerUnit) : '',
@@ -88,16 +88,16 @@ function lotLine(ctx: IvrCtx, lot: Lot, n: number, count: number): I18nText {
 const lots: IvrNode = {
   key: 'line_lots',
   back: 'line_menu',
-  say: (ctx) => {
-    const all = openLots(ctx);
+  say: async (ctx) => {
+    const all = await openLots(ctx);
     if (all.length === 0) return [...takeFlash(ctx), { key: 'voice.line.noLots' }, HINT_KEY];
     const i = Math.min((ctx.state.lotIndex as number | undefined) ?? 0, all.length - 1);
     ctx.state.lotIndex = i;
     ctx.state.lotId = all[i]!.id;
-    return [...takeFlash(ctx), lotLine(ctx, all[i]!, i + 1, all.length), { key: 'voice.line.lotMenu' }, HINT_KEY];
+    return [...takeFlash(ctx), await lotLine(ctx, all[i]!, i + 1, all.length), { key: 'voice.line.lotMenu' }, HINT_KEY];
   },
-  onDigits: (digits, ctx) => {
-    const all = openLots(ctx);
+  onDigits: async (digits, ctx) => {
+    const all = await openLots(ctx);
     if (all.length === 0) return digits === '1' ? { next: 'list_intro' } : { next: 'line_menu' };
     switch (digits) {
       case '1':
@@ -123,14 +123,14 @@ const lots: IvrNode = {
 };
 
 /** Run one listing change and come back to the listing, saying what happened. */
-function change(ctx: IvrCtx, fn: (lot: Lot, farmerId: string) => void, doneKey = 'voice.line.changed'): IvrResult {
-  const lot = currentLot(ctx);
+async function change(ctx: IvrCtx, fn: (lot: Lot, farmerId: string) => unknown, doneKey = 'voice.line.changed'): Promise<IvrResult> {
+  const lot = await currentLot(ctx);
   if (!lot) {
     flash(ctx, 'voice.line.lotGone');
     return { next: 'line_lots' };
   }
   try {
-    fn(lot, farmerOf(ctx)!.id);
+    await fn(lot, (await farmerOf(ctx))!.id);
     flash(ctx, doneKey);
   } catch (err) {
     if (!(err instanceof DomainError)) throw err;
@@ -142,7 +142,7 @@ function change(ctx: IvrCtx, fn: (lot: Lot, farmerId: string) => void, doneKey =
 const lotQty: IvrNode = {
   key: 'line_lot_qty',
   input: 'number',
-  say: (ctx) => [...takeFlash(ctx), { key: 'voice.line.askQty', params: { unit: unitSay(ctx, unitCodeOf(currentLot(ctx) ?? getLot(ctx.state.lotId as string))) } }, HINT_NUMBER],
+  say: async (ctx) => [...takeFlash(ctx), { key: 'voice.line.askQty', params: { unit: unitSay(ctx, await unitCodeOf(await currentLot(ctx) ?? await getLot(ctx.state.lotId as string))) } }, HINT_NUMBER],
   onDigits: (digits, ctx) => {
     const n = typedCount(digits);
     if (n === null) {
@@ -150,10 +150,10 @@ const lotQty: IvrNode = {
       return { next: 'line_lot_qty' };
     }
     // The farmer says how many are left to sell; the listing's total also counts what is already in orders.
-    return change(ctx, (lot, farmerId) => {
+    return change(ctx, async (lot, farmerId) => {
       const unitKg = lot.quantityKg / lot.unitQty;
       const inOrders = Math.round((lot.quantityKg - lot.remainingKg) / unitKg);
-      updateLot(lot.id, farmerId, { units: n + inOrders });
+      await updateLot(lot.id, farmerId, { units: n + inOrders });
     });
   },
 };
@@ -161,7 +161,7 @@ const lotQty: IvrNode = {
 const lotPrice: IvrNode = {
   key: 'line_lot_price',
   input: 'numberOrSpeech',
-  say: (ctx) => [...takeFlash(ctx), { key: 'voice.listing.askPrice', params: { unit: unitSay(ctx, unitCodeOf(getLot(ctx.state.lotId as string))) } }, HINT_NUMBER],
+  say: async (ctx) => [...takeFlash(ctx), { key: 'voice.listing.askPrice', params: { unit: unitSay(ctx, await unitCodeOf(await getLot(ctx.state.lotId as string))) } }, HINT_NUMBER],
   onDigits: (digits, ctx) => {
     const price = typedPrice(digits);
     if (price === undefined) {
@@ -184,13 +184,13 @@ const READY_DAYS: Record<string, number> = { '1': 0, '2': 1, '3': 7, '4': 14 };
 const lotReady: IvrNode = {
   key: 'line_lot_ready',
   back: 'line_lots',
-  say: (ctx) => {
-    const lot = getLot(ctx.state.lotId as string);
+  say: async (ctx) => {
+    const lot = await getLot(ctx.state.lotId as string);
     const forward = getCommodityById(lot.commodityId).clock.allowsForward;
     return [...takeFlash(ctx), { key: forward ? 'voice.listing.askReady' : 'voice.listing.askReadyPerishable' }, HINT_KEY];
   },
-  onDigits: (digits, ctx) => {
-    const lot = getLot(ctx.state.lotId as string);
+  onDigits: async (digits, ctx) => {
+    const lot = await getLot(ctx.state.lotId as string);
     const forward = getCommodityById(lot.commodityId).clock.allowsForward;
     const days = READY_DAYS[digits];
     if (days === undefined || (!forward && days > 1)) return { next: 'line_lot_ready' };
@@ -222,13 +222,13 @@ const lotRemove: IvrNode = {
 const offersNode: IvrNode = {
   key: 'line_offers',
   back: 'line_menu',
-  say: (ctx) => {
-    const waiting = waitingOffers(ctx);
+  say: async (ctx) => {
+    const waiting = await waitingOffers(ctx);
     if (waiting.length === 0) return [...takeFlash(ctx), { key: 'voice.line.noOffers' }, HINT_KEY];
     return [...takeFlash(ctx), { key: 'voice.line.offersCount', params: { n: waiting.length } }, HINT_KEY];
   },
-  onDigits: (digits, ctx) => {
-    const waiting = waitingOffers(ctx);
+  onDigits: async (digits, ctx) => {
+    const waiting = await waitingOffers(ctx);
     if (digits !== '1' || waiting.length === 0) return { next: 'line_menu' };
     ctx.state.offerId = waiting[0]!.id; // newest first: each answer brings the next one up
     return { next: 'bid_main' };

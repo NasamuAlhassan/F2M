@@ -23,7 +23,7 @@ export type ScreenResult =
  */
 export interface UssdScreen {
   key: string;
-  render(ctx: UssdCtx): I18nText[];
+  render(ctx: UssdCtx): I18nText[] | Promise<I18nText[]>;
   handleInput(input: string, ctx: UssdCtx): ScreenResult | Promise<ScreenResult>;
 }
 
@@ -53,13 +53,13 @@ function entryScreen(ctx: UssdCtx): string {
  * dial to the events URL; the simulator calls this directly so a cancelled flow
  * does not linger until TTL and resume itself on the next dial.
  */
-export function endUssdSession(sessionId: string): void {
-  db.delete(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, sessionId)).run();
+export async function endUssdSession(sessionId: string): Promise<void> {
+  (await db.delete(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, sessionId)));
 }
 
 export async function handleUssdRequest(req: UssdRequest): Promise<string> {
-  const farmer = getFarmerByPhone(req.phoneNumber) ?? null;
-  const driver = farmer ? null : (getDriverByPhone(req.phoneNumber) ?? null);
+  const farmer = await getFarmerByPhone(req.phoneNumber) ?? null;
+  const driver = farmer ? null : (await getDriverByPhone(req.phoneNumber) ?? null);
   const ctx: UssdCtx = {
     phone: req.phoneNumber,
     farmer,
@@ -74,9 +74,9 @@ export async function handleUssdRequest(req: UssdRequest): Promise<string> {
   const input = (segments[segments.length - 1] ?? '').trim();
 
   const now = Date.now();
-  let session = db.select().from(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, req.sessionId)).get();
+  let session = (await db.select().from(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, req.sessionId)))[0];
   if (session && now - session.updatedAt > SESSION_TTL_MS) {
-    db.delete(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, req.sessionId)).run();
+    (await db.delete(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, req.sessionId)));
     session = undefined;
   }
 
@@ -85,8 +85,8 @@ export async function handleUssdRequest(req: UssdRequest): Promise<string> {
     const screenKey = entryScreen(ctx);
     const screen = registry.get(screenKey);
     if (!screen) throw new Error(`USSD screen missing: ${screenKey}`);
-    const lines = screen.render(ctx);
-    saveSession(req.sessionId, ctx, screenKey);
+    const lines = await screen.render(ctx);
+    await saveSession(req.sessionId, ctx, screenKey);
     return serialize('CON', lines, ctx.locale);
   }
 
@@ -106,27 +106,27 @@ export async function handleUssdRequest(req: UssdRequest): Promise<string> {
   }
 
   if ('end' in result) {
-    db.delete(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, req.sessionId)).run();
+    (await db.delete(schema.ussdSessions).where(eq(schema.ussdSessions.sessionId, req.sessionId)));
     return serialize('END', result.end, ctx.locale);
   }
 
   if ('error' in result) {
-    const lines = [result.error, ...screen.render(ctx)];
-    saveSession(req.sessionId, ctx, screen.key);
+    const lines = [result.error, ...(await screen.render(ctx))];
+    await saveSession(req.sessionId, ctx, screen.key);
     return serialize('CON', lines, ctx.locale);
   }
 
   const nextScreen = registry.get(result.next);
   if (!nextScreen) throw new Error(`USSD screen missing: ${result.next}`);
   // Refresh roles — registration may have just completed inside handleInput.
-  ctx.farmer = getFarmerByPhone(req.phoneNumber) ?? null;
-  ctx.driver = ctx.farmer ? null : (getDriverByPhone(req.phoneNumber) ?? null);
-  const lines = nextScreen.render(ctx);
-  saveSession(req.sessionId, ctx, nextScreen.key);
+  ctx.farmer = await getFarmerByPhone(req.phoneNumber) ?? null;
+  ctx.driver = ctx.farmer ? null : (await getDriverByPhone(req.phoneNumber) ?? null);
+  const lines = await nextScreen.render(ctx);
+  await saveSession(req.sessionId, ctx, nextScreen.key);
   return serialize('CON', lines, ctx.locale);
 }
 
-function saveSession(sessionId: string, ctx: UssdCtx, screen: string): void {
+async function saveSession(sessionId: string, ctx: UssdCtx, screen: string): Promise<void> {
   const values = {
     sessionId,
     phone: ctx.phone,
@@ -134,10 +134,9 @@ function saveSession(sessionId: string, ctx: UssdCtx, screen: string): void {
     ctx: JSON.stringify(ctx.data),
     updatedAt: Date.now(),
   };
-  db.insert(schema.ussdSessions)
-    .values(values)
-    .onConflictDoUpdate({ target: schema.ussdSessions.sessionId, set: values })
-    .run();
+  (await db.insert(schema.ussdSessions)
+        .values(values)
+        .onConflictDoUpdate({ target: schema.ussdSessions.sessionId, set: values }));
 }
 
 function serialize(kind: 'CON' | 'END', lines: I18nText[], locale: string): string {

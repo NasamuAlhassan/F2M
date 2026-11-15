@@ -18,7 +18,7 @@ export async function alertRoutes(app: FastifyInstance): Promise<void> {
   app.get('/watches', { preHandler: [app.authBuyerOrFarmer] }, async (req) => {
     const role = req.user.kind === 'farmer' ? 'farmer' : 'buyer';
     return {
-      watches: listWatches(role, req.user.sub).map((w) => {
+      watches: (await listWatches(role, req.user.sub)).map((w) => {
         const c = getCommodityById(w.commodityId);
         return {
           id: w.id,
@@ -36,19 +36,19 @@ export async function alertRoutes(app: FastifyInstance): Promise<void> {
   app.post('/watches', { preHandler: [app.authBuyerOrFarmer] }, async (req, reply) => {
     const body = watchBody.parse(req.body);
     const role = req.user.kind === 'farmer' ? 'farmer' : 'buyer';
-    const watch = createWatch({
-      role,
-      ownerId: req.user.sub,
-      commodityCode: body.commodityCode.toUpperCase(),
-      regionCode: body.regionCode ?? null,
-      kind: body.kind,
-      thresholdPerKg: Math.round(body.ghsPerKg * 100),
-    });
+    const watch = await createWatch({
+          role,
+          ownerId: req.user.sub,
+          commodityCode: body.commodityCode.toUpperCase(),
+          regionCode: body.regionCode ?? null,
+          kind: body.kind,
+          thresholdPerKg: Math.round(body.ghsPerKg * 100),
+        });
     return reply.code(201).send({ watch });
   });
 
   app.delete<{ Params: { id: string } }>('/watches/:id', { preHandler: [app.authBuyerOrFarmer] }, async (req) => {
-    deleteWatch(req.params.id, req.user.kind === 'farmer' ? 'farmer' : 'buyer', req.user.sub);
+    await deleteWatch(req.params.id, req.user.kind === 'farmer' ? 'farmer' : 'buyer', req.user.sub);
     return { ok: true };
   });
 }
