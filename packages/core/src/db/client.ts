@@ -25,7 +25,17 @@ export type DbEngine = 'postgres' | 'pglite';
 
 function connect(): { db: Db; engine: DbEngine; close: () => Promise<void>; pglite?: PGlite } {
   if (config.DATABASE_URL) {
-    const client = postgres(config.DATABASE_URL, { prepare: false, max: 3, idle_timeout: 20 });
+    // max_pipeline 1: one query in flight per connection. postgres-js pipelines by
+    // default, and the pooler stalled on it (four parallel registry loads hung the
+    // first deploy). fetch_types off: no extra type-lookup query on connect.
+    const client = postgres(config.DATABASE_URL, {
+      prepare: false,
+      max: 3,
+      ...({ max_pipeline: 1 } as object), // a real postgres-js option its types leave out
+      fetch_types: false,
+      idle_timeout: 20,
+      connect_timeout: 15,
+    });
     return { db: drizzlePostgres(client, { schema }), engine: 'postgres', close: () => client.end() };
   }
   const inMemory = config.DATABASE_PATH === ':memory:';

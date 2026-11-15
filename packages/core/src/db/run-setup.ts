@@ -10,7 +10,16 @@ import { closeDb, dbEngine } from './client';
 import { runMigrations } from './migrate';
 
 const started = Date.now();
-const step = (msg: string) => console.log(`[db:setup +${((Date.now() - started) / 1000).toFixed(1)}s] ${msg}`);
+let current = 'connecting';
+const step = (msg: string) => {
+  current = msg;
+  console.log(`[db:setup +${((Date.now() - started) / 1000).toFixed(1)}s] ${msg}`);
+};
+// The whole job takes seconds; fail the build fast rather than hang for 45 minutes.
+setTimeout(() => {
+  console.error(`[db:setup] gave up after 120 s; last step finished: "${current}"`);
+  process.exit(1);
+}, 120_000).unref();
 
 try {
   step(`engine: ${dbEngine}`);
