@@ -5,16 +5,15 @@ import { config } from '../../config';
  * The language-model assist (D-056) — a suggestion engine, never a decision-maker.
  *
  * Three rules hold everywhere it is used:
- *  1. It is OFF unless the owner switches it on (`LLM_PROVIDER=anthropic`).
+ *  1. It is OFF unless the owner switches it on (`LLM_PROVIDER=openai-compatible`).
  *  2. It only ever returns a validated, structured object (a Zod schema), and the
  *     caller re-checks every value against the platform's own registries and the
  *     person's own words before using one.
  *  3. Anything it fails at — down, slow, refused, malformed — is `null`, and the
  *     caller carries on with its rules. It can make a feature better, never break it.
  *
- * It calls Anthropic's Messages API over `fetch`, as the other providers here do
- * with theirs; the request is exactly the documented shape (structured output via
- * `output_config.format`).
+ * It runs on open models, hosted by any OpenAI-compatible service (Groq by default;
+ * D-059), called over `fetch` as the other providers here call theirs.
  */
 
 export interface LlmImage {
@@ -33,7 +32,7 @@ export interface LlmRequest<T> {
 }
 
 export interface LlmProvider {
-  readonly name: 'anthropic' | 'mock';
+  readonly name: 'openai-compatible' | 'mock';
   extract<T>(req: LlmRequest<T>): Promise<T>;
 }
 
@@ -56,7 +55,7 @@ export function scrubPii(text: string): string {
 
 // ── Zod → the JSON Schema the API accepts ────────────────────────────────────
 
-/** Keywords structured outputs do not take; the Zod check afterwards enforces them instead. */
+/** Keywords left out of the schema the model is shown; the Zod check afterwards enforces them instead. */
 const UNSUPPORTED = new Set(['$schema', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'minLength', 'maxLength', 'pattern', 'format', 'minItems', 'maxItems', 'default']);
 
 function plainSchema(node: unknown): unknown {
@@ -75,57 +74,85 @@ export function jsonSchemaFor(schema: z.ZodType): unknown {
   return plainSchema(z.toJSONSchema(schema));
 }
 
-// ── Anthropic ────────────────────────────────────────────────────────────────
+// ── An OpenAI-compatible host of open models (Groq by default) ─────────────────
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const API_VERSION = '2026-10-21';
-/** Models whose refusals the API can rescue on a fallback model (docs: refusals-and-fallback). */
-const FALLBACK_MODELS = /^claude-(opus-5-5|opus-5|fable-5|sonnet-5-5)/;
+/** The answer text, without a code fence or a model's stray words around the JSON. */
+function jsonText(text: string): string {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+  const body = (fenced ? fenced[1]! : text).trim();
+  if (body.startsWith('{')) return body;
+  const first = body.indexOf('{');
+  const last = body.lastIndexOf('}');
+  return first >= 0 && last > first ? body.slice(first, last + 1) : body;
+}
 
-export class AnthropicLlmProvider implements LlmProvider {
-  readonly name = 'anthropic' as const;
+/**
+ * Any host that speaks the OpenAI chat-completions API: Groq (the default, free tier),
+ * OpenRouter, Hugging Face's router, or a self-hosted server. Switching host is
+ * settings only: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL.
+ *
+ * JSON mode (`response_format: json_object`) is the widely supported dial, so the
+ * schema goes in the instructions and the Zod check afterwards is what enforces it.
+ */
+export class OpenAiCompatibleLlmProvider implements LlmProvider {
+  readonly name = 'openai-compatible' as const;
 
-  constructor(private readonly opts: { apiKey?: string; model?: string; effort?: string; timeoutMs?: number; fetchImpl?: typeof fetch } = {}) {}
+  constructor(
+    private readonly opts: {
+      apiKey?: string;
+      baseUrl?: string;
+      model?: string;
+      visionModel?: string;
+      timeoutMs?: number;
+      fetchImpl?: typeof fetch;
+    } = {},
+  ) {}
 
   async extract<T>(req: LlmRequest<T>): Promise<T> {
-    const apiKey = this.opts.apiKey ?? config.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new LlmError('No Anthropic API key configured');
-    const model = this.opts.model ?? config.LLM_MODEL;
+    const apiKey = this.opts.apiKey ?? config.LLM_API_KEY;
+    if (!apiKey) throw new LlmError('No LLM API key configured');
+    const images = req.images ?? [];
+    // Pictures need a model that can see; with none configured the feature carries on without it.
+    const model = images.length ? (this.opts.visionModel ?? config.LLM_VISION_MODEL) : (this.opts.model ?? config.LLM_MODEL);
+    if (!model) throw new LlmError('No vision model configured');
+    const baseUrl = (this.opts.baseUrl ?? config.LLM_BASE_URL).replace(/\/+$/, '');
     const doFetch = this.opts.fetchImpl ?? fetch;
 
-    const content: unknown[] = [
-      ...(req.images ?? []).map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.base64 } })),
-      { type: 'text', text: req.user },
-    ];
-    const body: Record<string, unknown> = {
+    const system = `${req.system}\n\nAnswer with one JSON object and nothing else. It must match this JSON Schema:\n${JSON.stringify(jsonSchemaFor(req.schema))}`;
+    const user = images.length
+      ? [
+          { type: 'text', text: req.user },
+          ...images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.base64}` } })),
+        ]
+      : req.user;
+    const body = {
       model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
       max_tokens: req.maxTokens ?? 1024,
-      system: req.system,
-      messages: [{ role: 'user', content }],
-      // No `thinking`, `temperature` or prefill: the current models reject them. Effort is the one dial.
-      output_config: { effort: this.opts.effort ?? config.LLM_EFFORT, format: { type: 'json_schema', schema: jsonSchemaFor(req.schema) } },
+      temperature: 0,
+      response_format: { type: 'json_object' },
     };
-    const headers: Record<string, string> = { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': API_VERSION };
-    // Opt in to the refusal rescue by default, where the model supports it.
-    if (FALLBACK_MODELS.test(model)) {
-      headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
-      body.fallbacks = 'default';
-    }
 
-    const res = await doFetch(API_URL, {
+    const res = await doFetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
-      headers,
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(this.opts.timeoutMs ?? config.LLM_TIMEOUT_MS),
     });
-    if (!res.ok) throw new LlmError(`Anthropic answered ${res.status}`);
-    const reply = (await res.json()) as { stop_reason?: string; content?: Array<{ type: string; text?: string }> };
-    if (reply.stop_reason === 'refusal') throw new LlmError('The model declined this request');
-    if (reply.stop_reason === 'max_tokens') throw new LlmError('The answer was cut off');
-    const text = (reply.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
+    if (!res.ok) throw new LlmError(`The model host answered ${res.status}`);
+    const reply = (await res.json()) as {
+      choices?: Array<{ finish_reason?: string; message?: { content?: string | null; refusal?: string | null } }>;
+    };
+    const choice = reply.choices?.[0];
+    if (!choice) throw new LlmError('The model host sent no answer');
+    if (choice.message?.refusal || choice.finish_reason === 'content_filter') throw new LlmError('The model declined this request');
+    if (choice.finish_reason === 'length') throw new LlmError('The answer was cut off');
     let json: unknown;
     try {
-      json = JSON.parse(text);
+      json = JSON.parse(jsonText(choice.message?.content ?? ''));
     } catch {
       throw new LlmError('The answer was not JSON');
     }
@@ -142,7 +169,7 @@ let provider: LlmProvider | null | undefined;
 /** The configured provider, or null when the assist is off. */
 export function getLlmProvider(): LlmProvider | null {
   if (provider !== undefined) return provider;
-  provider = config.LLM_PROVIDER === 'anthropic' ? new AnthropicLlmProvider() : null;
+  provider = config.LLM_PROVIDER === 'openai-compatible' ? new OpenAiCompatibleLlmProvider() : null;
   return provider;
 }
 
