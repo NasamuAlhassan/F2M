@@ -71,6 +71,13 @@ function ProfileSidebar() {
   const save = useMutation({
     mutationFn: (body: Partial<DriverProfile> & { routeRegions?: string[] }) =>
       api('/api/driver/profile', { method: 'PUT', body: JSON.stringify(body) }),
+    // The switch and the vehicle choice answer at once; a refused save walks them back.
+    onMutate: async (body) => {
+      await queryClient.cancelQueries({ queryKey: ['driver-profile'] });
+      const before = queryClient.getQueryData<{ profile: DriverProfile }>(['driver-profile']);
+      if (before) queryClient.setQueryData(['driver-profile'], { profile: { ...before.profile, ...body } });
+      return { before };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['driver-profile'] });
       setError(null);
@@ -78,7 +85,8 @@ function ProfileSidebar() {
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaved(false), 2000);
     },
-    onError: (err) => {
+    onError: (err, _body, ctx) => {
+      if (ctx?.before) queryClient.setQueryData(['driver-profile'], ctx.before);
       setError(err instanceof Error ? err.message : 'Could not save your profile');
       // Refetch so the toggle, the vehicle chip and the checklist all fall back
       // to what the server actually holds.

@@ -200,7 +200,16 @@ export function PricesPage() {
             <li key={c.commodityCode}>
               <button
                 type="button"
-                onClick={() => setSelected(c.commodityCode)}
+                onClick={() => {
+                  setSelected(c.commodityCode);
+                  // On a phone the detail sits below every crop: bring it into view.
+                  requestAnimationFrame(() => {
+                    const el = document.getElementById('crop-detail');
+                    if (!el || el.getBoundingClientRect().top < window.innerHeight * 0.6) return;
+                    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+                  });
+                }}
                 aria-pressed={on}
                 className={`certificate flex min-h-11 w-full flex-col gap-2 bg-[var(--paper-lift)] p-4 text-left transition-[border-color,background-color] hover:bg-[var(--paper)] ${on ? 'ring-2 ring-[var(--forest)]' : ''}`}
               >
@@ -241,7 +250,11 @@ export function PricesPage() {
         })}
       </ul>
 
-      {selected && <CropPanel code={selected} regionCode={regionCode} />}
+      {selected && (
+        <div id="crop-detail" className="scroll-mt-24">
+          <CropPanel code={selected} regionCode={regionCode} />
+        </div>
+      )}
     </div>
   );
 }
@@ -258,7 +271,7 @@ function Confidence({ level }: { level: Confidence | null }) {
           : level === 'reference'
             ? t('web.prices.confReference', 'Reference only')
             : t('web.prices.confNone', 'No data');
-  return <span className="smallcaps rounded-full bg-[var(--paper-deep)] px-2 py-0.5 text-[10px] text-[var(--ink-7)]">{text}</span>;
+  return <span className="smallcaps rounded-full bg-[var(--paper-deep)] px-2 py-0.5 text-[11px] text-[var(--ink-7)]">{text}</span>;
 }
 
 function CropPanel({ code, regionCode }: { code: string; regionCode: string }) {
@@ -281,7 +294,7 @@ function CropPanel({ code, regionCode }: { code: string; regionCode: string }) {
   const basisText = e
     ? Object.entries(e.basis)
         .filter(([, n]) => n)
-        .map(([k, n]) => `${n} ${k === 'deal' ? 'deals' : k === 'market' ? 'market reports' : k === 'ask' ? 'asking prices' : k === 'offer' ? 'offers' : k === 'request' ? 'buyer requests' : 'reference quotes'}`)
+        .map(([k, n]) => BASIS_WORD(t, k, n as number))
         .join(', ')
     : '';
 
@@ -387,16 +400,16 @@ function CropPanel({ code, regionCode }: { code: string; regionCode: string }) {
                       <td className={tdCls}>
                         {r.regionName}
                         {r.balance !== null && r.balance < 1 && (
-                          <span className="ml-1.5 text-[10px] font-semibold text-[var(--gold-ink)]">{t('web.prices.scarce', 'short')}</span>
+                          <span className="ml-1.5 text-[11px] font-semibold text-[var(--gold-ink)]">{t('web.prices.scarce', 'short')}</span>
                         )}
                       </td>
                       <td className={`${tdCls} serial text-right`}>
                         {kgFmt(r.supplyKg)} kg
-                        <span className="block text-[10px] text-[var(--ink-6)]">{r.sellers === 1 ? t('web.prices.sellerOne', '1 seller') : t('web.prices.sellersN', '{n} sellers', { n: r.sellers })}</span>
+                        <span className="block text-[11px] text-[var(--ink-6)]">{r.sellers === 1 ? t('web.prices.sellerOne', '1 seller') : t('web.prices.sellersN', '{n} sellers', { n: r.sellers })}</span>
                       </td>
                       <td className={`${tdCls} serial text-right`}>
                         {kgFmt(r.demandKg)} kg
-                        <span className="block text-[10px] text-[var(--ink-6)]">{r.buyers === 1 ? t('web.prices.buyerOne', '1 buyer') : t('web.prices.buyersN', '{n} buyers', { n: r.buyers })}</span>
+                        <span className="block text-[11px] text-[var(--ink-6)]">{r.buyers === 1 ? t('web.prices.buyerOne', '1 buyer') : t('web.prices.buyersN', '{n} buyers', { n: r.buyers })}</span>
                       </td>
                     </tr>
                   ))}
@@ -429,7 +442,7 @@ function CropPanel({ code, regionCode }: { code: string; regionCode: string }) {
                     <tr key={m.market}>
                       <td className={tdCls}>
                         {m.market}
-                        {m.kind === 'reference' && <span className="ml-1.5 text-[10px] text-[var(--ink-6)]">{t('web.prices.refTag', 'reference')}</span>}
+                        {m.kind === 'reference' && <span className="ml-1.5 text-[11px] text-[var(--ink-6)]">{t('web.prices.refTag', 'reference')}</span>}
                       </td>
                       <td className={`${tdCls} serial text-right`}>{ghs(m.pricePerKg)}</td>
                       <td className={`${tdCls} text-[var(--ink-6)]`}>{shortDate(m.observedAt)}</td>
@@ -453,4 +466,23 @@ function Kpi({ label, value, sub, accent }: { label: string; value: string; sub:
       <p className="mt-0.5 text-[11px] leading-snug text-[var(--ink-6)]">{sub}</p>
     </div>
   );
+}
+
+/** "1 deal", "2 deals": each kind of price reading, counted. */
+function BASIS_WORD(t: ReturnType<typeof useT>['t'], kind: string, n: number): string {
+  const one = n === 1;
+  switch (kind) {
+    case 'deal':
+      return one ? t('web.prices.bDeal1', '1 deal') : t('web.prices.bDeals', '{n} deals', { n });
+    case 'market':
+      return one ? t('web.prices.bMarket1', '1 market report') : t('web.prices.bMarkets', '{n} market reports', { n });
+    case 'ask':
+      return one ? t('web.prices.bAsk1', '1 asking price') : t('web.prices.bAsks', '{n} asking prices', { n });
+    case 'offer':
+      return one ? t('web.prices.bOffer1', '1 offer') : t('web.prices.bOffers', '{n} offers', { n });
+    case 'request':
+      return one ? t('web.prices.bRequest1', '1 buyer request') : t('web.prices.bRequests', '{n} buyer requests', { n });
+    default:
+      return one ? t('web.prices.bRef1', '1 reference quote') : t('web.prices.bRefs', '{n} reference quotes', { n });
+  }
 }
