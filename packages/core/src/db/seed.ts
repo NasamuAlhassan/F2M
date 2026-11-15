@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { RubricDoc, ClockConfig } from '../domain/types';
 import { loadRegistries } from '../domain/registries';
 import { db } from './client';
@@ -742,56 +743,72 @@ COMMODITY_SEED.push(
   },
 );
 
+// `excluded.<column>`: in an upsert, the value the INSERT tried to write.
+const excluded = (column: AnyPgColumn) => sql.raw(`excluded."${column.name}"`);
+
 /**
  * Reference data: regions, crops, units, rubrics, market prices, the vehicle
  * rate card. Safe to run again: rows that exist are kept.
  *
  * `refresh` (the default, for db:reset) also rewrites the reference prices and
- * the rate card to these values. The server runs it on every start with
- * `refresh: false`, so a crop added here (Phase 1 added five) reaches an
+ * the rate card to these values. The deploy (db:setup) and a local start run it
+ * with `refresh: false`, so a crop added here (Phase 1 added five) reaches an
  * existing database without touching anything already there.
+ *
+ * One statement per table, not one per row: against the hosted database each
+ * statement is a network round trip, and ~200 of them made the deploy build
+ * take minutes.
  */
 export async function seed(opts: { refresh?: boolean } = {}): Promise<void> {
   const refresh = opts.refresh ?? true;
-  for (const r of REGION_SEED) {
-    (await db.insert(regions)
-            .values({ code: r.code, nameKey: `region.${r.code}`, lat: r.lat, lng: r.lng })
-            .onConflictDoNothing());
-  }
+  await db
+    .insert(regions)
+    .values(REGION_SEED.map((r) => ({ code: r.code, nameKey: `region.${r.code}`, lat: r.lat, lng: r.lng })))
+    .onConflictDoNothing();
 
-  for (const c of COMMODITY_SEED) {
-    (await db.insert(commodities)
-            .values({
-              code: c.code,
-              nameKey: `commodity.${c.code}`,
-              category: c.category,
-              clockType: c.clockType,
-              clockConfig: JSON.stringify(c.clock),
-              activeRubricVersion: 1,
-              sortOrder: c.sortOrder,
-            })
-            .onConflictDoUpdate({ target: commodities.code, set: { sortOrder: c.sortOrder } }));
-    const commodity = (await db.select().from(commodities).where(eq(commodities.code, c.code)))[0];
-    if (!commodity) throw new Error(`seed: commodity ${c.code} missing after insert`);
+  await db
+    .insert(commodities)
+    .values(
+      COMMODITY_SEED.map((c) => ({
+        code: c.code,
+        nameKey: `commodity.${c.code}`,
+        category: c.category,
+        clockType: c.clockType,
+        clockConfig: JSON.stringify(c.clock),
+        activeRubricVersion: 1,
+        sortOrder: c.sortOrder,
+      })),
+    )
+    .onConflictDoUpdate({ target: commodities.code, set: { sortOrder: excluded(commodities.sortOrder) } });
 
-    for (const u of c.units) {
-      (await db.insert(units)
-                .values({
-                  commodityId: commodity.id,
-                  code: u.code,
-                  nameKey: `unit.${u.code}`,
-                  kgPerUnit: u.kgPerUnit,
-                  isInformal: u.isInformal ?? false,
-                })
-                .onConflictDoNothing());
-    }
+  const idByCode = new Map((await db.select({ id: commodities.id, code: commodities.code }).from(commodities)).map((c) => [c.code, c.id]));
+  const commodityId = (code: string) => {
+    const id = idByCode.get(code);
+    if (id === undefined) throw new Error(`seed: commodity ${code} missing after insert`);
+    return id;
+  };
 
-    (await db.insert(rubrics)
-            .values({ commodityId: commodity.id, version: 1, doc: JSON.stringify(c.rubric) })
-            .onConflictDoNothing());
-  }
+  await db
+    .insert(units)
+    .values(
+      COMMODITY_SEED.flatMap((c) =>
+        c.units.map((u) => ({
+          commodityId: commodityId(c.code),
+          code: u.code,
+          nameKey: `unit.${u.code}`,
+          kgPerUnit: u.kgPerUnit,
+          isInformal: u.isInformal ?? false,
+        })),
+      ),
+    )
+    .onConflictDoNothing();
 
-  await seedMarketPrices(refresh);
+  await db
+    .insert(rubrics)
+    .values(COMMODITY_SEED.map((c) => ({ commodityId: commodityId(c.code), version: 1, doc: JSON.stringify(c.rubric) })))
+    .onConflictDoNothing();
+
+  await seedMarketPrices(refresh, idByCode);
 
   // Logistics rate card (D-024): base fee + per-km, quoted upfront per vehicle class.
   const VEHICLE_SEED = [
@@ -799,17 +816,19 @@ export async function seed(opts: { refresh?: boolean } = {}): Promise<void> {
     { code: 'van', capacityKg: 1500, baseFee: 4000, perKmRate: 400, sortOrder: 20 },
     { code: 'light_truck', capacityKg: 5000, baseFee: 8000, perKmRate: 600, sortOrder: 30 },
   ];
-  for (const v of VEHICLE_SEED) {
-    const row = db.insert(vehicleClasses).values({ ...v, nameKey: `vehicle.${v.code}` });
-    if (refresh) {
-      await row
-        .onConflictDoUpdate({
-          target: vehicleClasses.code,
-          set: { capacityKg: v.capacityKg, baseFee: v.baseFee, perKmRate: v.perKmRate, sortOrder: v.sortOrder },
-        });
-    } else {
-      await row.onConflictDoNothing();
-    }
+  const vehicles = db.insert(vehicleClasses).values(VEHICLE_SEED.map((v) => ({ ...v, nameKey: `vehicle.${v.code}` })));
+  if (refresh) {
+    await vehicles.onConflictDoUpdate({
+      target: vehicleClasses.code,
+      set: {
+        capacityKg: excluded(vehicleClasses.capacityKg),
+        baseFee: excluded(vehicleClasses.baseFee),
+        perKmRate: excluded(vehicleClasses.perKmRate),
+        sortOrder: excluded(vehicleClasses.sortOrder),
+      },
+    });
+  } else {
+    await vehicles.onConflictDoNothing();
   }
 
   // The registries are cached in memory (domain/registries.ts): refresh them from what was just written.
@@ -846,40 +865,44 @@ const PRICE_SEED: Record<string, [number, number, number, number]> = {
   COWPEA: [950, 1150, 1050, 900],
 };
 
-async function seedMarketPrices(refresh: boolean): Promise<void> {
+async function seedMarketPrices(refresh: boolean, idByCode: Map<string, string>): Promise<void> {
   const now = Date.now();
-  const allCommodities = (await db.select().from(commodities));
-  for (const [code, prices] of Object.entries(PRICE_SEED)) {
-    const commodity = allCommodities.find((c) => c.code === code);
-    if (!commodity) continue;
-    for (const [i, { market, regionCode }] of MARKETS.entries()) {
-      // The same placeholder joins the price history as a 'reference' — the lowest-trust
-      // source, used only when nothing real exists, and it ages out like any other (D-053).
-      const ref = db.insert(priceObservations).values({
-        commodityId: commodity.id,
-        regionCode,
-        market,
-        pricePerKg: prices[i]!,
-        source: 'reference',
-        dataset: 'seed',
-        refId: `seed:${code}:${market}`,
-        observedAt: now,
-      });
-      if (refresh) {
-        await ref.onConflictDoUpdate({ target: [priceObservations.source, priceObservations.refId], set: { pricePerKg: prices[i]!, observedAt: now } });
-      } else {
-        await ref.onConflictDoNothing();
-      }
-      const row = db.insert(marketPrices).values({ commodityId: commodity.id, market, regionCode, pricePerKg: prices[i]!, recordedAt: now });
-      if (refresh) {
-        await row
-          .onConflictDoUpdate({
-            target: [marketPrices.commodityId, marketPrices.market],
-            set: { pricePerKg: prices[i]!, recordedAt: now },
-          });
-      } else {
-        await row.onConflictDoNothing(); // a price already there (or a real one later) is never overwritten
-      }
-    }
+  const rows = Object.entries(PRICE_SEED).flatMap(([code, prices]) => {
+    const commodityId = idByCode.get(code);
+    if (commodityId === undefined) return [];
+    return MARKETS.map(({ market, regionCode }, i) => ({ code, commodityId, market, regionCode, pricePerKg: prices[i]! }));
+  });
+  // The same placeholder joins the price history as a 'reference' — the lowest-trust
+  // source, used only when nothing real exists, and it ages out like any other (D-053).
+  const observations = db.insert(priceObservations).values(
+    rows.map((r) => ({
+      commodityId: r.commodityId,
+      regionCode: r.regionCode,
+      market: r.market,
+      pricePerKg: r.pricePerKg,
+      source: 'reference' as const,
+      dataset: 'seed',
+      refId: `seed:${r.code}:${r.market}`,
+      observedAt: now,
+    })),
+  );
+  if (refresh) {
+    await observations.onConflictDoUpdate({
+      target: [priceObservations.source, priceObservations.refId],
+      set: { pricePerKg: excluded(priceObservations.pricePerKg), observedAt: now },
+    });
+  } else {
+    await observations.onConflictDoNothing();
+  }
+  const current = db
+    .insert(marketPrices)
+    .values(rows.map((r) => ({ commodityId: r.commodityId, market: r.market, regionCode: r.regionCode, pricePerKg: r.pricePerKg, recordedAt: now })));
+  if (refresh) {
+    await current.onConflictDoUpdate({
+      target: [marketPrices.commodityId, marketPrices.market],
+      set: { pricePerKg: excluded(marketPrices.pricePerKg), recordedAt: now },
+    });
+  } else {
+    await current.onConflictDoNothing(); // a price already there (or a real one later) is never overwritten
   }
 }

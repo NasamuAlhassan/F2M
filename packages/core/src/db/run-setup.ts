@@ -15,11 +15,11 @@ const step = (msg: string) => {
   current = msg;
   console.log(`[db:setup +${((Date.now() - started) / 1000).toFixed(1)}s] ${msg}`);
 };
-// The whole job takes seconds; fail the build fast rather than hang for 45 minutes.
+// The whole job takes seconds; fail the build within 5 minutes rather than hang for 45.
 setTimeout(() => {
-  console.error(`[db:setup] gave up after 120 s; last step finished: "${current}"`);
+  console.error(`[db:setup] gave up after 5 minutes; last step finished: "${current}"`);
   process.exit(1);
-}, 120_000).unref();
+}, 300_000).unref();
 
 try {
   step(`engine: ${dbEngine}`);
