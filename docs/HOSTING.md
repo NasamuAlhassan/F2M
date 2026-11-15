@@ -30,7 +30,9 @@ timers. Tests use an in-memory PGlite. No Docker, no cloud account.
   instance (`loadRegistries()`), so crop names cost no round trip.
 - **The server is bundled before Vercel sees it.** `vercel-build` runs
   `apps/server/scripts/bundle.mjs` (esbuild): `src/index.ts` and `@ftm/core`
-  become one file, `dist/server.mjs`, with npm packages left external. Vercel's
+  become one file, `dist/server.mjs`, npm packages included (all but sharp and
+  PGlite): Vercel's loader cannot `require()` an ES module, which some packages
+  do. Vercel's
   Fastify preset picks `src/app.mjs`, which only imports that bundle. Left to
   itself, Vercel would compile the TypeScript and fail (no file extensions on
   imports, TypeScript source in `node_modules`).
