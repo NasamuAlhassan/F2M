@@ -2,18 +2,21 @@
 // dist/server.mjs, that Node runs as-is. Without this, Vercel compiles
 // src/index.ts itself, which fails three ways: our relative imports have no
 // file extensions, @ftm/core is TypeScript source inside node_modules, and its
-// compiler cannot see our type definitions. The bundle holds our code (server +
-// @ftm/core); npm packages stay external and Vercel ships them from node_modules.
-import { readFileSync } from 'node:fs';
+// compiler cannot see our type definitions.
+//
+// npm packages are bundled too, all but two. Vercel's module loader cannot
+// require() an ES module from CommonJS (plain Node 24 can), and some packages do
+// exactly that: @fastify/static requires the ESM-only content-disposition, which
+// crashed every request. Bundled, esbuild links them at build time. Reproduce the
+// loader locally with `node --no-experimental-require-module`.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pkg = (p) => JSON.parse(readFileSync(path.join(SERVER, p, 'package.json'), 'utf8'));
-const deps = { ...pkg('.').dependencies, ...pkg('../../packages/core').dependencies };
-// A package name also covers its subpaths (drizzle-orm/pg-core, ...).
-const external = Object.keys(deps).filter((name) => !name.startsWith('@ftm/'));
+// Left in node_modules: sharp loads native binaries and PGlite its WebAssembly
+// files, both by path relative to their own package.
+const external = ['sharp', '@electric-sql/pglite'];
 
 const result = await build({
   entryPoints: [path.join(SERVER, 'src/index.ts')],
@@ -30,4 +33,4 @@ const result = await build({
   metafile: true,
 });
 const bytes = Object.values(result.metafile.outputs).reduce((n, o) => n + o.bytes, 0);
-console.log(`[bundle] dist/server.mjs ready (${(bytes / 1024).toFixed(0)} KB, ${external.length} packages external)`);
+console.log(`[bundle] dist/server.mjs ready (${(bytes / 1024).toFixed(0)} KB; external: ${external.join(', ')})`);
