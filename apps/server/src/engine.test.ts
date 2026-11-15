@@ -17,7 +17,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { acceptFor, openOfferFor, testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildServer } from './app';
+import { buildServer } from './buildServer';
 
 const DAY = 24 * 60 * 60 * 1000;
 let app: FastifyInstance;

@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { testBuyerToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildServer } from './app';
+import { buildServer } from './buildServer';
 
 let app: FastifyInstance;
 

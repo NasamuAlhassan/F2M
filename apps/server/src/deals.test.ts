@@ -24,7 +24,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { buildServer } from './app';
+import { buildServer } from './buildServer';
 
 /**
  * The deal page: one sale seen by its buyer, farmer and driver, with whose

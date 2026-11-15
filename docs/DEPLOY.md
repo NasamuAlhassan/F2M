@@ -183,7 +183,7 @@ handle the install/build/output detection from there with no further
 config — `apps/web/vercel.json` supplies only the rewrites (the API/USSD/
 voice/photos proxy to Render, plus the SPA fallback so a hard refresh on
 `/market` or a QR landing on `/t/:lotId` doesn't 404, the same problem
-Option A's `app.ts` SPA fallback solves for its own origin).
+Option A's `buildServer.ts` SPA fallback solves for its own origin).
 
 **Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel's own
 Project Settings → Environment Variables — this is easy to miss.** Vite

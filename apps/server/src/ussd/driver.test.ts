@@ -18,7 +18,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { acceptFor, testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildServer } from '../app';
+import { buildServer } from '../buildServer';
 import { handleUssdRequest } from './index';
 
 const DRIVER_PHONE = '+233541237700';

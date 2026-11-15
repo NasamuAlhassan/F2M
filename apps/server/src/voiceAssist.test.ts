@@ -12,7 +12,7 @@ import {
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { buildServer } from './app';
+import { buildServer } from './buildServer';
 import { handleUssdRequest } from './ussd/index';
 
 /**

@@ -50,7 +50,7 @@ import {
   sendPendingNotifications,
   setTokenVerifier,
 } from '@ftm/core';
-import { buildServer } from '../src/app';
+import { buildServer } from '../src/buildServer';
 
 const MAX_GRADE_ATTEMPTS = 3; // a REJECT verdict retries with a fresh lot — honestly reported
 
