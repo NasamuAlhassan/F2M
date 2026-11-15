@@ -376,3 +376,25 @@ Chronological record of what was built, changed, or edited, and why. One section
 - **Wires:** `POST /api/contracts/:id/receive` and `/claims`; `GET /api/contracts/:id` adds `settlement` and `claims`; `/api/farmer/claims[/:id/answer]`; `/api/jobs/:id/at-pickup|departed|arrived`; simulator-only `/api/dev/claims[/:id/resolve]` as F2M's reviewer until Phase 4. USSD My lots shows delivered, received and claim (1 accept, 2 refuse). New voice flow `claim`. The grade call and SMS now describe the advance and the balance.
 - **The deal page** (owner's request, built with the UI session): `GET /api/deals/:id` gives one sale to its buyer, farmer and driver (404 to anyone else). It shows whose move is next (`dealNextStep`, one answer for web, USSD and voice), the money, people and transport, and one timeline that merges offer moves, order and job steps, payouts, claims, and the SMS and calls F2M sent the farmer. The driver sees no prices, money or negotiation; nobody sees a MoMo number; phones show only while the deal is live. `GET /api/deals` lists a party's deals. Covered by 5 wire tests.
 - **Verified:** typecheck clean; 392 tests green across 43 files (the price-intelligence session's included). Phase 3 adds 20 settlement domain tests and 6 wire tests. `npm run demo` exit 0: "farmer paid GHS 600.00 at pickup + GHS 1400.00 on receipt = the agreed GHS 2000.00, driver paid GHS 804.80, both escrows empty".
+
+## 2026-11-14 · Vercel + Supabase: the backend on Postgres (D-058)
+
+- **SQLite → Postgres.** Schema on `drizzle-orm/pg-core` in a private `f2m` schema (bigint epoch-ms, double precision, real booleans), with a fresh migration baseline. `db/client.ts` connects postgres-js to Supabase's transaction pooler when `DATABASE_URL` is set, and PGlite otherwise; `db` routes to the open transaction. A codemod (ts-morph) awaited 483 queries and about 1,800 call sites; typecheck and lint did the rest.
+- **Fixed on the way:**
+  - ledger journals in transition `also` callbacks were not awaited;
+  - a voice-line listing change was not awaited;
+  - three `filter(async …)` calls always passed;
+  - `.map(asyncFn)` returned Promises as `{}` in JSON;
+  - Postgres `count(*)` arrives as text;
+  - fire-and-forget hold retries became awaited (serverless stops when it answers).
+- **Serverless-safe:**
+  - registries cached per instance;
+  - `vercel-build` migrates and seeds, so cold starts only load registries;
+  - a `settings` table for the price-feed clock and background hearings (a "one moment" redirect may land on another instance);
+  - `waitUntil` for work after a response;
+  - the SSE stream is off on Vercel.
+- **Storage:** `storage/index.ts`, disk or a Supabase public bucket, for photos, recordings and voice clips. Media URLs come from the store.
+- **The sweep:** `POST /api/cron/sweep` (slow or fast lane) behind `CRON_SECRET`. `supabase/migrations/0003_media_and_sweep.sql` creates the bucket and the two `pg_cron` jobs.
+- **Deploy:** `apps/server/vercel.json` (`vercel-build`), `apps/web/vercel.json` rewrites to the server project, and `docs/HOSTING.md` with the step-by-step.
+- **Tests:** PGlite in memory, one migrated and seeded snapshot per run (setup time halved). One new test covers a hearing picked up by another instance.
+- **Verified:** typecheck clean (core, server); promise lint clean; 403 tests green on Postgres; `npm run demo` exit 0.

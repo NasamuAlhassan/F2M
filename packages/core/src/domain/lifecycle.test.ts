@@ -29,91 +29,89 @@ afterAll(() => {
   setGradingProvider(null);
 });
 
-function isolateYamLane(): void {
+async function isolateYamLane(): Promise<void> {
   const yam = getCommodityByCode('YAM');
-  db.update(demands)
-    .set({ status: 'cancelled' })
-    .where(and(eq(demands.commodityId, yam.id), inArray(demands.status, ['open', 'partially_matched'])))
-    .run();
-  db.update(lots)
-    .set({ status: 'withdrawn' })
-    .where(and(eq(lots.commodityId, yam.id), eq(lots.status, 'registered')))
-    .run();
+  (await db.update(demands)
+        .set({ status: 'cancelled' })
+        .where(and(eq(demands.commodityId, yam.id), inArray(demands.status, ['open', 'partially_matched']))));
+  (await db.update(lots)
+        .set({ status: 'withdrawn' })
+        .where(and(eq(lots.commodityId, yam.id), eq(lots.status, 'registered'))));
 }
 
 describe('lifecycle sweeps (M8)', () => {
-  it('expires demands whose delivery window closed', () => {
-    const buyer = testBuyer();
+  it('expires demands whose delivery window closed', async () => {
+    const buyer = await testBuyer();
     const now = Date.now();
-    const demand = createDemand({
-      buyerId: buyer.id,
-      commodityCode: 'TOMATO',
-      quantityKg: 999, // nothing this large exists — stays open
-      minBand: 'B',
-      basePricePerKg: 300,
-      windowStart: now,
-      windowEnd: now + DAY,
-      regionCode: 'BONO',
-    });
-    expect(getDemand(demand.id).status).toBe('open');
+    const demand = await createDemand({
+          buyerId: buyer.id,
+          commodityCode: 'TOMATO',
+          quantityKg: 999, // nothing this large exists — stays open
+          minBand: 'B',
+          basePricePerKg: 300,
+          windowStart: now,
+          windowEnd: now + DAY,
+          regionCode: 'BONO',
+        });
+    expect((await getDemand(demand.id)).status).toBe('open');
 
-    const expired = expireDemands(now + 2 * DAY);
+    const expired = await expireDemands(now + 2 * DAY);
     expect(expired).toBeGreaterThanOrEqual(1);
-    expect(getDemand(demand.id).status).toBe('expired');
+    expect((await getDemand(demand.id)).status).toBe('expired');
   });
 
   it('refunds a funded contract whose pickup window passed with a day of grace', async () => {
-    isolateYamLane();
-    const buyer = testBuyer();
-    const farmer = registerFarmer({ phone: '0291000111', name: 'Missed Pickup', regionCode: 'OTI' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+    await isolateYamLane();
+    const buyer = await testBuyer();
+    const farmer = await registerFarmer({ phone: '0291000111', name: 'Missed Pickup', regionCode: 'OTI' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
     const now = Date.now();
-    const demand = createDemand({
-      buyerId: buyer.id,
-      commodityCode: 'YAM',
-      quantityKg: 500,
-      minBand: 'B',
-      basePricePerKg: 400,
-      windowStart: now,
-      windowEnd: now + 3 * DAY,
-      regionCode: 'OTI',
-    });
+    const demand = await createDemand({
+          buyerId: buyer.id,
+          commodityCode: 'YAM',
+          quantityKg: 500,
+          minBand: 'B',
+          basePricePerKg: 400,
+          windowStart: now,
+          windowEnd: now + 3 * DAY,
+          regionCode: 'OTI',
+        });
     const order = await acceptFor(farmer.id, lot.id);
     expect(order.demandId).toBe(demand.id);
     await pollPaymentsOnce();
-    expect(getContract(order.id).state).toBe('FUNDS_HELD');
+    expect((await getContract(order.id)).state).toBe('FUNDS_HELD');
 
     // Inside window + grace: nothing happens.
-    expect(refundMissedPickups(now + 3 * DAY + 12 * 60 * 60 * 1000)).toBe(0);
+    expect(await refundMissedPickups(now + 3 * DAY + 12 * 60 * 60 * 1000)).toBe(0);
     // Past window + grace: full refund, produce back on the market.
-    expect(refundMissedPickups(now + 4 * DAY + 60_000)).toBe(1);
+    expect(await refundMissedPickups(now + 4 * DAY + 60_000)).toBe(1);
 
-    const contract = getContract(order.id);
+    const contract = await getContract(order.id);
     expect(contract.state).toBe('CANCELLED_REFUNDED');
-    expect(contractEscrowBalance(contract.id)).toBe(0);
-    expect(allJournalsBalanced()).toBe(true);
-    expect(getLot(lot.id).remainingKg).toBe(500);
-    expect(getLot(lot.id).status).toBe('registered');
+    expect(await contractEscrowBalance(contract.id)).toBe(0);
+    expect(await allJournalsBalanced()).toBe(true);
+    expect((await getLot(lot.id)).remainingKg).toBe(500);
+    expect((await getLot(lot.id)).status).toBe('registered');
   });
 
   it('emits PAYMENT_RELEASED and DISPUTE_RESOLVED in the trace', async () => {
-    isolateYamLane();
-    const buyer = testBuyer();
-    const farmer = registerFarmer({ phone: '0291000222', name: 'Trace Events', regionCode: 'CENTRAL' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
-    createDemand({
-      buyerId: buyer.id,
-      commodityCode: 'YAM',
-      quantityKg: 500,
-      minBand: 'B',
-      basePricePerKg: 400,
-      windowStart: Date.now(),
-      windowEnd: Date.now() + 7 * DAY,
-      regionCode: 'CENTRAL',
-    });
+    await isolateYamLane();
+    const buyer = await testBuyer();
+    const farmer = await registerFarmer({ phone: '0291000222', name: 'Trace Events', regionCode: 'CENTRAL' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+    await createDemand({
+            buyerId: buyer.id,
+            commodityCode: 'YAM',
+            quantityKg: 500,
+            minBand: 'B',
+            basePricePerKg: 400,
+            windowStart: Date.now(),
+            windowEnd: Date.now() + 7 * DAY,
+            regionCode: 'CENTRAL',
+          });
     const order = await acceptFor(farmer.id, lot.id);
     await pollPaymentsOnce();
-    confirmPickup(order.id, { type: 'farmer', id: farmer.id });
+    await confirmPickup(order.id, { type: 'farmer', id: farmer.id });
     const buffer = await sharp({ create: { width: 400, height: 300, channels: 3, background: { r: 180, g: 140, b: 80 } } })
       .jpeg()
       .toBuffer();
@@ -131,7 +129,7 @@ describe('lifecycle sweeps (M8)', () => {
     });
 
     await runGrading(order.id); // C
-    disputeGrading(order.id, farmer.id, 'fresh this morning');
+    await disputeGrading(order.id, farmer.id, 'fresh this morning');
     await runGrading(order.id); // re-grade → B, final
     await agreeGrading(order.id, farmer.id);
     await pollPaymentsOnce();
@@ -139,8 +137,8 @@ describe('lifecycle sweeps (M8)', () => {
     await confirmReceipt(order.id, { type: 'buyer', id: buyer.id });
     await pollPaymentsOnce();
 
-    expect(getContract(order.id).state).toBe('SETTLED');
-    const types = getTrace(lot.id).map((e) => e.type);
+    expect((await getContract(order.id)).state).toBe('SETTLED');
+    const types = (await getTrace(lot.id)).map((e) => e.type);
     expect(types).toContain('DISPUTE_OPENED');
     expect(types).toContain('DISPUTE_RESOLVED');
     expect(types).toContain('PAYMENT_RELEASED');

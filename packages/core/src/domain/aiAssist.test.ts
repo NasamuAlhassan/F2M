@@ -223,44 +223,44 @@ describe('understandRequest', () => {
 });
 
 describe('adviseOffer — arithmetic, no model', () => {
-  const seedPrices = (code: string, perKg: number, tag: string) => {
+  const seedPrices = async (code: string, perKg: number, tag: string) => {
     const c = getCommodityByCode(code).id;
-    for (let i = 0; i < 6; i += 1) recordPrice({ commodityId: c, pricePerKg: perKg + i, source: 'deal', refId: `${tag}-${i}`, observedAt: Date.now() - (i + 1) * DAY });
+    for (let i = 0; i < 6; i += 1) await recordPrice({ commodityId: c, pricePerKg: perKg + i, source: 'deal', refId: `${tag}-${i}`, observedAt: Date.now() - (i + 1) * DAY });
   };
-  const bid = (phone: string, pricePerUnit: number) => {
-    const farmer = registerFarmer({ phone, name: 'Advice Farmer', regionCode: 'ASHANTI' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'PLANTAIN', unitCode: 'BUNCH', unitQty: 10, declaredBand: 'B', askingPricePerUnit: 6000 });
-    return placeBid({ buyerId: testBuyer().id, lotId: lot.id, units: 2, pricePerUnit });
+  const bid = async (phone: string, pricePerUnit: number) => {
+    const farmer = await registerFarmer({ phone, name: 'Advice Farmer', regionCode: 'ASHANTI' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'PLANTAIN', unitCode: 'BUNCH', unitQty: 10, declaredBand: 'B', askingPricePerUnit: 6000 });
+    return placeBid({ buyerId: (await testBuyer()).id, lotId: lot.id, units: 2, pricePerUnit });
   };
 
-  it('tells a farmer to accept a fair or generous offer and to counter a low one at the market middle', () => {
-    seedPrices('PLANTAIN', 500, 'adv'); // ~GHS 5/kg → ~GHS 60 a 12 kg bunch
-    const fair = adviseOffer(bid('+233207600001', 6100).id, 'farmer');
+  it('tells a farmer to accept a fair or generous offer and to counter a low one at the market middle', async () => {
+    await seedPrices('PLANTAIN', 500, 'adv'); // ~GHS 5/kg → ~GHS 60 a 12 kg bunch
+    const fair = await adviseOffer((await bid('+233207600001', 6100)).id, 'farmer');
     expect(fair.action).toBe('accept');
-    const low = adviseOffer(bid('+233207600002', 3000).id, 'farmer');
+    const low = await adviseOffer((await bid('+233207600002', 3000)).id, 'farmer');
     expect(low.action).toBe('counter');
     expect(low.suggestedPricePerUnit).toBeGreaterThan(5500);
     expect(low.message).toContain('Consider countering');
   });
 
-  it('advises the buyer the other way round', () => {
-    seedPrices('PLANTAIN', 500, 'adv2');
-    const dear = adviseOffer(bid('+233207600003', 9500).id, 'buyer');
+  it('advises the buyer the other way round', async () => {
+    await seedPrices('PLANTAIN', 500, 'adv2');
+    const dear = await adviseOffer((await bid('+233207600003', 9500)).id, 'buyer');
     expect(dear.action).toBe('counter'); // the buyer is bidding well over the market
   });
 
-  it('says so when there is too little data', () => {
-    const farmer = registerFarmer({ phone: '+233207600004', name: 'No Data Farmer', regionCode: 'ASHANTI' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'RICE', unitCode: 'BAG_50KG', unitQty: 5, declaredBand: 'B' });
-    const offer = placeBid({ buyerId: testBuyer().id, lotId: lot.id, units: 1, pricePerUnit: 50_000 });
-    expect(adviseOffer(offer.id, 'farmer').action).toBe('none');
+  it('says so when there is too little data', async () => {
+    const farmer = await registerFarmer({ phone: '+233207600004', name: 'No Data Farmer', regionCode: 'ASHANTI' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'RICE', unitCode: 'BAG_50KG', unitQty: 5, declaredBand: 'B' });
+    const offer = await placeBid({ buyerId: (await testBuyer()).id, lotId: lot.id, units: 1, pricePerUnit: 50_000 });
+    expect((await adviseOffer(offer.id, 'farmer')).action).toBe('none');
   });
 });
 
 describe('checkListingPhoto', () => {
   it('is null while the assist is off, and null when a lot has no photo', async () => {
-    const farmer = registerFarmer({ phone: '+233207600005', name: 'Photo Farmer', regionCode: 'ASHANTI' });
-    const lot = registerLot({ farmerId: farmer.id, commodityCode: 'ONION', unitCode: 'BAG_50KG', unitQty: 2, declaredBand: 'B' });
+    const farmer = await registerFarmer({ phone: '+233207600005', name: 'Photo Farmer', regionCode: 'ASHANTI' });
+    const lot = await registerLot({ farmerId: farmer.id, commodityCode: 'ONION', unitCode: 'BAG_50KG', unitQty: 2, declaredBand: 'B' });
     expect(await checkListingPhoto(lot.id)).toBeNull();
     setLlmProvider(scripted({ showsProduce: true, produceSeen: 'onions', matchesDeclaredCrop: true, concerns: [] }));
     expect(await checkListingPhoto(lot.id)).toBeNull(); // nothing to look at

@@ -10,7 +10,7 @@ beforeAll(async () => {
   app = await buildServer({ logger: false });
   // Plantain: a run of recent deals, nobody else's crop.
   const c = getCommodityByCode('PLANTAIN').id;
-  for (let i = 0; i < 6; i += 1) recordPrice({ commodityId: c, pricePerKg: 500 + i, source: 'deal', refId: `route-pl-${i}`, observedAt: Date.now() - (i + 1) * DAY });
+  for (let i = 0; i < 6; i += 1) await recordPrice({ commodityId: c, pricePerKg: 500 + i, source: 'deal', refId: `route-pl-${i}`, observedAt: Date.now() - (i + 1) * DAY });
 });
 afterAll(async () => {
   await app.close();

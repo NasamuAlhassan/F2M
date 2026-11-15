@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { RubricDoc, ClockConfig } from '../domain/types';
+import { loadRegistries } from '../domain/registries';
 import { db } from './client';
 import { commodities, marketPrices, priceObservations, regions, rubrics, units, vehicleClasses } from './schema';
 
@@ -753,48 +754,44 @@ COMMODITY_SEED.push(
 export async function seed(opts: { refresh?: boolean } = {}): Promise<void> {
   const refresh = opts.refresh ?? true;
   for (const r of REGION_SEED) {
-    db.insert(regions)
-      .values({ code: r.code, nameKey: `region.${r.code}`, lat: r.lat, lng: r.lng })
-      .onConflictDoNothing()
-      .run();
+    (await db.insert(regions)
+            .values({ code: r.code, nameKey: `region.${r.code}`, lat: r.lat, lng: r.lng })
+            .onConflictDoNothing());
   }
 
   for (const c of COMMODITY_SEED) {
-    db.insert(commodities)
-      .values({
-        code: c.code,
-        nameKey: `commodity.${c.code}`,
-        category: c.category,
-        clockType: c.clockType,
-        clockConfig: JSON.stringify(c.clock),
-        activeRubricVersion: 1,
-        sortOrder: c.sortOrder,
-      })
-      .onConflictDoUpdate({ target: commodities.code, set: { sortOrder: c.sortOrder } })
-      .run();
-    const commodity = db.select().from(commodities).where(eq(commodities.code, c.code)).get();
+    (await db.insert(commodities)
+            .values({
+              code: c.code,
+              nameKey: `commodity.${c.code}`,
+              category: c.category,
+              clockType: c.clockType,
+              clockConfig: JSON.stringify(c.clock),
+              activeRubricVersion: 1,
+              sortOrder: c.sortOrder,
+            })
+            .onConflictDoUpdate({ target: commodities.code, set: { sortOrder: c.sortOrder } }));
+    const commodity = (await db.select().from(commodities).where(eq(commodities.code, c.code)))[0];
     if (!commodity) throw new Error(`seed: commodity ${c.code} missing after insert`);
 
     for (const u of c.units) {
-      db.insert(units)
-        .values({
-          commodityId: commodity.id,
-          code: u.code,
-          nameKey: `unit.${u.code}`,
-          kgPerUnit: u.kgPerUnit,
-          isInformal: u.isInformal ?? false,
-        })
-        .onConflictDoNothing()
-        .run();
+      (await db.insert(units)
+                .values({
+                  commodityId: commodity.id,
+                  code: u.code,
+                  nameKey: `unit.${u.code}`,
+                  kgPerUnit: u.kgPerUnit,
+                  isInformal: u.isInformal ?? false,
+                })
+                .onConflictDoNothing());
     }
 
-    db.insert(rubrics)
-      .values({ commodityId: commodity.id, version: 1, doc: JSON.stringify(c.rubric) })
-      .onConflictDoNothing()
-      .run();
+    (await db.insert(rubrics)
+            .values({ commodityId: commodity.id, version: 1, doc: JSON.stringify(c.rubric) })
+            .onConflictDoNothing());
   }
 
-  seedMarketPrices(refresh);
+  await seedMarketPrices(refresh);
 
   // Logistics rate card (D-024): base fee + per-km, quoted upfront per vehicle class.
   const VEHICLE_SEED = [
@@ -805,17 +802,18 @@ export async function seed(opts: { refresh?: boolean } = {}): Promise<void> {
   for (const v of VEHICLE_SEED) {
     const row = db.insert(vehicleClasses).values({ ...v, nameKey: `vehicle.${v.code}` });
     if (refresh) {
-      row
+      await row
         .onConflictDoUpdate({
           target: vehicleClasses.code,
           set: { capacityKg: v.capacityKg, baseFee: v.baseFee, perKmRate: v.perKmRate, sortOrder: v.sortOrder },
-        })
-        .run();
+        });
     } else {
-      row.onConflictDoNothing().run();
+      await row.onConflictDoNothing();
     }
   }
 
+  // The registries are cached in memory (domain/registries.ts): refresh them from what was just written.
+  await loadRegistries();
   console.log('Seed complete: regions, commodities, units, rubrics, market prices, vehicle rate card.');
 }
 
@@ -848,13 +846,13 @@ const PRICE_SEED: Record<string, [number, number, number, number]> = {
   COWPEA: [950, 1150, 1050, 900],
 };
 
-function seedMarketPrices(refresh: boolean): void {
+async function seedMarketPrices(refresh: boolean): Promise<void> {
   const now = Date.now();
-  const allCommodities = db.select().from(commodities).all();
+  const allCommodities = (await db.select().from(commodities));
   for (const [code, prices] of Object.entries(PRICE_SEED)) {
     const commodity = allCommodities.find((c) => c.code === code);
     if (!commodity) continue;
-    MARKETS.forEach(({ market, regionCode }, i) => {
+    for (const [i, { market, regionCode }] of MARKETS.entries()) {
       // The same placeholder joins the price history as a 'reference' — the lowest-trust
       // source, used only when nothing real exists, and it ages out like any other (D-053).
       const ref = db.insert(priceObservations).values({
@@ -868,21 +866,20 @@ function seedMarketPrices(refresh: boolean): void {
         observedAt: now,
       });
       if (refresh) {
-        ref.onConflictDoUpdate({ target: [priceObservations.source, priceObservations.refId], set: { pricePerKg: prices[i]!, observedAt: now } }).run();
+        await ref.onConflictDoUpdate({ target: [priceObservations.source, priceObservations.refId], set: { pricePerKg: prices[i]!, observedAt: now } });
       } else {
-        ref.onConflictDoNothing().run();
+        await ref.onConflictDoNothing();
       }
       const row = db.insert(marketPrices).values({ commodityId: commodity.id, market, regionCode, pricePerKg: prices[i]!, recordedAt: now });
       if (refresh) {
-        row
+        await row
           .onConflictDoUpdate({
             target: [marketPrices.commodityId, marketPrices.market],
             set: { pricePerKg: prices[i]!, recordedAt: now },
-          })
-          .run();
+          });
       } else {
-        row.onConflictDoNothing().run(); // a price already there (or a real one later) is never overwritten
+        await row.onConflictDoNothing(); // a price already there (or a real one later) is never overwritten
       }
-    });
+    }
   }
 }

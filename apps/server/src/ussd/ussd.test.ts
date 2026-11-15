@@ -63,7 +63,7 @@ describe('USSD flows (M2)', () => {
     expect(responses[5]).toContain('Register as Ama Serwaa, Northern?');
     expect(responses[6]).toMatch(/^END Welcome to Farm to Market, Ama Serwaa/);
 
-    const farmer = getFarmerByPhone(PHONE);
+    const farmer = await getFarmerByPhone(PHONE);
     expect(farmer).toBeDefined();
     expect(farmer!.regionCode).toBe('NORTHERN');
     expect(farmer!.district).toBe('Tolon');
@@ -84,8 +84,8 @@ describe('USSD flows (M2)', () => {
     expect(last).toMatch(/^END Lot FTM-/);
     expect(last).toContain('200 Olonka of Maize');
 
-    const farmer = getFarmerByPhone(PHONE)!;
-    const lots = listLotsByFarmer(farmer.id);
+    const farmer = (await getFarmerByPhone(PHONE))!;
+    const lots = await listLotsByFarmer(farmer.id);
     expect(lots).toHaveLength(1);
     expect(lots[0]!.quantityKg).toBe(500); // 200 x 2.5kg
     expect(lots[0]!.declaredBand).toBe('B');
@@ -134,23 +134,23 @@ describe('USSD flows (M2)', () => {
   });
 
   it('shows a bid in her own unit at her declared grade’s price and accepts it (M3, Phase 1)', async () => {
-    const buyer = testBuyer();
+    const buyer = await testBuyer();
     const now = Date.now();
     // Demand more than every maize lot combined so Ama's 500kg lot is bid on
     // regardless of which other fixture lots exist when this file runs.
-    createDemand({
-      buyerId: buyer.id,
-      commodityCode: 'MAIZE',
-      quantityKg: 5000,
-      minBand: 'B',
-      basePricePerKg: 440, // pesewas/kg: B GHS 4.40, A GHS 5.00
-      windowStart: now,
-      windowEnd: now + 7 * 24 * 60 * 60 * 1000,
-      regionCode: 'GREATER_ACCRA',
-    });
-    const farmer = getFarmerByPhone(PHONE)!;
+    await createDemand({
+            buyerId: buyer.id,
+            commodityCode: 'MAIZE',
+            quantityKg: 5000,
+            minBand: 'B',
+            basePricePerKg: 440, // pesewas/kg: B GHS 4.40, A GHS 5.00
+            windowStart: now,
+            windowEnd: now + 7 * 24 * 60 * 60 * 1000,
+            regionCode: 'GREATER_ACCRA',
+          });
+    const farmer = (await getFarmerByPhone(PHONE))!;
     // A bid is an offer thread, not a contract: nothing exists to accept until she does.
-    expect(listContractsForFarmer(farmer.id)).toHaveLength(0);
+    expect(await listContractsForFarmer(farmer.id)).toHaveLength(0);
 
     // Home shows the badge; open offers > detail > accept. The engine's bid is
     // whole olonkas at the request's price for her declared grade B:
@@ -165,23 +165,23 @@ describe('USSD flows (M2)', () => {
     expect(done).toMatch(/^END Deal agreed: 200 Olonka of Maize for GHS 2200.00/);
 
     // Accepting makes the order: ACCEPTED, holding exactly the agreed total.
-    const accepted = listContractsForFarmer(farmer.id, ['ACCEPTED']);
+    const accepted = await listContractsForFarmer(farmer.id, ['ACCEPTED']);
     expect(accepted).toHaveLength(1);
     expect(accepted[0]!.holdAmount).toBe(200 * 1100);
     expect(accepted[0]!.agreedTotal).toBe(200 * 1100);
   });
 
   it('confirms pickup, sees the grade with its reason, and agrees — all on USSD (M5)', async () => {
-    const farmer = getFarmerByPhone(PHONE)!;
+    const farmer = (await getFarmerByPhone(PHONE))!;
     await pollPaymentsOnce(); // resolve the hold from the accept above
-    const contract = listContractsForFarmer(farmer.id, ['FUNDS_HELD'])[0]!;
+    const contract = (await listContractsForFarmer(farmer.id, ['FUNDS_HELD']))[0]!;
 
     // Lot detail now offers pickup confirmation.
     const [, , pickupScreen] = await dial(PHONE, ['3', '1']);
     expect(pickupScreen).toContain('1. Confirm pickup done');
     const [, , , done] = await dial(PHONE, ['3', '1', '1']);
     expect(done).toMatch(/^END Thank you. Pickup confirmed/);
-    expect(getContract(contract.id).state).toBe('PICKUP_CONFIRMED');
+    expect((await getContract(contract.id)).state).toBe('PICKUP_CONFIRMED');
 
     // Buyer-side photo + grading (the same domain calls the web portal makes).
     const buffer = await sharp({ create: { width: 800, height: 600, channels: 3, background: { r: 220, g: 190, b: 90 } } })
@@ -210,13 +210,13 @@ describe('USSD flows (M2)', () => {
     expect(agreed).toContain('Your advance of GHS 660.00 is on its way to your MoMo');
 
     await pollPaymentsOnce();
-    expect(getContract(contract.id).state).toBe('DELIVERED');
+    expect((await getContract(contract.id)).state).toBe('DELIVERED');
     const [, , waiting] = await dial(PHONE, ['3', '1']);
     expect(waiting).toContain('Waiting for the buyer to confirm');
     // The buyer receives it: the balance goes out and the order settles.
     await confirmReceipt(contract.id, { type: 'buyer', id: contract.buyerId });
     await pollPaymentsOnce();
-    expect(getContract(contract.id).state).toBe('SETTLED');
+    expect((await getContract(contract.id)).state).toBe('SETTLED');
 
     // And the payments screen now shows it.
     const [, payScreen] = await dial(PHONE, ['4']);
@@ -232,22 +232,22 @@ describe('USSD negotiation, requests and listing management (Phase 1)', () => {
   let farmerId: string;
   let lotId: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     // Rice lane: no other suite here touches it, so the engine stays out of the way.
-    const farmer = registerFarmer({ phone: P2, name: 'Akosua Rice', regionCode: 'NORTHERN' });
+    const farmer = await registerFarmer({ phone: P2, name: 'Akosua Rice', regionCode: 'NORTHERN' });
     farmerId = farmer.id;
-    lotId = registerLot({
-      farmerId,
-      commodityCode: 'RICE',
-      unitCode: 'BAG_50KG',
-      unitQty: 10,
-      declaredBand: 'B',
-      askingPricePerUnit: 50000, // GHS 500.00 a bag
-    }).id;
+    lotId = (await registerLot({
+          farmerId,
+          commodityCode: 'RICE',
+          unitCode: 'BAG_50KG',
+          unitQty: 10,
+          declaredBand: 'B',
+          askingPricePerUnit: 50000, // GHS 500.00 a bag
+        })).id;
   });
 
   it('counters a buyer bid with a price typed on the keypad, then withdraws it', async () => {
-    const offer = placeBid({ buyerId: testBuyer().id, lotId, units: 4, pricePerUnit: 40000 });
+    const offer = await placeBid({ buyerId: (await testBuyer()).id, lotId, units: 4, pricePerUnit: 40000 });
 
     // home > My offers > the bid > 2 Counter > GHS 450 > 0 keep 4 bags > 1 confirm
     const r = await dial(P2, ['2', '1', '2', '450', '0', '1']);
@@ -260,7 +260,7 @@ describe('USSD negotiation, requests and listing management (Phase 1)', () => {
     expect(r[5]).toContain('Offer 4 50kg bag of Rice at GHS 450.00 each (GHS 1800.00)?');
     expect(r[6]).toMatch(/^END Sent to Accra Fresh Markets Ltd/);
 
-    const countered = getOffer(offer.id);
+    const countered = await getOffer(offer.id);
     expect(countered.turn).toBe('buyer');
     expect(countered.units).toBe(4);
     expect(countered.pricePerUnit).toBe(45000);
@@ -272,15 +272,15 @@ describe('USSD negotiation, requests and listing management (Phase 1)', () => {
     expect(detail).toContain('You offered Accra Fresh Markets Ltd 4 50kg bag of Rice at GHS 450.00 each (GHS 1800.00).');
     expect(detail).toContain('1. Withdraw my offer');
     expect(done).toMatch(/^END Your offer was withdrawn/);
-    expect(getOffer(offer.id).status).toBe('withdrawn');
+    expect((await getOffer(offer.id)).status).toBe('withdrawn');
   });
 
   it('rejects a bid with 3', async () => {
-    const offer = placeBid({ buyerId: testBuyer().id, lotId, units: 2, pricePerUnit: 30000 });
+    const offer = await placeBid({ buyerId: (await testBuyer()).id, lotId, units: 2, pricePerUnit: 30000 });
     const [, , , done] = await dial(P2, ['2', '1', '3']);
     expect(done).toMatch(/^END You turned down the offer/);
-    expect(getOffer(offer.id).status).toBe('rejected');
-    expect(listContractsForFarmer(farmerId)).toHaveLength(0);
+    expect((await getOffer(offer.id)).status).toBe('rejected');
+    expect(await listContractsForFarmer(farmerId)).toHaveLength(0);
   });
 
   it('changes the price and quantity of an open listing, then removes it', async () => {
@@ -294,39 +294,39 @@ describe('USSD negotiation, requests and listing management (Phase 1)', () => {
     const price = await dial(P2, ['3', '1', '2', '550']);
     expect(price[3]).toContain('New price per 50kg bag in GHS');
     expect(price[4]).toMatch(/^END FTM-\S+ updated\. It stays on the market for \d+ more days/);
-    expect(getLot(lotId).askingPricePerUnit).toBe(55000);
+    expect((await getLot(lotId)).askingPricePerUnit).toBe(55000);
 
     const qty = await dial(P2, ['3', '1', '3', '12']);
     expect(qty[4]).toMatch(/^END FTM-\S+ updated/);
-    expect(getLot(lotId).quantityKg).toBe(600);
+    expect((await getLot(lotId)).quantityKg).toBe(600);
 
     const removed = await dial(P2, ['3', '1', '1', '1']);
     expect(removed[4]).toMatch(/^END FTM-\S+ has been removed from the market/);
-    expect(getLot(lotId).status).toBe('withdrawn');
+    expect((await getLot(lotId)).status).toBe('withdrawn');
   });
 
   it('answers a buyer request from menu 8 with an offer on her own listing', async () => {
     // Ready in a month — past the request's one-week window, so the engine
     // makes no bid of its own and the farmer is the one who starts the thread.
-    const forward = registerLot({
-      farmerId,
-      commodityCode: 'RICE',
-      unitCode: 'BAG_50KG',
-      unitQty: 6,
-      declaredBand: 'B',
-      readyDate: Date.now() + 30 * DAY,
-    });
-    const demand = createDemand({
-      buyerId: testBuyer().id,
-      commodityCode: 'RICE',
-      quantityKg: 200,
-      minBand: 'B',
-      basePricePerKg: 600,
-      windowStart: Date.now(),
-      windowEnd: Date.now() + 7 * DAY,
-      regionCode: 'GREATER_ACCRA',
-    });
-    expect(listOffersForFarmer(farmerId, 'open')).toHaveLength(0);
+    const forward = await registerLot({
+          farmerId,
+          commodityCode: 'RICE',
+          unitCode: 'BAG_50KG',
+          unitQty: 6,
+          declaredBand: 'B',
+          readyDate: Date.now() + 30 * DAY,
+        });
+    const demand = await createDemand({
+          buyerId: (await testBuyer()).id,
+          commodityCode: 'RICE',
+          quantityKg: 200,
+          minBand: 'B',
+          basePricePerKg: 600,
+          windowStart: Date.now(),
+          windowEnd: Date.now() + 7 * DAY,
+          regionCode: 'GREATER_ACCRA',
+        });
+    expect(await listOffersForFarmer(farmerId, 'open')).toHaveLength(0);
 
     const [home, requests = ''] = await dial(P2, ['8']);
     expect(home).toContain('8. Buyer requests');
@@ -344,9 +344,9 @@ describe('USSD negotiation, requests and listing management (Phase 1)', () => {
     expect(r[6]).toContain('Offer Accra Fresh Markets Ltd 3 50kg bag of Rice at GHS 620.00 each (GHS 1860.00)?');
     expect(r[7]).toMatch(/^END Sent to Accra Fresh Markets Ltd/);
 
-    const [thread] = listOffersForFarmer(farmerId, 'open');
+    const [thread] = await listOffersForFarmer(farmerId, 'open');
     expect(thread).toMatchObject({ lotId: forward.id, demandId: demand.id, turn: 'buyer', units: 3, pricePerUnit: 62000 });
-    expect(getDemand(demand.id).remainingKg).toBe(50); // the thread holds 150kg of the request
+    expect((await getDemand(demand.id)).remainingKg).toBe(50); // the thread holds 150kg of the request
   });
 });
 
@@ -370,11 +370,11 @@ describe('USSD language flows (M30, D-040)', () => {
     const responses = await dial(phone, ['2', '1', 'Yaw Mensah', '9', '2', 'Tolon', '1']);
     expect(responses[1]).toBe(`CON ${tDraft('tw', 'ussd.welcome.title')}\n${tDraft('tw', 'ussd.welcome.register')}\n${tDraft('tw', 'ussd.welcome.registerDriver')}\n${tDraft('tw', 'ussd.welcome.prices')}`);
     expect(responses[7]).toMatch(/^END/);
-    const farmer = getFarmerByPhone(phone)!;
+    const farmer = (await getFarmerByPhone(phone))!;
     expect(farmer.locale).toBe('tw');
     // The registration receipt rode the chosen locale (Twi catalog lacks
     // sms.registered → resolved from English under the per-key fallback).
-    expect(listNotificationsForPhone(phone).some((n) => n.templateKey === 'sms.registered')).toBe(true);
+    expect((await listNotificationsForPhone(phone)).some((n) => n.templateKey === 'sms.registered')).toBe(true);
   });
 
   it('home menu 7 changes a farmer language and confirms in the NEW language', async () => {
@@ -385,11 +385,11 @@ describe('USSD language flows (M30, D-040)', () => {
     expect(menu).toContain('Language for SMS and calls:');
     expect(done).toMatch(/^END/);
     expect(done).toContain('Twi'); // the endonym names the choice
-    expect(getFarmerByPhone(phone)!.locale).toBe('tw');
+    expect((await getFarmerByPhone(phone))!.locale).toBe('tw');
     // Round-trip back to English.
     const [, , back] = await dial(phone, ['7', '1']);
     expect(back).toMatch(/^END/);
-    expect(getFarmerByPhone(phone)!.locale).toBe('en');
+    expect((await getFarmerByPhone(phone))!.locale).toBe('en');
   });
 
   it('with the gate closed, new callers see the plain welcome and no language menu', async () => {

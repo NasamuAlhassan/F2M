@@ -11,10 +11,10 @@ export async function lotRoutes(app: FastifyInstance): Promise<void> {
   // The full trace, money amounts included — only for a buyer trading on this lot.
   app.get('/lots/:id/trace', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
-    getLot(id); // 404 on unknown lot
-    if (!listContractsForLot(id).some((c) => c.buyerId === req.user.sub)) {
+    await getLot(id); // 404 on unknown lot
+    if (!(await listContractsForLot(id)).some((c) => c.buyerId === req.user.sub)) {
       throw new DomainError('Not your lot', 'FORBIDDEN', 403);
     }
-    return { events: getTrace(id) };
+    return { events: await getTrace(id) };
   });
 }

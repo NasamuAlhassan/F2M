@@ -230,19 +230,18 @@ export interface ProcessVoiceListingInput {
 
 export async function processVoiceListing(input: ProcessVoiceListingInput): Promise<VoiceListing> {
   const phone = normalizePhone(input.phone);
-  const farmer = getFarmerByPhone(phone);
+  const farmer = await getFarmerByPhone(phone);
   const locale = farmer?.locale ?? 'en';
 
-  const insert = (fields: Partial<typeof voiceListings.$inferInsert>): VoiceListing =>
-    db
-      .insert(voiceListings)
-      .values({ phone, farmerId: farmer?.id ?? null, audioRef: input.audioRef ?? null, locale, ...fields })
-      .returning()
-      .get();
+  const insert = async (fields: Partial<typeof voiceListings.$inferInsert>): Promise<VoiceListing> =>
+    (await db
+                  .insert(voiceListings)
+                  .values({ phone, farmerId: farmer?.id ?? null, audioRef: input.audioRef ?? null, locale, ...fields })
+                  .returning())[0]!;
 
   if (!farmer) {
     // Honest dead-end: we can't list produce for a phone we don't know.
-    queueSms({ phone, locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
+    await queueSms({ phone, locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
     return insert({ status: 'failed', error: 'not_registered' });
   }
 
@@ -252,30 +251,30 @@ export async function processVoiceListing(input: ProcessVoiceListingInput): Prom
     transcript = await getAsrProvider().transcribe({ audioRef: input.audioRef, hint: input.transcriptHint, locale });
     translated = await getMtProvider().translate({ text: transcript, from: locale, to: 'en' });
   } catch (err) {
-    queueSms({ phone, locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
+    await queueSms({ phone, locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
     return insert({ status: 'failed', transcript, error: `pipeline: ${(err as Error).message}` });
   }
 
   const parsed = parseListingText(translated);
   if (!parsed) {
-    queueSms({ phone, locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
+    await queueSms({ phone, locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
     return insert({ status: 'failed', transcript, translatedText: translated, error: 'unparseable' });
   }
 
   try {
-    const lot = registerLot({ farmerId: farmer.id, ...parsed, channel: 'ivr' });
+    const lot = await registerLot({ farmerId: farmer.id, ...parsed, channel: 'ivr' });
     // The SMS receipt is the farmer's only written record — read back exactly
     // what went live (D-019's archive-what-was-promised rule).
-    queueSms({
-      phone,
-      locale,
-      templateKey: 'sms.listingCreated',
-      params: { kg: lot.quantityKg, commodity: t(locale, `commodity.${parsed.commodityCode}`), band: parsed.declaredBand, lotCode: lot.lotCode, code: config.USSD_SHORTCODE },
-      lotId: lot.id,
-    });
+    await queueSms({
+            phone,
+            locale,
+            templateKey: 'sms.listingCreated',
+            params: { kg: lot.quantityKg, commodity: t(locale, `commodity.${parsed.commodityCode}`), band: parsed.declaredBand, lotCode: lot.lotCode, code: config.USSD_SHORTCODE },
+            lotId: lot.id,
+          });
     return insert({ status: 'listed', transcript, translatedText: translated, parsed: JSON.stringify(parsed), lotId: lot.id });
   } catch (err) {
-    queueSms({ phone, locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
+    await queueSms({ phone, locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
     return insert({
       status: 'failed',
       transcript,
@@ -292,7 +291,7 @@ export async function processVoiceListing(input: ProcessVoiceListingInput): Prom
  * produced, so unclear answers can be reviewed and the models improved
  * (vision §5.3).
  */
-export function saveVoiceListing(input: {
+export async function saveVoiceListing(input: {
   phone: string;
   farmerId: string;
   locale: string;
@@ -300,25 +299,24 @@ export function saveVoiceListing(input: {
   parsed: unknown;
   lotId?: string;
   error?: string;
-}): VoiceListing {
-  return db
-    .insert(voiceListings)
-    .values({
-      phone: input.phone,
-      farmerId: input.farmerId,
-      locale: input.locale,
-      audioRef: input.heard.map((h) => h.audioRef).filter(Boolean).join(' ') || null,
-      transcript: input.heard.map((h) => h.transcript).join(' | ') || null,
-      translatedText: input.heard.map((h) => h.english).join(' | ') || null,
-      parsed: JSON.stringify(input.parsed),
-      lotId: input.lotId ?? null,
-      status: input.lotId ? 'listed' : 'failed',
-      error: input.error ?? null,
-    })
-    .returning()
-    .get();
+}): Promise<VoiceListing> {
+  return (await db
+        .insert(voiceListings)
+        .values({
+          phone: input.phone,
+          farmerId: input.farmerId,
+          locale: input.locale,
+          audioRef: input.heard.map((h) => h.audioRef).filter(Boolean).join(' ') || null,
+          transcript: input.heard.map((h) => h.transcript).join(' | ') || null,
+          translatedText: input.heard.map((h) => h.english).join(' | ') || null,
+          parsed: JSON.stringify(input.parsed),
+          lotId: input.lotId ?? null,
+          status: input.lotId ? 'listed' : 'failed',
+          error: input.error ?? null,
+        })
+        .returning())[0]!;
 }
 
-export function getVoiceListing(id: string): VoiceListing | undefined {
-  return db.select().from(voiceListings).where(eq(voiceListings.id, id)).get();
+export async function getVoiceListing(id: string): Promise<VoiceListing | undefined> {
+  return (await db.select().from(voiceListings).where(eq(voiceListings.id, id)))[0];
 }

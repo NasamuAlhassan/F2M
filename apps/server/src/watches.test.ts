@@ -10,10 +10,10 @@ let farmerToken: string;
 
 beforeAll(async () => {
   app = await buildServer({ logger: false });
-  buyerToken = testBuyerToken();
-  const farmer = registerFarmer({ phone: '+233207590001', name: 'Watch Farmer', regionCode: 'NORTHERN' });
-  farmerToken = testToken('farmer', farmer.id, farmer.phone);
-  registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'TUBER', unitQty: 40, declaredBand: 'B' });
+  buyerToken = await testBuyerToken();
+  const farmer = await registerFarmer({ phone: '+233207590001', name: 'Watch Farmer', regionCode: 'NORTHERN' });
+  farmerToken = await testToken('farmer', farmer.id, farmer.phone);
+  await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'TUBER', unitQty: 40, declaredBand: 'B' });
 });
 afterAll(async () => {
   await app.close();

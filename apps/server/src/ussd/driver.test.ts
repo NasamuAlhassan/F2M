@@ -49,30 +49,28 @@ async function dial(phone: string, inputs: string[]): Promise<string[]> {
 }
 
 async function fundedContract() {
-  const yamRow = db.select().from(schema.commodities).all().find((c) => c.code === 'YAM')!;
-  db.update(schema.demands)
-    .set({ status: 'cancelled' })
-    .where(and(eq(schema.demands.commodityId, yamRow.id), inArray(schema.demands.status, ['open', 'partially_matched'])))
-    .run();
-  db.update(schema.lots)
-    .set({ status: 'withdrawn' })
-    .where(and(eq(schema.lots.commodityId, yamRow.id), eq(schema.lots.status, 'registered')))
-    .run();
-  db.update(schema.drivers).set({ active: false }).where(eq(schema.drivers.active, true)).run();
+  const yamRow = (await db.select().from(schema.commodities)).find((c) => c.code === 'YAM')!;
+  (await db.update(schema.demands)
+        .set({ status: 'cancelled' })
+        .where(and(eq(schema.demands.commodityId, yamRow.id), inArray(schema.demands.status, ['open', 'partially_matched']))));
+  (await db.update(schema.lots)
+        .set({ status: 'withdrawn' })
+        .where(and(eq(schema.lots.commodityId, yamRow.id), eq(schema.lots.status, 'registered'))));
+  (await db.update(schema.drivers).set({ active: false }).where(eq(schema.drivers.active, true)));
 
-  const buyer = testBuyer();
-  const farmer = registerFarmer({ phone: '+233209871100', name: 'Driver Test Farmer', regionCode: 'ASHANTI' });
-  registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
-  createDemand({
-    buyerId: buyer.id,
-    commodityCode: 'YAM',
-    quantityKg: 500,
-    minBand: 'B',
-    basePricePerKg: 400,
-    windowStart: Date.now(),
-    windowEnd: Date.now() + 7 * DAY,
-    regionCode: 'ASHANTI',
-  });
+  const buyer = await testBuyer();
+  const farmer = await registerFarmer({ phone: '+233209871100', name: 'Driver Test Farmer', regionCode: 'ASHANTI' });
+  await registerLot({ farmerId: farmer.id, commodityCode: 'YAM', unitCode: 'HUNDRED', unitQty: 2, declaredBand: 'B' });
+  await createDemand({
+        buyerId: buyer.id,
+        commodityCode: 'YAM',
+        quantityKg: 500,
+        minBand: 'B',
+        basePricePerKg: 400,
+        windowStart: Date.now(),
+        windowEnd: Date.now() + 7 * DAY,
+        regionCode: 'ASHANTI',
+      });
   // The engine's bid waits on the farmer (Phase 1); accepting it makes the contract and starts the hold.
   const contract = await acceptFor(farmer.id);
   await pollPaymentsOnce();
@@ -90,17 +88,17 @@ describe('driver surfaces (M14)', () => {
     expect(responses[5]).toContain('Register Kwesi Transport, 1.5T Truck, Ashanti?');
     expect(responses[6]).toMatch(/^END Welcome, Kwesi Transport/);
 
-    const driver = getDriverByPhone(DRIVER_PHONE);
+    const driver = await getDriverByPhone(DRIVER_PHONE);
     expect(driver?.vehicleClassCode).toBe('van');
   });
 
   it('accepts a dispatched job and confirms pickup — all over USSD', async () => {
     const { buyer, contractId } = await fundedContract();
     // Our USSD driver was parked by the fixture — reactivate just them.
-    const driver = getDriverByPhone(DRIVER_PHONE)!;
-    db.update(schema.drivers).set({ active: true }).where(eq(schema.drivers.id, driver.id)).run();
+    const driver = (await getDriverByPhone(DRIVER_PHONE))!;
+    (await db.update(schema.drivers).set({ active: true }).where(eq(schema.drivers.id, driver.id)));
 
-    const job = requestTransport(contractId, buyer.id);
+    const job = await requestTransport(contractId, buyer.id);
 
     const [home, list, detail, accepted] = await dial(DRIVER_PHONE, ['1', '1', '1']);
     expect(home).toContain('1. Job offers (1)');
@@ -108,23 +106,23 @@ describe('driver surfaces (M14)', () => {
     expect(detail).toContain(`Job ${job.jobCode}: 500kg Yam`);
     expect(detail).toContain('Pays GHS');
     expect(accepted).toMatch(/^END Job DLV-/);
-    expect(getJob(job.id).state).toBe('ASSIGNED');
+    expect((await getJob(job.id)).state).toBe('ASSIGNED');
 
     await pollPaymentsOnce();
-    expect(getJob(job.id).state).toBe('FUNDS_HELD');
+    expect((await getJob(job.id)).state).toBe('FUNDS_HELD');
 
     const [, active, done] = await dial(DRIVER_PHONE, ['2', '1']);
     expect(active).toContain('Fee secured - go to pickup');
     expect(active).toContain('1. Confirm goods loaded');
     expect(done).toMatch(/pickup confirmed/);
 
-    expect(getJob(job.id).state).toBe('PICKED_UP');
-    expect(getContract(contractId).state).toBe('PICKUP_CONFIRMED'); // D-025 via the wire
+    expect((await getJob(job.id)).state).toBe('PICKED_UP');
+    expect((await getContract(contractId)).state).toBe('PICKUP_CONFIRMED'); // D-025 via the wire
   });
 
   it('drives the same actions through the web API, with each login held to its own role', async () => {
-    const driverRow = getDriverByPhone(DRIVER_PHONE)!;
-    const driverToken = testToken('driver', driverRow.id, driverRow.phone);
+    const driverRow = (await getDriverByPhone(DRIVER_PHONE))!;
+    const driverToken = await testToken('driver', driverRow.id, driverRow.phone);
 
     const jobs = await app.inject({
       method: 'GET',
@@ -142,7 +140,7 @@ describe('driver surfaces (M14)', () => {
     });
     expect(crossed.statusCode).toBe(401);
 
-    const buyerToken = testBuyerToken();
+    const buyerToken = await testBuyerToken();
     const crossedBuyer = await app.inject({
       method: 'GET',
       url: '/api/driver/jobs',
@@ -151,12 +149,11 @@ describe('driver surfaces (M14)', () => {
     expect(crossedBuyer.statusCode).toBe(401);
 
     // Buyer confirms delivery via the web API → payout → PAID.
-    const driver = getDriverByPhone(DRIVER_PHONE)!;
-    const job = db
-      .select()
-      .from(schema.deliveryJobs)
-      .where(and(eq(schema.deliveryJobs.driverId, driver.id), eq(schema.deliveryJobs.state, 'PICKED_UP')))
-      .get()!;
+    const driver = (await getDriverByPhone(DRIVER_PHONE))!;
+    const job = (await db
+          .select()
+          .from(schema.deliveryJobs)
+          .where(and(eq(schema.deliveryJobs.driverId, driver.id), eq(schema.deliveryJobs.state, 'PICKED_UP'))))[0]!;
     const deliver = await app.inject({
       method: 'POST',
       url: `/api/jobs/${job.id}/deliver`,
@@ -164,8 +161,8 @@ describe('driver surfaces (M14)', () => {
     });
     expect(deliver.statusCode).toBe(200);
     await pollPaymentsOnce();
-    expect(getJob(job.id).state).toBe('PAID');
-    expect(getJobForContract(job.contractId)!.state).toBe('PAID');
+    expect((await getJob(job.id)).state).toBe('PAID');
+    expect((await getJobForContract(job.contractId))!.state).toBe('PAID');
   });
 });
 
@@ -177,9 +174,9 @@ describe('driver language menu (M30, D-040)', () => {
       expect(home).toContain('4. Language');
       expect(menu).toContain('Language for SMS and calls:');
       expect(done).toMatch(/^END/);
-      expect(getDriverByPhone(DRIVER_PHONE)!.locale).toBe('tw');
+      expect((await getDriverByPhone(DRIVER_PHONE))!.locale).toBe('tw');
       await dial(DRIVER_PHONE, ['4', '1']); // back to English
-      expect(getDriverByPhone(DRIVER_PHONE)!.locale).toBe('en');
+      expect((await getDriverByPhone(DRIVER_PHONE))!.locale).toBe('en');
     } finally {
       setDraftLocalesLive(null);
     }

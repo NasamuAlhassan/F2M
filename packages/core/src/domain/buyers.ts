@@ -13,34 +13,33 @@ export interface RegisterBuyerInput {
 }
 
 /** A buyer signing up on the web (D-047). Payouts and refunds go to the same number's mobile money. */
-export function registerBuyer(input: RegisterBuyerInput): Buyer {
+export async function registerBuyer(input: RegisterBuyerInput): Promise<Buyer> {
   const phone = normalizePhone(input.phone);
   getRegion(input.regionCode); // throws on unknown region
   if (!input.name.trim()) throw new DomainError('Name is required', 'INVALID_NAME');
-  if (getBuyerByPhone(phone)) throw new DomainError('This phone number is already registered as a buyer', 'BUYER_EXISTS', 409);
-  return db
-    .insert(buyers)
-    .values({
-      phone,
-      name: input.name.trim(),
-      company: input.company?.trim() || null,
-      regionCode: input.regionCode,
-      momoMsisdn: toMsisdn(phone),
-    })
-    .returning()
-    .get();
+  if (await getBuyerByPhone(phone)) throw new DomainError('This phone number is already registered as a buyer', 'BUYER_EXISTS', 409);
+  return (await db
+        .insert(buyers)
+        .values({
+          phone,
+          name: input.name.trim(),
+          company: input.company?.trim() || null,
+          regionCode: input.regionCode,
+          momoMsisdn: toMsisdn(phone),
+        })
+        .returning())[0]!;
 }
 
-export function getBuyerById(id: string): Buyer | undefined {
-  return db.select().from(buyers).where(eq(buyers.id, id)).get();
+export async function getBuyerById(id: string): Promise<Buyer | undefined> {
+  return (await db.select().from(buyers).where(eq(buyers.id, id)))[0];
 }
 
-export function getBuyerByPhone(rawPhone: string): Buyer | undefined {
+export async function getBuyerByPhone(rawPhone: string): Promise<Buyer | undefined> {
   let phone: string;
   try {
     phone = normalizePhone(rawPhone);
   } catch {
     return undefined;
   }
-  return db.select().from(buyers).where(eq(buyers.phone, phone)).get();
+  return (await db.select().from(buyers).where(eq(buyers.phone, phone)))[0];
 }

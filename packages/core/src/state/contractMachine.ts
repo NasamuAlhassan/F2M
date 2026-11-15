@@ -73,21 +73,21 @@ export interface TransitionExtra {
   deductionAmount?: number;
   payload?: Record<string, unknown>;
   /** Extra work (e.g. ledger postings) that must commit atomically with the transition. */
-  also?: (tx: DbLike, contract: Contract) => void;
+  also?: (tx: DbLike, contract: Contract) => void | Promise<void>;
 }
 
 /**
  * Apply a guarded contract state transition. The contract update, lot/demand
  * side effects, and the trace event all commit in ONE transaction.
  */
-export function transitionContract(
+export async function transitionContract(
   contractId: string,
   to: ContractState,
   actor: Actor,
   extra: TransitionExtra = {},
-): Contract {
-  return db.transaction((tx) => {
-    const contract = tx.select().from(contracts).where(eq(contracts.id, contractId)).get();
+): Promise<Contract> {
+  return db.transaction(async (tx) => {
+    const contract = (await tx.select().from(contracts).where(eq(contracts.id, contractId)))[0];
     if (!contract) throw notFound('contract');
 
     const rule = TRANSITIONS[`${contract.state}>${to}`];
@@ -131,78 +131,77 @@ export function transitionContract(
     if (extra.declineReasonKey) updates.declineReasonKey = extra.declineReasonKey;
     if (extra.disputeNote) updates.disputeNote = extra.disputeNote;
 
-    const updated = tx.update(contracts).set(updates).where(eq(contracts.id, contractId)).returning().get()!;
+    const updated = (await tx.update(contracts).set(updates).where(eq(contracts.id, contractId)).returning())[0]!;
 
-    applySideEffects(tx, updated, to);
-    extra.also?.(tx, updated);
+    await applySideEffects(tx, updated, to);
+    // Awaited inside the transaction: the ledger lines commit with the state change, or neither does.
+    await extra.also?.(tx, updated);
 
     const eventType = EVENT_FOR_STATE[to];
     if (eventType) {
-      appendLotEvent(tx, {
-        lotId: contract.lotId,
-        type: eventType,
-        actorType: actor.type,
-        actorId: actor.id ?? null,
-        payload: {
-          contractId,
-          ...(extra.finalGrade ? { grade: extra.finalGrade } : {}),
-          ...(extra.finalAmount !== undefined ? { finalAmount: extra.finalAmount } : {}),
-          ...(extra.payload ?? {}),
-        },
-      });
+      await appendLotEvent(tx, {
+                lotId: contract.lotId,
+                type: eventType,
+                actorType: actor.type,
+                actorId: actor.id ?? null,
+                payload: {
+                  contractId,
+                  ...(extra.finalGrade ? { grade: extra.finalGrade } : {}),
+                  ...(extra.finalAmount !== undefined ? { finalAmount: extra.finalAmount } : {}),
+                  ...(extra.payload ?? {}),
+                },
+              });
     }
     return updated;
   });
 }
 
 /** Lot/demand/match bookkeeping that must ride in the same transaction. */
-function applySideEffects(tx: DbLike, contract: Contract, to: ContractState): void {
-  const setMatch = (status: 'accepted' | 'declined' | 'expired') =>
-    tx.update(matches).set({ status }).where(eq(matches.id, contract.matchId)).run();
+async function applySideEffects(tx: DbLike, contract: Contract, to: ContractState): Promise<void> {
+  const setMatch = async (status: 'accepted' | 'declined' | 'expired') =>
+    (await tx.update(matches).set({ status }).where(eq(matches.id, contract.matchId)));
 
   // A listing with bags still unsold stays on the market (Phase 1); its status
   // follows an order only once nothing is left on it.
-  const lotIsEmpty = () => (tx.select().from(lots).where(eq(lots.id, contract.lotId)).get()?.remainingKg ?? 0) <= 1e-9;
+  const lotIsEmpty = async () => ((await tx.select().from(lots).where(eq(lots.id, contract.lotId)))[0]?.remainingKg ?? 0) <= 1e-9;
 
   if (to === 'ACCEPTED') {
-    setMatch('accepted');
-    if (lotIsEmpty()) tx.update(lots).set({ status: 'contracted' }).where(eq(lots.id, contract.lotId)).run();
+    await setMatch('accepted');
+    if (await lotIsEmpty()) (await tx.update(lots).set({ status: 'contracted' }).where(eq(lots.id, contract.lotId)));
   }
 
   if (to === 'DECLINED' || to === 'EXPIRED' || to === 'CANCELLED' || to === 'CANCELLED_REFUNDED') {
     // Release the reservation taken at offer time, on both sides — the produce
     // still exists (declined/expired/rejected) and the buyer still needs the kg.
-    setMatch(to === 'DECLINED' ? 'declined' : 'expired');
-    const lot = tx.select().from(lots).where(eq(lots.id, contract.lotId)).get();
+    await setMatch(to === 'DECLINED' ? 'declined' : 'expired');
+    const lot = (await tx.select().from(lots).where(eq(lots.id, contract.lotId)))[0];
     // A listing the farmer removed, sold elsewhere or let lapse stays off the market.
     if (lot && !['withdrawn', 'sold', 'expired'].includes(lot.status)) {
       const remaining = Math.min(lot.quantityKg, lot.remainingKg + contract.quantityKg);
-      tx.update(lots)
-        .set({ remainingKg: remaining, status: remaining > 0 ? 'registered' : lot.status })
-        .where(eq(lots.id, lot.id))
-        .run();
+      (await tx.update(lots)
+                .set({ remainingKg: remaining, status: remaining > 0 ? 'registered' : lot.status })
+                .where(eq(lots.id, lot.id)));
     }
-    const demand = tx.select().from(demands).where(eq(demands.id, contract.demandId)).get();
+    const demand = (await tx.select().from(demands).where(eq(demands.id, contract.demandId)))[0];
     if (demand?.origin === 'deal') {
       // The record behind a negotiated order is not a request: it never reopens.
-      tx.update(demands).set({ status: 'cancelled' }).where(eq(demands.id, demand.id)).run();
+      (await tx.update(demands).set({ status: 'cancelled' }).where(eq(demands.id, demand.id)));
     } else if (demand && demand.status !== 'expired' && demand.status !== 'cancelled') {
       const remaining = Math.min(demand.quantityKg, demand.remainingKg + contract.quantityKg);
-      tx.update(demands)
-        .set({ remainingKg: remaining, status: remaining >= demand.quantityKg ? 'open' : 'partially_matched' })
-        .where(eq(demands.id, demand.id))
-        .run();
+      (await tx.update(demands)
+                .set({ remainingKg: remaining, status: remaining >= demand.quantityKg ? 'open' : 'partially_matched' })
+                .where(eq(demands.id, demand.id)));
     }
   }
 
-  if (to === 'GRADED' && lotIsEmpty()) {
-    tx.update(lots).set({ status: 'graded' }).where(eq(lots.id, contract.lotId)).run();
+  if (to === 'GRADED' && await lotIsEmpty()) {
+    (await tx.update(lots).set({ status: 'graded' }).where(eq(lots.id, contract.lotId)));
   }
   if (to === 'SETTLED') {
-    if (lotIsEmpty()) tx.update(lots).set({ status: 'settled' }).where(eq(lots.id, contract.lotId)).run();
-    const demand = tx.select().from(demands).where(eq(demands.id, contract.demandId)).get();
+    if (await lotIsEmpty()) (await tx.update(lots).set({ status: 'settled' }).where(eq(lots.id, contract.lotId)));
+    const demand = (await tx.select().from(demands).where(eq(demands.id, contract.demandId)))[0];
     if (demand && demand.remainingKg <= 0) {
-      tx.update(demands).set({ status: 'fulfilled' }).where(eq(demands.id, demand.id)).run();
+      (await tx.update(demands).set({ status: 'fulfilled' }).where(eq(demands.id, demand.id)));
     }
   }
 }

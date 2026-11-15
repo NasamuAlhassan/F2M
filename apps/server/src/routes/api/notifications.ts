@@ -8,8 +8,8 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   app.get('/notifications', { preHandler: [app.authBuyer] }, async (req) => {
     const buyerId = req.user.sub;
     return {
-      unread: unreadNotificationCount(buyerId),
-      notifications: listBuyerNotifications(buyerId).map((n) => ({
+      unread: await unreadNotificationCount(buyerId),
+      notifications: (await listBuyerNotifications(buyerId)).map((n) => ({
         id: n.id,
         message: n.message,
         contractId: n.contractId,
@@ -23,6 +23,6 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/notifications/read', { preHandler: [app.authBuyer] }, async (req) => {
     const { ids } = readSchema.parse(req.body ?? {});
-    return { marked: markNotificationsRead(req.user.sub, ids) };
+    return { marked: await markNotificationsRead(req.user.sub, ids) };
   });
 }

@@ -1,5 +1,5 @@
 export { config, REPO_ROOT, type Config } from './config';
-export { db, sqlite, type Db } from './db/client';
+export { db, dbEngine, closeDb, type Db } from './db/client';
 export { runMigrations } from './db/migrate';
 export * as schema from './db/schema';
 export {
@@ -54,7 +54,9 @@ export * from './domain/geo';
 export * from './domain/ledger';
 export * from './domain/paymentFlow';
 export * from './domain/settlement';
+export * from './domain/settings';
 export * from './domain/deals';
+export * from './storage/index';
 export * from './domain/photos';
 export * from './domain/gradingFlow';
 export * from './domain/marketPrices';

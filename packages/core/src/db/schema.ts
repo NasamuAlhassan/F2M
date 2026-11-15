@@ -1,4 +1,13 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { bigint, boolean, doublePrecision, index, pgSchema, text, uniqueIndex } from 'drizzle-orm/pg-core';
+
+// Postgres (Supabase in production, PGlite in tests and local dev; docs/HOSTING.md).
+// Every whole number is a 64-bit bigint read as a JS number: epoch milliseconds
+// (~1.8e12) do not fit Postgres's 32-bit integer.
+//
+// Every table lives in the `f2m` schema, not `public`: Supabase publishes `public` through its
+// REST API to anyone holding the anon key (which the web app ships with), so
+// F2M's data stays out of it and only the server's own connection reaches it.
+export const f2m = pgSchema('f2m');
 
 const id = () =>
   text('id')
@@ -6,21 +15,21 @@ const id = () =>
     .$defaultFn(() => crypto.randomUUID());
 
 const createdAt = () =>
-  integer('created_at')
+  bigint('created_at', { mode: 'number' })
     .notNull()
     .$defaultFn(() => Date.now());
 
 // All money columns are integer pesewas (GHS minor units). See D-011.
 // All JSON columns are text, parsed through Zod accessors in domain services. See D-004.
 
-export const regions = sqliteTable('regions', {
+export const regions = f2m.table('regions', {
   code: text('code').primaryKey(),
   nameKey: text('name_key').notNull(),
-  lat: real('lat').notNull(),
-  lng: real('lng').notNull(),
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
 });
 
-export const farmers = sqliteTable(
+export const farmers = f2m.table(
   'farmers',
   {
     id: id(),
@@ -30,8 +39,8 @@ export const farmers = sqliteTable(
       .notNull()
       .references(() => regions.code),
     district: text('district'),
-    gpsLat: real('gps_lat'),
-    gpsLng: real('gps_lng'),
+    gpsLat: doublePrecision('gps_lat'),
+    gpsLng: doublePrecision('gps_lng'),
     momoMsisdn: text('momo_msisdn').notNull(),
     locale: text('locale').notNull().default('en'),
     createdAt: createdAt(),
@@ -39,7 +48,7 @@ export const farmers = sqliteTable(
   (t) => [uniqueIndex('farmers_phone_idx').on(t.phone)],
 );
 
-export const buyers = sqliteTable(
+export const buyers = f2m.table(
   'buyers',
   {
     id: id(),
@@ -49,8 +58,8 @@ export const buyers = sqliteTable(
     phone: text('phone'), // E.164 — the login identity for buyers who signed up on the web
     momoMsisdn: text('momo_msisdn').notNull(),
     regionCode: text('region_code').references(() => regions.code),
-    gpsLat: real('gps_lat'),
-    gpsLng: real('gps_lng'),
+    gpsLat: doublePrecision('gps_lat'),
+    gpsLng: doublePrecision('gps_lng'),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('buyers_email_idx').on(t.email), uniqueIndex('buyers_phone_idx').on(t.phone)],
@@ -62,7 +71,7 @@ export const buyers = sqliteTable(
  * set, matching `role`. USSD and IVR never need an account — the carrier
  * tells us the caller's number.
  */
-export const accounts = sqliteTable(
+export const accounts = f2m.table(
   'accounts',
   {
     id: id(),
@@ -77,7 +86,7 @@ export const accounts = sqliteTable(
   (t) => [uniqueIndex('accounts_auth_user_idx').on(t.authUserId), uniqueIndex('accounts_phone_idx').on(t.phone)],
 );
 
-export const commodities = sqliteTable(
+export const commodities = f2m.table(
   'commodities',
   {
     id: id(),
@@ -86,13 +95,13 @@ export const commodities = sqliteTable(
     category: text('category', { enum: ['grain', 'perishable', 'tuber'] }).notNull(),
     clockType: text('clock_type', { enum: ['storable', 'perishable'] }).notNull(),
     clockConfig: text('clock_config').notNull(), // JSON ClockConfig
-    activeRubricVersion: integer('active_rubric_version').notNull().default(1),
-    sortOrder: integer('sort_order').notNull().default(100), // menu position — most-traded first
+    activeRubricVersion: bigint('active_rubric_version', { mode: 'number' }).notNull().default(1),
+    sortOrder: bigint('sort_order', { mode: 'number' }).notNull().default(100), // menu position — most-traded first
   },
   (t) => [uniqueIndex('commodities_code_idx').on(t.code)],
 );
 
-export const units = sqliteTable(
+export const units = f2m.table(
   'units',
   {
     id: id(),
@@ -101,27 +110,27 @@ export const units = sqliteTable(
       .references(() => commodities.id),
     code: text('code').notNull(),
     nameKey: text('name_key').notNull(),
-    kgPerUnit: real('kg_per_unit').notNull(), // commodity-scoped: maize-olonka ≠ groundnut-olonka
-    isInformal: integer('is_informal', { mode: 'boolean' }).notNull().default(false),
+    kgPerUnit: doublePrecision('kg_per_unit').notNull(), // commodity-scoped: maize-olonka ≠ groundnut-olonka
+    isInformal: boolean('is_informal').notNull().default(false),
   },
   (t) => [uniqueIndex('units_commodity_code_idx').on(t.commodityId, t.code)],
 );
 
-export const rubrics = sqliteTable(
+export const rubrics = f2m.table(
   'rubrics',
   {
     id: id(),
     commodityId: text('commodity_id')
       .notNull()
       .references(() => commodities.id),
-    version: integer('version').notNull(),
+    version: bigint('version', { mode: 'number' }).notNull(),
     doc: text('doc').notNull(), // JSON RubricDoc
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('rubrics_commodity_version_idx').on(t.commodityId, t.version)],
 );
 
-export const lots = sqliteTable(
+export const lots = f2m.table(
   'lots',
   {
     id: id(),
@@ -132,30 +141,30 @@ export const lots = sqliteTable(
     commodityId: text('commodity_id')
       .notNull()
       .references(() => commodities.id),
-    quantityKg: real('quantity_kg').notNull(), // canonical — converted once, at intake
-    remainingKg: real('remaining_kg').notNull(),
+    quantityKg: doublePrecision('quantity_kg').notNull(), // canonical — converted once, at intake
+    remainingKg: doublePrecision('remaining_kg').notNull(),
     unitId: text('unit_id')
       .notNull()
       .references(() => units.id),
-    unitQty: real('unit_qty').notNull(),
+    unitQty: doublePrecision('unit_qty').notNull(),
     declaredBand: text('declared_band').notNull(), // farmer self-assessment, soft signal only
     // How the listing was made (D-036): web sellers upload photos; ussd/ivr
     // sellers may not read SMS, so buyers see their phone and call instead.
     channel: text('channel', { enum: ['web', 'ussd', 'ivr'] }).notNull().default('ussd'),
-    readyDate: integer('ready_date').notNull(), // ms; future date on a storable = forward listing
-    askingPricePerKg: integer('asking_price_per_kg'), // pesewas, optional — derived from the per-unit price when one is set
+    readyDate: bigint('ready_date', { mode: 'number' }).notNull(), // ms; future date on a storable = forward listing
+    askingPricePerKg: bigint('asking_price_per_kg', { mode: 'number' }), // pesewas, optional — derived from the per-unit price when one is set
     // The farmer's own asking price per unit of the listing (per bag, crate…), pesewas (Phase 1).
-    askingPricePerUnit: integer('asking_price_per_unit'),
-    harvestedAt: integer('harvested_at'), // ms, optional
+    askingPricePerUnit: bigint('asking_price_per_unit', { mode: 'number' }),
+    harvestedAt: bigint('harvested_at', { mode: 'number' }), // ms, optional
     community: text('community'), // town/village — finer than the region (vision §5.2)
     landmark: text('landmark'), // "behind the Methodist school" — for the driver
-    expiresAt: integer('expires_at'), // ms; the listing lapses then unless renewed (Phase 1)
-    expiryWarnedAt: integer('expiry_warned_at'), // ms; the warning SMS went out
+    expiresAt: bigint('expires_at', { mode: 'number' }), // ms; the listing lapses then unless renewed (Phase 1)
+    expiryWarnedAt: bigint('expiry_warned_at', { mode: 'number' }), // ms; the warning SMS went out
     regionCode: text('region_code')
       .notNull()
       .references(() => regions.code),
-    gpsLat: real('gps_lat'),
-    gpsLng: real('gps_lng'),
+    gpsLat: doublePrecision('gps_lat'),
+    gpsLng: doublePrecision('gps_lng'),
     status: text('status', {
       enum: ['registered', 'matched', 'contracted', 'graded', 'settled', 'expired', 'withdrawn', 'sold'],
     })
@@ -170,7 +179,7 @@ export const lots = sqliteTable(
   ],
 );
 
-export const demands = sqliteTable(
+export const demands = f2m.table(
   'demands',
   {
     id: id(),
@@ -180,17 +189,17 @@ export const demands = sqliteTable(
     commodityId: text('commodity_id')
       .notNull()
       .references(() => commodities.id),
-    quantityKg: real('quantity_kg').notNull(),
-    remainingKg: real('remaining_kg').notNull(),
+    quantityKg: doublePrecision('quantity_kg').notNull(),
+    remainingKg: doublePrecision('remaining_kg').notNull(),
     minBand: text('min_band').notNull(),
     priceTerms: text('price_terms').notNull(), // JSON: { band: pesewasPerKg }
-    windowStart: integer('window_start').notNull(),
-    windowEnd: integer('window_end').notNull(),
+    windowStart: bigint('window_start', { mode: 'number' }).notNull(),
+    windowEnd: bigint('window_end', { mode: 'number' }).notNull(),
     regionCode: text('region_code')
       .notNull()
       .references(() => regions.code),
-    gpsLat: real('gps_lat'),
-    gpsLng: real('gps_lng'),
+    gpsLat: doublePrecision('gps_lat'),
+    gpsLng: doublePrecision('gps_lng'),
     status: text('status', {
       enum: ['open', 'partially_matched', 'fulfilled', 'expired', 'cancelled'],
     })
@@ -204,7 +213,7 @@ export const demands = sqliteTable(
   (t) => [index('demands_buyer_idx').on(t.buyerId), index('demands_commodity_status_idx').on(t.commodityId, t.status)],
 );
 
-export const matches = sqliteTable(
+export const matches = f2m.table(
   'matches',
   {
     id: id(),
@@ -214,16 +223,16 @@ export const matches = sqliteTable(
     lotId: text('lot_id')
       .notNull()
       .references(() => lots.id),
-    allocatedKg: real('allocated_kg').notNull(),
-    score: real('score').notNull(),
+    allocatedKg: doublePrecision('allocated_kg').notNull(),
+    score: doublePrecision('score').notNull(),
     scoreBreakdown: text('score_breakdown').notNull(), // JSON — rendered in portal, matching is explainable
     status: text('status', {
       enum: ['proposed', 'offered', 'accepted', 'declined', 'expired', 'superseded'],
     })
       .notNull()
       .default('proposed'),
-    offeredAt: integer('offered_at'),
-    expiresAt: integer('expires_at'), // from commodity clock_config.offerTtlMinutes
+    offeredAt: bigint('offered_at', { mode: 'number' }),
+    expiresAt: bigint('expires_at', { mode: 'number' }), // from commodity clock_config.offerTtlMinutes
     createdAt: createdAt(),
   },
   (t) => [index('matches_demand_idx').on(t.demandId), index('matches_lot_idx').on(t.lotId)],
@@ -251,7 +260,7 @@ export const CONTRACT_STATES = [
 ] as const;
 export type ContractState = (typeof CONTRACT_STATES)[number];
 
-export const contracts = sqliteTable(
+export const contracts = f2m.table(
   'contracts',
   {
     id: id(),
@@ -273,33 +282,33 @@ export const contracts = sqliteTable(
     commodityId: text('commodity_id')
       .notNull()
       .references(() => commodities.id),
-    quantityKg: real('quantity_kg').notNull(),
+    quantityKg: doublePrecision('quantity_kg').notNull(),
     priceTerms: text('price_terms').notNull(), // JSON, frozen at offer time — D-015
-    holdAmount: integer('hold_amount').notNull(), // pesewas = qty × best-band price
+    holdAmount: bigint('hold_amount', { mode: 'number' }).notNull(), // pesewas = qty × best-band price
     displayCurrency: text('display_currency').notNull().default('GHS'),
     settlementCurrency: text('settlement_currency').notNull().default('GHS'), // the currency the payment rail moves
     state: text('state', { enum: CONTRACT_STATES }).notNull().default('OFFERED'),
     finalGrade: text('final_grade'),
-    finalAmount: integer('final_amount'), // pesewas = qty × price_terms[final_grade]
+    finalAmount: bigint('final_amount', { mode: 'number' }), // pesewas = qty × price_terms[final_grade]
     // A negotiated deal's exact total (units × price per unit), pesewas. Set → the farmer is
     // paid this whatever the grade (REJECT still refunds) until Phase 3 reworks quality.
-    agreedTotal: integer('agreed_total'),
+    agreedTotal: bigint('agreed_total', { mode: 'number' }),
     // Phase 3 money: the advance paid at pickup, the deduction agreed on a claim (pesewas).
-    advanceAmount: integer('advance_amount'),
-    deductionAmount: integer('deduction_amount'),
+    advanceAmount: bigint('advance_amount', { mode: 'number' }),
+    deductionAmount: bigint('deduction_amount', { mode: 'number' }),
     declineReasonKey: text('decline_reason_key'),
     disputeNote: text('dispute_note'),
-    fundingAttempts: integer('funding_attempts').notNull().default(0),
-    acceptedAt: integer('accepted_at'),
-    fundedAt: integer('funded_at'),
-    pickupConfirmedAt: integer('pickup_confirmed_at'),
-    gradedAt: integer('graded_at'),
-    deliveredAt: integer('delivered_at'),
+    fundingAttempts: bigint('funding_attempts', { mode: 'number' }).notNull().default(0),
+    acceptedAt: bigint('accepted_at', { mode: 'number' }),
+    fundedAt: bigint('funded_at', { mode: 'number' }),
+    pickupConfirmedAt: bigint('pickup_confirmed_at', { mode: 'number' }),
+    gradedAt: bigint('graded_at', { mode: 'number' }),
+    deliveredAt: bigint('delivered_at', { mode: 'number' }),
     /** When a silent buyer's delivery confirms itself (Phase 3: delivered + 24 h). */
-    receiptDueAt: integer('receipt_due_at'),
-    receivedAt: integer('received_at'),
-    settledAt: integer('settled_at'),
-    closedAt: integer('closed_at'),
+    receiptDueAt: bigint('receipt_due_at', { mode: 'number' }),
+    receivedAt: bigint('received_at', { mode: 'number' }),
+    settledAt: bigint('settled_at', { mode: 'number' }),
+    closedAt: bigint('closed_at', { mode: 'number' }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -310,7 +319,7 @@ export const contracts = sqliteTable(
   ],
 );
 
-export const gradings = sqliteTable(
+export const gradings = f2m.table(
   'gradings',
   {
     id: id(),
@@ -323,11 +332,11 @@ export const gradings = sqliteTable(
     rubricId: text('rubric_id')
       .notNull()
       .references(() => rubrics.id), // pinned version — disputes re-grade under the same rubric
-    attempt: integer('attempt').notNull().default(1),
+    attempt: bigint('attempt', { mode: 'number' }).notNull().default(1),
     provider: text('provider', { enum: ['hf', 'mock'] }).notNull(),
     model: text('model'),
     gradeBand: text('grade_band'),
-    confidence: real('confidence'),
+    confidence: doublePrecision('confidence'),
     reasons: text('reasons'), // JSON GradingReason[]
     rawResponse: text('raw_response'),
     status: text('status', { enum: ['pending', 'completed', 'failed', 'disputed', 'resolved'] })
@@ -338,7 +347,7 @@ export const gradings = sqliteTable(
   (t) => [index('gradings_contract_idx').on(t.contractId)],
 );
 
-export const photos = sqliteTable(
+export const photos = f2m.table(
   'photos',
   {
     id: id(),
@@ -349,13 +358,13 @@ export const photos = sqliteTable(
     gradingId: text('grading_id').references(() => gradings.id),
     path: text('path').notNull(), // relative, posix separators — becomes a URL
     mime: text('mime').notNull(),
-    bytes: integer('bytes').notNull(),
+    bytes: bigint('bytes', { mode: 'number' }).notNull(),
     createdAt: createdAt(),
   },
   (t) => [index('photos_lot_idx').on(t.lotId), index('photos_contract_idx').on(t.contractId)],
 );
 
-export const payments = sqliteTable(
+export const payments = f2m.table(
   'payments',
   {
     id: id(),
@@ -368,27 +377,27 @@ export const payments = sqliteTable(
     kind: text('kind', { enum: ['advance', 'balance'] }),
     provider: text('provider', { enum: ['mock'] }).notNull(), // a licensed payment provider joins in Phase 6
     providerRef: text('provider_ref').notNull(), // UUID sent as X-Reference-Id — idempotency key
-    amount: integer('amount').notNull(), // pesewas
+    amount: bigint('amount', { mode: 'number' }).notNull(), // pesewas
     currency: text('currency').notNull(),
     counterpartyMsisdn: text('counterparty_msisdn').notNull(),
     status: text('status', { enum: ['pending', 'successful', 'failed'] }).notNull().default('pending'),
     raw: text('raw'), // last status/callback payload, JSON
     createdAt: createdAt(),
-    updatedAt: integer('updated_at')
+    updatedAt: bigint('updated_at', { mode: 'number' })
       .notNull()
       .$defaultFn(() => Date.now()),
   },
   (t) => [uniqueIndex('payments_provider_ref_idx').on(t.providerRef), index('payments_contract_idx').on(t.contractId)],
 );
 
-export const ledgerEntries = sqliteTable(
+export const ledgerEntries = f2m.table(
   'ledger_entries',
   {
     id: id(),
     journalId: text('journal_id').notNull(), // groups a balanced posting — every journal sums to zero
     account: text('account').notNull(), // external:momo | escrow:contract:{id} | farmer:{id}:payable | buyer:{id}:refunds
-    debit: integer('debit').notNull().default(0), // pesewas; exactly one of debit/credit is non-zero
-    credit: integer('credit').notNull().default(0),
+    debit: bigint('debit', { mode: 'number' }).notNull().default(0), // pesewas; exactly one of debit/credit is non-zero
+    credit: bigint('credit', { mode: 'number' }).notNull().default(0),
     contractId: text('contract_id').references(() => contracts.id),
     jobId: text('job_id').references(() => deliveryJobs.id), // set for transport-fee journals
     memoKey: text('memo_key'),
@@ -440,14 +449,14 @@ export const LOT_EVENT_TYPES = [
 ] as const;
 export type LotEventType = (typeof LOT_EVENT_TYPES)[number];
 
-export const lotEvents = sqliteTable(
+export const lotEvents = f2m.table(
   'lot_events',
   {
     id: id(),
     lotId: text('lot_id')
       .notNull()
       .references(() => lots.id),
-    seq: integer('seq').notNull(), // per-lot monotonic — append-only, never updated or deleted
+    seq: bigint('seq', { mode: 'number' }).notNull(), // per-lot monotonic — append-only, never updated or deleted
     type: text('type', { enum: LOT_EVENT_TYPES }).notNull(),
     actorType: text('actor_type', { enum: ['farmer', 'buyer', 'system'] }).notNull(),
     actorId: text('actor_id'),
@@ -460,7 +469,7 @@ export const lotEvents = sqliteTable(
 // Published reference prices — what her onions fetch in Techiman before she
 // agrees to a number at her gate. Latest-only per (commodity, market); real
 // feeds can relax this later.
-export const marketPrices = sqliteTable(
+export const marketPrices = f2m.table(
   'market_prices',
   {
     id: id(),
@@ -471,8 +480,8 @@ export const marketPrices = sqliteTable(
     regionCode: text('region_code')
       .notNull()
       .references(() => regions.code),
-    pricePerKg: integer('price_per_kg').notNull(), // pesewas
-    recordedAt: integer('recorded_at').notNull(),
+    pricePerKg: bigint('price_per_kg', { mode: 'number' }).notNull(), // pesewas
+    recordedAt: bigint('recorded_at', { mode: 'number' }).notNull(),
   },
   (t) => [uniqueIndex('market_prices_commodity_market_idx').on(t.commodityId, t.market)],
 );
@@ -491,7 +500,7 @@ export const marketPrices = sqliteTable(
 export const PRICE_SOURCES = ['deal', 'market', 'ask', 'offer', 'request', 'reference'] as const;
 export type PriceSource = (typeof PRICE_SOURCES)[number];
 
-export const priceObservations = sqliteTable(
+export const priceObservations = f2m.table(
   'price_observations',
   {
     id: id(),
@@ -500,13 +509,13 @@ export const priceObservations = sqliteTable(
       .references(() => commodities.id),
     regionCode: text('region_code').references(() => regions.code),
     market: text('market'), // proper noun when the price is a market quote
-    pricePerKg: integer('price_per_kg').notNull(), // pesewas
+    pricePerKg: bigint('price_per_kg', { mode: 'number' }).notNull(), // pesewas
     source: text('source', { enum: PRICE_SOURCES }).notNull(),
     /** Where a 'market' row came from: 'wfp', 'fpma', 'feed', 'manual'. */
     dataset: text('dataset'),
     /** The thing this price describes (a lot, an offer, a feed row) — lets a changed listing update its row, and an import run twice add nothing. */
     refId: text('ref_id'),
-    observedAt: integer('observed_at').notNull(),
+    observedAt: bigint('observed_at', { mode: 'number' }).notNull(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -523,7 +532,7 @@ export const priceObservations = sqliteTable(
 export const WATCH_KINDS = ['listing', 'price_above', 'price_below'] as const;
 export type WatchKind = (typeof WATCH_KINDS)[number];
 
-export const priceWatches = sqliteTable(
+export const priceWatches = f2m.table(
   'price_watches',
   {
     id: id(),
@@ -534,8 +543,8 @@ export const priceWatches = sqliteTable(
       .references(() => commodities.id),
     regionCode: text('region_code').references(() => regions.code), // null = anywhere in Ghana
     kind: text('kind', { enum: WATCH_KINDS }).notNull(),
-    thresholdPerKg: integer('threshold_per_kg').notNull(), // pesewas
-    lastNotifiedAt: integer('last_notified_at'),
+    thresholdPerKg: bigint('threshold_per_kg', { mode: 'number' }).notNull(), // pesewas
+    lastNotifiedAt: bigint('last_notified_at', { mode: 'number' }),
     createdAt: createdAt(),
   },
   (t) => [index('price_watches_owner_idx').on(t.role, t.ownerId), index('price_watches_commodity_idx').on(t.commodityId)],
@@ -545,7 +554,7 @@ export const priceWatches = sqliteTable(
  * Every alert we sent, so the same news never reaches the same person twice
  * and nobody is texted more than a few times a day (D-055).
  */
-export const alertLog = sqliteTable(
+export const alertLog = f2m.table(
   'alert_log',
   {
     id: id(),
@@ -560,16 +569,16 @@ export const alertLog = sqliteTable(
   ],
 );
 
-export const vehicleClasses = sqliteTable('vehicle_classes', {
+export const vehicleClasses = f2m.table('vehicle_classes', {
   code: text('code').primaryKey(), // tricycle | van | light_truck
   nameKey: text('name_key').notNull(),
-  capacityKg: real('capacity_kg').notNull(),
-  baseFee: integer('base_fee').notNull(), // pesewas
-  perKmRate: integer('per_km_rate').notNull(), // pesewas per km
-  sortOrder: integer('sort_order').notNull().default(100),
+  capacityKg: doublePrecision('capacity_kg').notNull(),
+  baseFee: bigint('base_fee', { mode: 'number' }).notNull(), // pesewas
+  perKmRate: bigint('per_km_rate', { mode: 'number' }).notNull(), // pesewas per km
+  sortOrder: bigint('sort_order', { mode: 'number' }).notNull().default(100),
 });
 
-export const drivers = sqliteTable(
+export const drivers = f2m.table(
   'drivers',
   {
     id: id(),
@@ -578,15 +587,15 @@ export const drivers = sqliteTable(
     regionCode: text('region_code')
       .notNull()
       .references(() => regions.code),
-    gpsLat: real('gps_lat'), // home base; region centroid fallback
-    gpsLng: real('gps_lng'),
+    gpsLat: doublePrecision('gps_lat'), // home base; region centroid fallback
+    gpsLng: doublePrecision('gps_lng'),
     momoMsisdn: text('momo_msisdn').notNull(),
     locale: text('locale').notNull().default('en'),
     vehicleClassCode: text('vehicle_class_code')
       .notNull()
       .references(() => vehicleClasses.code),
     pinHash: text('pin_hash'), // 4-digit PIN set at USSD registration; web-registered drivers have none (D-047)
-    active: integer('active', { mode: 'boolean' }).notNull().default(true), // the ONLINE/OFFLINE availability toggle
+    active: boolean('active').notNull().default(true), // the ONLINE/OFFLINE availability toggle
     routeRegions: text('route_regions').notNull().default('[]'), // JSON region codes served; empty = anywhere
     createdAt: createdAt(),
   },
@@ -608,7 +617,7 @@ export const DELIVERY_JOB_STATES = [
 ] as const;
 export type DeliveryJobState = (typeof DELIVERY_JOB_STATES)[number];
 
-export const deliveryJobs = sqliteTable(
+export const deliveryJobs = f2m.table(
   'delivery_jobs',
   {
     id: id(),
@@ -629,20 +638,20 @@ export const deliveryJobs = sqliteTable(
     vehicleClassCode: text('vehicle_class_code')
       .notNull()
       .references(() => vehicleClasses.code),
-    distanceKm: real('distance_km').notNull(), // frozen at request time
-    quoteAmount: integer('quote_amount').notNull(), // pesewas, frozen = base + perKm × km
-    pickupLat: real('pickup_lat').notNull(),
-    pickupLng: real('pickup_lng').notNull(),
-    dropoffLat: real('dropoff_lat').notNull(),
-    dropoffLng: real('dropoff_lng').notNull(),
+    distanceKm: doublePrecision('distance_km').notNull(), // frozen at request time
+    quoteAmount: bigint('quote_amount', { mode: 'number' }).notNull(), // pesewas, frozen = base + perKm × km
+    pickupLat: doublePrecision('pickup_lat').notNull(),
+    pickupLng: doublePrecision('pickup_lng').notNull(),
+    dropoffLat: doublePrecision('dropoff_lat').notNull(),
+    dropoffLng: doublePrecision('dropoff_lng').notNull(),
     state: text('state', { enum: DELIVERY_JOB_STATES }).notNull().default('REQUESTED'),
-    fundingAttempts: integer('funding_attempts').notNull().default(0),
-    assignedAt: integer('assigned_at'),
-    fundedAt: integer('funded_at'),
-    pickedUpAt: integer('picked_up_at'),
-    deliveredAt: integer('delivered_at'),
-    paidAt: integer('paid_at'),
-    closedAt: integer('closed_at'),
+    fundingAttempts: bigint('funding_attempts', { mode: 'number' }).notNull().default(0),
+    assignedAt: bigint('assigned_at', { mode: 'number' }),
+    fundedAt: bigint('funded_at', { mode: 'number' }),
+    pickedUpAt: bigint('picked_up_at', { mode: 'number' }),
+    deliveredAt: bigint('delivered_at', { mode: 'number' }),
+    paidAt: bigint('paid_at', { mode: 'number' }),
+    closedAt: bigint('closed_at', { mode: 'number' }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -654,7 +663,7 @@ export const deliveryJobs = sqliteTable(
 );
 
 // One shot per (job, driver) — mirrors the matches rule (D-016).
-export const deliveryJobOffers = sqliteTable(
+export const deliveryJobOffers = f2m.table(
   'delivery_job_offers',
   {
     id: id(),
@@ -664,8 +673,8 @@ export const deliveryJobOffers = sqliteTable(
     driverId: text('driver_id')
       .notNull()
       .references(() => drivers.id),
-    offeredAt: integer('offered_at').notNull(),
-    expiresAt: integer('expires_at').notNull(),
+    offeredAt: bigint('offered_at', { mode: 'number' }).notNull(),
+    expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
     status: text('status', { enum: ['offered', 'accepted', 'declined', 'expired'] }).notNull().default('offered'),
   },
   (t) => [uniqueIndex('delivery_job_offers_job_driver_idx').on(t.jobId, t.driverId)],
@@ -674,7 +683,7 @@ export const deliveryJobOffers = sqliteTable(
 // SMS outbox — "we will text you" made true. Messages are resolved into the
 // recipient's locale at queue time; the sweep delivers via the configured
 // provider (mock offline, Africa's Talking when the key lands).
-export const notifications = sqliteTable(
+export const notifications = f2m.table(
   'notifications',
   {
     id: id(),
@@ -687,7 +696,7 @@ export const notifications = sqliteTable(
     provider: text('provider'),
     error: text('error'),
     createdAt: createdAt(),
-    sentAt: integer('sent_at'),
+    sentAt: bigint('sent_at', { mode: 'number' }),
   },
   (t) => [index('notifications_phone_idx').on(t.phone), index('notifications_status_idx').on(t.status)],
 );
@@ -697,7 +706,7 @@ export const notifications = sqliteTable(
 export const VOICE_CALL_STATUSES = ['pending', 'placing', 'in_progress', 'completed', 'failed', 'no_answer'] as const;
 export type VoiceCallStatus = (typeof VOICE_CALL_STATUSES)[number];
 
-export const voiceCalls = sqliteTable(
+export const voiceCalls = f2m.table(
   'voice_calls',
   {
     id: id(),
@@ -713,13 +722,13 @@ export const voiceCalls = sqliteTable(
     offerId: text('offer_id').references(() => offers.id), // the 'bid' flow: hear an offer thread's proposal (Phase 1)
     currentNode: text('current_node'),
     status: text('status', { enum: VOICE_CALL_STATUSES }).notNull().default('pending'),
-    attempts: integer('attempts').notNull().default(0),
+    attempts: bigint('attempts', { mode: 'number' }).notNull().default(0),
     providerRef: text('provider_ref'),
     sessionRef: text('session_ref'), // the gateway's call session id
     outcome: text('outcome'), // JSON: { digits?, result? }
-    lastAttemptAt: integer('last_attempt_at'),
+    lastAttemptAt: bigint('last_attempt_at', { mode: 'number' }),
     createdAt: createdAt(),
-    updatedAt: integer('updated_at')
+    updatedAt: bigint('updated_at', { mode: 'number' })
       .notNull()
       .$defaultFn(() => Date.now()),
   },
@@ -729,7 +738,7 @@ export const voiceCalls = sqliteTable(
 // Buyer in-app notification center — read/unread semantics, distinct from the
 // SMS delivery outbox (D-026). Message resolved at queue time, same archival
 // principle as SMS.
-export const buyerNotifications = sqliteTable(
+export const buyerNotifications = f2m.table(
   'buyer_notifications',
   {
     id: id(),
@@ -742,7 +751,7 @@ export const buyerNotifications = sqliteTable(
     lotId: text('lot_id').references(() => lots.id),
     demandId: text('demand_id').references(() => demands.id),
     jobId: text('job_id').references(() => deliveryJobs.id),
-    readAt: integer('read_at'),
+    readAt: bigint('read_at', { mode: 'number' }),
     createdAt: createdAt(),
   },
   (t) => [index('buyer_notifications_buyer_idx').on(t.buyerId, t.readAt)],
@@ -751,7 +760,7 @@ export const buyerNotifications = sqliteTable(
 // Voice listings (D-038): one open-ended call = one row — the audio ref, what
 // ASR heard, what MT made of it, what the parser extracted, and the lot it
 // became. The audit trail for "the AI listed this for me".
-export const voiceListings = sqliteTable(
+export const voiceListings = f2m.table(
   'voice_listings',
   {
     id: id(),
@@ -779,7 +788,7 @@ export const voiceListings = sqliteTable(
  * row; every move is an offer_events row.
  */
 export const OFFER_STATUSES = ['open', 'accepted', 'rejected', 'withdrawn', 'expired'] as const;
-export const offers = sqliteTable(
+export const offers = f2m.table(
   'offers',
   {
     id: id(),
@@ -795,17 +804,17 @@ export const offers = sqliteTable(
     demandId: text('demand_id').references(() => demands.id), // set when it started from a buyer request
     status: text('status', { enum: OFFER_STATUSES }).notNull().default('open'),
     turn: text('turn', { enum: ['buyer', 'farmer'] }), // who must act; null once closed
-    units: real('units').notNull(), // in the listing's unit
-    pricePerUnit: integer('price_per_unit').notNull(), // pesewas
+    units: doublePrecision('units').notNull(), // in the listing's unit
+    pricePerUnit: bigint('price_per_unit', { mode: 'number' }).notNull(), // pesewas
     proposedBy: text('proposed_by', { enum: ['buyer', 'farmer'] }).notNull(),
-    proposedAt: integer('proposed_at').notNull(),
-    expiresAt: integer('expires_at'), // the current proposal lapses then
+    proposedAt: bigint('proposed_at', { mode: 'number' }).notNull(),
+    expiresAt: bigint('expires_at', { mode: 'number' }), // the current proposal lapses then
     // Request-started threads hold this many kg of the request so the engine never over-buys.
-    heldDemandKg: real('held_demand_kg').notNull().default(0),
+    heldDemandKg: doublePrecision('held_demand_kg').notNull().default(0),
     contractId: text('contract_id').references(() => contracts.id),
-    reminderSentAt: integer('reminder_sent_at'), // the "someone is waiting for your answer" SMS for this proposal
+    reminderSentAt: bigint('reminder_sent_at', { mode: 'number' }), // the "someone is waiting for your answer" SMS for this proposal
     createdAt: createdAt(),
-    updatedAt: integer('updated_at')
+    updatedAt: bigint('updated_at', { mode: 'number' })
       .notNull()
       .$defaultFn(() => Date.now()),
   },
@@ -817,7 +826,7 @@ export const offers = sqliteTable(
   ],
 );
 
-export const offerEvents = sqliteTable(
+export const offerEvents = f2m.table(
   'offer_events',
   {
     id: id(),
@@ -826,20 +835,20 @@ export const offerEvents = sqliteTable(
       .references(() => offers.id),
     by: text('by', { enum: ['buyer', 'farmer', 'system'] }).notNull(),
     action: text('action', { enum: ['bid', 'counter', 'accept', 'reject', 'withdraw', 'expire'] }).notNull(),
-    units: real('units'),
-    pricePerUnit: integer('price_per_unit'),
+    units: doublePrecision('units'),
+    pricePerUnit: bigint('price_per_unit', { mode: 'number' }),
     channel: text('channel', { enum: ['web', 'ussd', 'ivr', 'system'] }).notNull(),
     createdAt: createdAt(),
   },
   (t) => [index('offer_events_offer_idx').on(t.offerId)],
 );
 
-export const ussdSessions = sqliteTable('ussd_sessions', {
+export const ussdSessions = f2m.table('ussd_sessions', {
   sessionId: text('session_id').primaryKey(), // the gateway's sessionId
   phone: text('phone').notNull(),
   screen: text('screen').notNull(),
   ctx: text('ctx').notNull().default('{}'), // JSON — partial form data, pagination cursors, selected ids
-  updatedAt: integer('updated_at')
+  updatedAt: bigint('updated_at', { mode: 'number' })
     .notNull()
     .$defaultFn(() => Date.now()),
 });
@@ -884,7 +893,7 @@ export type OfferEvent = typeof offerEvents.$inferSelect;
  */
 export const CLAIM_REASONS = ['short_weight', 'quality', 'damaged', 'late', 'not_delivered', 'other'] as const;
 export const CLAIM_STATUSES = ['awaiting_farmer', 'accepted', 'awaiting_review', 'resolved'] as const;
-export const orderClaims = sqliteTable(
+export const orderClaims = f2m.table(
   'order_claims',
   {
     id: id(),
@@ -896,19 +905,30 @@ export const orderClaims = sqliteTable(
       .references(() => buyers.id),
     reason: text('reason', { enum: CLAIM_REASONS }).notNull(),
     note: text('note'),
-    proposedDeduction: integer('proposed_deduction').notNull(), // pesewas, ≤ what was still held
+    proposedDeduction: bigint('proposed_deduction', { mode: 'number' }).notNull(), // pesewas, ≤ what was still held
     status: text('status', { enum: CLAIM_STATUSES }).notNull().default('awaiting_farmer'),
     farmerAnswer: text('farmer_answer', { enum: ['accepted', 'refused', 'no_answer'] }),
-    answerDueAt: integer('answer_due_at').notNull(),
-    answeredAt: integer('answered_at'),
+    answerDueAt: bigint('answer_due_at', { mode: 'number' }).notNull(),
+    answeredAt: bigint('answered_at', { mode: 'number' }),
     /** F2M's decision (Phase 4 admin; the simulator route until then). */
-    finalDeduction: integer('final_deduction'),
+    finalDeduction: bigint('final_deduction', { mode: 'number' }),
     reviewStatus: text('review_status', { enum: ['pending', 'reviewed'] }).notNull().default('pending'),
     reviewNote: text('review_note'),
     reviewedBy: text('reviewed_by'),
-    reviewedAt: integer('reviewed_at'),
+    reviewedAt: bigint('reviewed_at', { mode: 'number' }),
     createdAt: createdAt(),
   },
   (t) => [index('order_claims_contract_idx').on(t.contractId), index('order_claims_status_idx').on(t.status)],
 );
 export type OrderClaim = typeof orderClaims.$inferSelect;
+
+/**
+ * Small facts the server must remember between requests (docs/HOSTING.md):
+ * on serverless no module variable survives from one call to the next, so
+ * "when did we last pull the price feed" lives here.
+ */
+export const settings = f2m.table('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+});

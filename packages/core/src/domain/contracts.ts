@@ -6,29 +6,29 @@ import { priceTermsSchema, type PriceTerms } from './types';
 
 // The full contract state machine arrives in M3; these queries serve every surface.
 
-export function getContract(id: string): Contract {
-  const contract = db.select().from(contracts).where(eq(contracts.id, id)).get();
+export async function getContract(id: string): Promise<Contract> {
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, id)))[0];
   if (!contract) throw notFound('contract');
   return contract;
 }
 
-export function getContractByMatchId(matchId: string): Contract | undefined {
-  return db.select().from(contracts).where(eq(contracts.matchId, matchId)).get();
+export async function getContractByMatchId(matchId: string): Promise<Contract | undefined> {
+  return (await db.select().from(contracts).where(eq(contracts.matchId, matchId)))[0];
 }
 
-export function listContractsForFarmer(farmerId: string, states?: ContractState[]): Contract[] {
+export async function listContractsForFarmer(farmerId: string, states?: ContractState[]): Promise<Contract[]> {
   const where = states
     ? and(eq(contracts.farmerId, farmerId), inArray(contracts.state, states))
     : eq(contracts.farmerId, farmerId);
-  return db.select().from(contracts).where(where).orderBy(desc(contracts.createdAt)).all();
+  return (await db.select().from(contracts).where(where).orderBy(desc(contracts.createdAt)));
 }
 
-export function listContractsForBuyer(buyerId: string): Contract[] {
-  return db.select().from(contracts).where(eq(contracts.buyerId, buyerId)).orderBy(desc(contracts.createdAt)).all();
+export async function listContractsForBuyer(buyerId: string): Promise<Contract[]> {
+  return (await db.select().from(contracts).where(eq(contracts.buyerId, buyerId)).orderBy(desc(contracts.createdAt)));
 }
 
-export function listContractsForLot(lotId: string): Contract[] {
-  return db.select().from(contracts).where(eq(contracts.lotId, lotId)).orderBy(desc(contracts.createdAt)).all();
+export async function listContractsForLot(lotId: string): Promise<Contract[]> {
+  return (await db.select().from(contracts).where(eq(contracts.lotId, lotId)).orderBy(desc(contracts.createdAt)));
 }
 
 export function contractPriceTerms(contract: Contract): PriceTerms {

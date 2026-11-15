@@ -4,9 +4,9 @@ import { invalid } from './common';
 
 export const home: UssdScreen = {
   key: 'home',
-  render: (ctx) => {
+  render: async (ctx) => {
     // The badge counts negotiations waiting on HER answer (Phase 1).
-    const openOffers = ctx.farmer ? listOffersForFarmer(ctx.farmer.id, 'open').filter((o) => o.turn === 'farmer').length : 0;
+    const openOffers = ctx.farmer ? (await listOffersForFarmer(ctx.farmer.id, 'open')).filter((o) => o.turn === 'farmer').length : 0;
     const lines: I18nText[] = [
       { key: 'ussd.home.title' },
       { key: 'ussd.home.hello', params: { name: ctx.farmer?.name ?? '' } },

@@ -10,18 +10,18 @@ import { gte, eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import { runMigrations } from './migrate';
 
-runMigrations();
+await runMigrations();
+await (await import('../domain/registries')).loadRegistries(); // crop names for the parsers
 const { db } = await import('./client');
 const { voiceListings } = await import('./schema');
 const { askLlm, llmEnabled } = await import('../providers/llm/index');
 
 const days = Number(process.argv.find((a) => a.startsWith('--days='))?.slice(7) ?? 30);
 const since = Date.now() - days * 24 * 60 * 60 * 1000;
-const failed = db
+const failed = (await db
   .select()
   .from(voiceListings)
-  .where(and(eq(voiceListings.status, 'failed'), gte(voiceListings.createdAt, since)))
-  .all();
+  .where(and(eq(voiceListings.status, 'failed'), gte(voiceListings.createdAt, since))));
 
 console.log(`# Failed voice listings, last ${days} days: ${failed.length}\n`);
 if (failed.length === 0) process.exit(0);

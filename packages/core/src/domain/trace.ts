@@ -15,22 +15,20 @@ export interface LotEventInput {
   payload?: Record<string, unknown>;
 }
 
-export function appendLotEvent(tx: DbLike, ev: LotEventInput): void {
-  const row = tx
-    .select({ maxSeq: max(lotEvents.seq) })
-    .from(lotEvents)
-    .where(eq(lotEvents.lotId, ev.lotId))
-    .get();
-  tx.insert(lotEvents)
-    .values({
-      lotId: ev.lotId,
-      seq: (row?.maxSeq ?? 0) + 1,
-      type: ev.type,
-      actorType: ev.actorType,
-      actorId: ev.actorId ?? null,
-      payload: ev.payload ? JSON.stringify(ev.payload) : null,
-    })
-    .run();
+export async function appendLotEvent(tx: DbLike, ev: LotEventInput): Promise<void> {
+  const row = (await tx
+      .select({ maxSeq: max(lotEvents.seq) })
+      .from(lotEvents)
+      .where(eq(lotEvents.lotId, ev.lotId)))[0];
+  (await tx.insert(lotEvents)
+        .values({
+          lotId: ev.lotId,
+          seq: (row?.maxSeq ?? 0) + 1,
+          type: ev.type,
+          actorType: ev.actorType,
+          actorId: ev.actorId ?? null,
+          payload: ev.payload ? JSON.stringify(ev.payload) : null,
+        }));
   // Every change to a listing changes what buyers see (D-054). Only the id travels.
   publishLive({ topic: 'market', audience: ['all'], ref: { lotId: ev.lotId } });
 }
@@ -39,12 +37,11 @@ export interface TraceEvent extends Omit<LotEvent, 'payload'> {
   payload: Record<string, unknown> | null;
 }
 
-export function getTrace(lotId: string): TraceEvent[] {
-  return db
-    .select()
-    .from(lotEvents)
-    .where(eq(lotEvents.lotId, lotId))
-    .orderBy(lotEvents.seq)
-    .all()
+export async function getTrace(lotId: string): Promise<TraceEvent[]> {
+  return (await db
+      .select()
+      .from(lotEvents)
+      .where(eq(lotEvents.lotId, lotId))
+      .orderBy(lotEvents.seq))
     .map((e) => ({ ...e, payload: e.payload ? (JSON.parse(e.payload) as Record<string, unknown>) : null }));
 }

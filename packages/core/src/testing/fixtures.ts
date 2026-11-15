@@ -20,8 +20,8 @@ export const TEST_BUYER = {
   regionCode: 'GREATER_ACCRA',
 } as const;
 
-export function testBuyer(): Buyer {
-  return getBuyerByPhone(TEST_BUYER.phone) ?? registerBuyer({ ...TEST_BUYER });
+export async function testBuyer(): Promise<Buyer> {
+  return await getBuyerByPhone(TEST_BUYER.phone) ?? await registerBuyer({ ...TEST_BUYER });
 }
 
 /** Accepts `test:<authUserId>:<phone digits>` and nothing else. */
@@ -40,33 +40,32 @@ export function testLoginToken(authUserId: string, phone: string): string {
  * A bearer token acting as an existing farmer, buyer or driver row — creating
  * the account link on first use. The row's own phone becomes the login.
  */
-export function testToken(role: Account['role'], roleId: string, phone: string): string {
+export async function testToken(role: Account['role'], roleId: string, phone: string): Promise<string> {
   const authUserId = `auth-${role}-${roleId}`;
-  const existing = db.select().from(accounts).where(eq(accounts.authUserId, authUserId)).get();
+  const existing = (await db.select().from(accounts).where(eq(accounts.authUserId, authUserId)))[0];
   if (!existing) {
-    db.insert(accounts)
-      .values({
-        authUserId,
-        phone: normalizePhone(phone),
-        role,
-        farmerId: role === 'farmer' ? roleId : null,
-        buyerId: role === 'buyer' ? roleId : null,
-        driverId: role === 'driver' ? roleId : null,
-      })
-      .run();
+    (await db.insert(accounts)
+            .values({
+              authUserId,
+              phone: normalizePhone(phone),
+              role,
+              farmerId: role === 'farmer' ? roleId : null,
+              buyerId: role === 'buyer' ? roleId : null,
+              driverId: role === 'driver' ? roleId : null,
+            }));
   }
   return testLoginToken(authUserId, phone);
 }
 
 /** Shorthand: a token for the shared test buyer. */
-export function testBuyerToken(): string {
-  const buyer = testBuyer();
+export async function testBuyerToken(): Promise<string> {
+  const buyer = await testBuyer();
   return testToken('buyer', buyer.id, buyer.phone!);
 }
 
 /** The newest open offer thread waiting on this farmer (Phase 1) — what the engine or a buyer bid made. */
-export function openOfferFor(farmerId: string, lotId?: string): Offer | undefined {
-  return listOffersForFarmer(farmerId, 'open').find((o) => o.turn === 'farmer' && (!lotId || o.lotId === lotId));
+export async function openOfferFor(farmerId: string, lotId?: string): Promise<Offer | undefined> {
+  return (await listOffersForFarmer(farmerId, 'open')).find((o) => o.turn === 'farmer' && (!lotId || o.lotId === lotId));
 }
 
 /**
@@ -74,7 +73,7 @@ export function openOfferFor(farmerId: string, lotId?: string): Offer | undefine
  * and the buyer's payment hold starts — what "press 1" did before Phase 1.
  */
 export async function acceptFor(farmerId: string, lotId?: string): Promise<Contract> {
-  const offer = openOfferFor(farmerId, lotId);
+  const offer = await openOfferFor(farmerId, lotId);
   if (!offer) throw new Error(`no open offer waiting on farmer ${farmerId}`);
   const { contract } = await acceptOfferThread(offer.id, 'farmer', farmerId);
   return contract;

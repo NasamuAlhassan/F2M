@@ -19,17 +19,17 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
 
   // Whether to accept or counter, from the price data alone — works with the assist off.
   app.get<{ Params: { id: string } }>('/offers/:id/advice', { preHandler: [app.authBuyerOrFarmer] }, async (req) => {
-    const offer = getOffer(req.params.id);
+    const offer = await getOffer(req.params.id);
     const party = req.user.kind === 'farmer' ? 'farmer' : 'buyer';
     const mine = party === 'farmer' ? offer.farmerId === req.user.sub : offer.buyerId === req.user.sub;
     if (!mine) throw new DomainError('Not your offer', 'FORBIDDEN', 403);
-    return { advice: adviseOffer(offer.id, party) };
+    return { advice: await adviseOffer(offer.id, party) };
   });
 
   // Does the photo show the crop the listing names? Advisory.
   app.post<{ Params: { id: string } }>('/farmer/lots/:id/photo-check', { preHandler: [app.authFarmer] }, async (req) => {
     if (!aiAssistEnabled()) throw new DomainError('The photo check is not switched on', 'AI_OFF', 503);
-    const lot = getLot(req.params.id);
+    const lot = await getLot(req.params.id);
     if (lot.farmerId !== req.user.sub) throw new DomainError('Not your lot', 'FORBIDDEN', 403);
     return { check: await checkListingPhoto(lot.id) };
   });

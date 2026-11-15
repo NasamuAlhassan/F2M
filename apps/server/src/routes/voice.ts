@@ -14,6 +14,8 @@ import {
   processVoiceListing,
   startInboundCall,
   t,
+  getMediaStore,
+  mediaUrlAbsolute,
 } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -50,14 +52,13 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
   if (config.simulatorEnabled) app.post('/voice/upload-recording', async (req, reply) => {
     const file = await req.file();
     if (!file) throw new DomainError('Attach an audio file', 'NO_FILE', 400);
-    const dir = path.join(config.storageDir, 'recordings');
-    fs.mkdirSync(dir, { recursive: true });
     // Keep the container the client actually sent: the simulator now uploads
     // WAV (the language Space can't read WebM), older clients still send WebM.
     const isWav = file.mimetype.includes('wav') || file.filename.toLowerCase().endsWith('.wav');
     const fileName = `${crypto.randomUUID()}.${isWav ? 'wav' : 'webm'}`;
-    fs.writeFileSync(path.join(dir, fileName), await file.toBuffer());
-    return reply.code(201).send({ recordingUrl: `${config.PUBLIC_BASE_URL}/recordings/${fileName}` });
+    const key = `recordings/${fileName}`;
+    await getMediaStore().put(key, await file.toBuffer(), isWav ? 'audio/wav' : 'audio/webm');
+    return reply.code(201).send({ recordingUrl: mediaUrlAbsolute(key) });
   });
 
   app.post('/voice/answer', async (req, reply) => {
@@ -85,7 +86,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
       return await answerCall();
     } catch (err) {
       req.log.error(err, 'voice answer handler failed');
-      const locale = getFarmerByPhone(phone)?.locale ?? 'en';
+      const locale = (await getFarmerByPhone(phone))?.locale ?? 'en';
       return reply
         .type('application/xml')
         .send(await sayResponse(t(locale, 'voice.list.failed', { code: config.USSD_SHORTCODE }), locale));
@@ -96,9 +97,9 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
     // a call row and the line's menu (sell, my listings, offers waiting), and
     // every later answer carries that call's id. Outbound flows keep theirs.
     if (!callId) {
-      const farmer = getFarmerByPhone(phone);
+      const farmer = await getFarmerByPhone(phone);
       const locale = farmer?.locale ?? 'en';
-      const live = getInboundCallForSession(body.sessionId);
+      const live = await getInboundCallForSession(body.sessionId);
       if (live) return reply.type('application/xml').send(await answer(live.id));
       if (!body.recordingUrl && body.transcript === undefined) {
         if (!farmer) {
@@ -106,7 +107,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
             .type('application/xml')
             .send(await sayResponse(t(locale, 'voice.list.notRegistered', { code: config.USSD_SHORTCODE }), locale));
         }
-        const call = startInboundCall({ phone: normalizePhone(phone), locale, sessionRef: body.sessionId });
+        const call = await startInboundCall({ phone: normalizePhone(phone), locale, sessionRef: body.sessionId });
         return reply.type('application/xml').send(await answer(call.id));
       }
       // A whole listing in one recording with no call around it (D-038's
@@ -118,7 +119,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
         transcriptHint: body.transcript ?? null,
       });
       if (result.status === 'listed' && result.lotId && result.parsed) {
-        const lot = getLot(result.lotId);
+        const lot = await getLot(result.lotId);
         const parsed = JSON.parse(result.parsed) as { commodityCode: string; declaredBand: string };
         return reply.type('application/xml').send(
           await sayResponse(
@@ -144,9 +145,9 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
   app.post('/voice/events', async (req, reply) => {
     const { callId } = req.query as { callId?: string };
     if (callId) {
-      const call = getVoiceCall(callId);
+      const call = await getVoiceCall(callId);
       if (call && ['placing', 'in_progress'].includes(call.status)) {
-        finishVoiceCall(callId, 'no_answer');
+        await finishVoiceCall(callId, 'no_answer');
       }
     }
     return reply.code(200).send({ ok: true });

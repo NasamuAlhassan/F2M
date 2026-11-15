@@ -17,7 +17,28 @@ function alive(pid: number): boolean {
   }
 }
 
+/**
+ * Build one migrated, seeded database for the whole run and snapshot it
+ * (docs/HOSTING.md): each test file then opens an in-memory copy in a fraction
+ * of a second instead of migrating and seeding its own (45 files, ~5 s each).
+ */
+export async function setup(): Promise<void> {
+  process.env.DATABASE_PATH = ':memory:';
+  process.env.DATABASE_URL = '';
+  const { runMigrations } = await import('../db/migrate');
+  await runMigrations();
+  const { seed } = await import('../db/seed');
+  await seed();
+  const { pglite } = await import('../db/client');
+  const blob = await pglite!.dumpDataDir('none');
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const file = path.join(DATA_DIR, `test-snapshot-${process.pid}.tar`);
+  fs.writeFileSync(file, Buffer.from(await blob.arrayBuffer()));
+  process.env.FTM_TEST_SNAPSHOT = file; // inherited by the test workers, started after this
+}
+
 export function teardown(): void {
+  if (process.env.FTM_TEST_SNAPSHOT) fs.rmSync(process.env.FTM_TEST_SNAPSHOT, { force: true });
   if (!fs.existsSync(DATA_DIR)) return;
   for (const name of fs.readdirSync(DATA_DIR)) {
     const m = /^test-(\d+)\.db(-wal|-shm)?$/.exec(name);

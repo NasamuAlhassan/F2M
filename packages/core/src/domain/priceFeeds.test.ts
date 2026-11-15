@@ -27,73 +27,72 @@ describe('importWfpCsv', () => {
     '2021-03-15,BRONG AHAFO,TECHIMAN,Techiman,3,7.6,-1.9,cereals and tubers,Cassava,68,91 KG,actual,Wholesale,USD,10,10', // wrong currency
   ].join('\n');
 
-  const rows = (code: string) =>
-    db.select().from(priceObservations).where(and(eq(priceObservations.commodityId, getCommodityByCode(code).id), eq(priceObservations.dataset, 'wfp'))).all();
+  const rows = async (code: string) =>
+    (await db.select().from(priceObservations).where(and(eq(priceObservations.commodityId, getCommodityByCode(code).id), eq(priceObservations.dataset, 'wfp'))));
 
-  it('keeps only wholesale cedi prices of our crops and converts them to pesewas per kg', () => {
-    const result = importWfpCsv(csv);
+  it('keeps only wholesale cedi prices of our crops and converts them to pesewas per kg', async () => {
+    const result = await importWfpCsv(csv);
     expect(result).toMatchObject({ read: 6, imported: 3, newest: '2021-03-15' });
-    expect(rows('MAIZE').map((r) => r.pricePerKg)).toEqual([320]);
-    expect(rows('TOMATO').map((r) => r.pricePerKg)).toEqual([500]);
-    expect(rows('PLANTAIN').map((r) => r.pricePerKg)).toEqual([250]);
-    expect(rows('CASSAVA')).toHaveLength(0);
+    expect((await rows('MAIZE')).map((r) => r.pricePerKg)).toEqual([320]);
+    expect((await rows('TOMATO')).map((r) => r.pricePerKg)).toEqual([500]);
+    expect((await rows('PLANTAIN')).map((r) => r.pricePerKg)).toEqual([250]);
+    expect(await rows('CASSAVA')).toHaveLength(0);
   });
 
-  it('puts each market in its modern region', () => {
-    expect(rows('MAIZE')[0]!.regionCode).toBe('NORTHERN');
-    expect(rows('PLANTAIN')[0]!.regionCode).toBe('BONO_EAST'); // Techiman is in Bono East, not "Brong Ahafo"
-    expect(rows('MAIZE')[0]!.source).toBe('market');
+  it('puts each market in its modern region', async () => {
+    expect((await rows('MAIZE'))[0]!.regionCode).toBe('NORTHERN');
+    expect((await rows('PLANTAIN'))[0]!.regionCode).toBe('BONO_EAST'); // Techiman is in Bono East, not "Brong Ahafo"
+    expect((await rows('MAIZE'))[0]!.source).toBe('market');
   });
 
-  it('adds nothing when the same file is loaded again', () => {
-    importWfpCsv(csv);
-    expect(rows('MAIZE')).toHaveLength(1);
+  it('adds nothing when the same file is loaded again', async () => {
+    await importWfpCsv(csv);
+    expect(await rows('MAIZE')).toHaveLength(1);
   });
 
-  it('refuses a file that is not WFP’s', () => {
-    expect(() => importWfpCsv('a,b,c\n1,2,3')).toThrow(/WFP/);
+  it('refuses a file that is not WFP’s', async () => {
+    await expect((() => importWfpCsv('a,b,c\n1,2,3'))()).rejects.toThrow(/WFP/);
   });
 });
 
 describe('ingestFeed', () => {
   const today = new Date().toISOString();
 
-  it('accepts cedis per kg or per unit, and says which rows it could not use', () => {
-    const result = ingestFeed({
-      dataset: 'test-collector',
-      observations: [
-        { commodity: 'onion', market: 'Techiman', regionCode: 'BONO_EAST', ghsPerKg: 6.5, observedAt: today },
-        { commodity: 'ONION', market: 'Tamale', regionCode: 'NORTHERN', ghsPerUnit: 300, unitKg: 50, observedAt: today },
-        { commodity: 'UNOBTAINIUM', ghsPerKg: 5 },
-        { commodity: 'ONION', regionCode: 'ATLANTIS', ghsPerKg: 5 },
-        { commodity: 'ONION', ghsPerKg: 5, observedAt: '2999-01-01' },
-        { commodity: 'ONION', ghsPerKg: 5000 },
-      ],
-    });
+  it('accepts cedis per kg or per unit, and says which rows it could not use', async () => {
+    const result = await ingestFeed({
+          dataset: 'test-collector',
+          observations: [
+            { commodity: 'onion', market: 'Techiman', regionCode: 'BONO_EAST', ghsPerKg: 6.5, observedAt: today },
+            { commodity: 'ONION', market: 'Tamale', regionCode: 'NORTHERN', ghsPerUnit: 300, unitKg: 50, observedAt: today },
+            { commodity: 'UNOBTAINIUM', ghsPerKg: 5 },
+            { commodity: 'ONION', regionCode: 'ATLANTIS', ghsPerKg: 5 },
+            { commodity: 'ONION', ghsPerKg: 5, observedAt: '2999-01-01' },
+            { commodity: 'ONION', ghsPerKg: 5000 },
+          ],
+        });
     expect(result.accepted).toBe(2);
     expect(result.rejected.map((r) => r.index)).toEqual([2, 3, 4, 5]);
-    const onion = db
-      .select()
-      .from(priceObservations)
-      .where(and(eq(priceObservations.commodityId, getCommodityByCode('ONION').id), eq(priceObservations.dataset, 'test-collector')))
-      .all()
+    const onion = (await db
+          .select()
+          .from(priceObservations)
+          .where(and(eq(priceObservations.commodityId, getCommodityByCode('ONION').id), eq(priceObservations.dataset, 'test-collector'))))
       .map((r) => r.pricePerKg)
       .sort();
     expect(onion).toEqual([600, 650]);
   });
 
-  it('is repeatable: the same report on the same day is one row', () => {
+  it('is repeatable: the same report on the same day is one row', async () => {
     const feed = { dataset: 'test-repeat', observations: [{ commodity: 'RICE', market: 'Wa', ghsPerKg: 9, observedAt: today }] };
-    ingestFeed(feed);
-    ingestFeed({ ...feed, observations: [{ ...feed.observations[0]!, ghsPerKg: 9.5 }] });
-    const rice = db.select().from(priceObservations).where(eq(priceObservations.dataset, 'test-repeat')).all();
+    await ingestFeed(feed);
+    await ingestFeed({ ...feed, observations: [{ ...feed.observations[0]!, ghsPerKg: 9.5 }] });
+    const rice = (await db.select().from(priceObservations).where(eq(priceObservations.dataset, 'test-repeat')));
     expect(rice).toHaveLength(1);
     expect(rice[0]!.pricePerKg).toBe(950);
   });
 
-  it('rejects a malformed feed outright', () => {
-    expect(() => ingestFeed({ dataset: 'x', observations: [] })).toThrow();
-    expect(() => ingestFeed({ dataset: 'bad name!', observations: [{ commodity: 'MAIZE', ghsPerKg: 4 }] })).toThrow();
-    expect(() => ingestFeed({ dataset: 'x', observations: [{ commodity: 'MAIZE' }] })).toThrow();
+  it('rejects a malformed feed outright', async () => {
+    await expect((() => ingestFeed({ dataset: 'x', observations: [] }))()).rejects.toThrow();
+    await expect((() => ingestFeed({ dataset: 'bad name!', observations: [{ commodity: 'MAIZE', ghsPerKg: 4 }] }))()).rejects.toThrow();
+    await expect((() => ingestFeed({ dataset: 'x', observations: [{ commodity: 'MAIZE' }] }))()).rejects.toThrow();
   });
 });

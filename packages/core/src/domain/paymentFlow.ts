@@ -23,8 +23,8 @@ function smsDate(ms: number): string {
 
 const MAX_FUNDING_ATTEMPTS = 2;
 
-function getContractRow(contractId: string): Contract {
-  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+async function getContractRow(contractId: string): Promise<Contract> {
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, contractId)))[0];
   if (!contract) throw notFound('contract');
   return contract;
 }
@@ -34,30 +34,29 @@ function getContractRow(contractId: string): Contract {
  * contract. Status lands via pollPaymentsOnce, never via the initiate call.
  */
 export async function initiateHold(contractId: string): Promise<Payment> {
-  const contract = getContractRow(contractId);
+  const contract = await getContractRow(contractId);
   if (contract.state !== 'ACCEPTED') {
     throw new DomainError(`Cannot fund a contract in ${contract.state}`, 'INVALID_STATE', 409);
   }
-  const buyer = db.select().from(buyers).where(eq(buyers.id, contract.buyerId)).get();
+  const buyer = (await db.select().from(buyers).where(eq(buyers.id, contract.buyerId)))[0];
   if (!buyer) throw notFound('buyer');
 
   const provider = getPaymentProvider();
   const referenceId = crypto.randomUUID();
-  const payment = db
-    .insert(payments)
-    .values({
-      contractId: contract.id,
-      direction: 'collection',
-      provider: provider.name,
-      providerRef: referenceId,
-      amount: contract.holdAmount,
-      currency: provider.settlementCurrency,
-      counterpartyMsisdn: buyer.momoMsisdn,
-      status: 'pending',
-    })
-    .returning()
-    .get();
-  db.update(contracts).set({ settlementCurrency: provider.settlementCurrency }).where(eq(contracts.id, contract.id)).run();
+  const payment = (await db
+        .insert(payments)
+        .values({
+          contractId: contract.id,
+          direction: 'collection',
+          provider: provider.name,
+          providerRef: referenceId,
+          amount: contract.holdAmount,
+          currency: provider.settlementCurrency,
+          counterpartyMsisdn: buyer.momoMsisdn,
+          status: 'pending',
+        })
+        .returning())[0]!;
+  (await db.update(contracts).set({ settlementCurrency: provider.settlementCurrency }).where(eq(contracts.id, contract.id)));
 
   try {
     const result = await provider.requestHold({
@@ -69,18 +68,16 @@ export async function initiateHold(contractId: string): Promise<Payment> {
       note: `FTM hold ${contract.id.slice(0, 8)}`,
     });
     if (result.status === 'failed') {
-      db.update(payments)
-        .set({ status: 'failed', raw: JSON.stringify(result.raw ?? null), updatedAt: Date.now() })
-        .where(eq(payments.id, payment.id))
-        .run();
-      handleCollectionFailure(contract.id);
+      (await db.update(payments)
+                .set({ status: 'failed', raw: JSON.stringify(result.raw ?? null), updatedAt: Date.now() })
+                .where(eq(payments.id, payment.id)));
+      await handleCollectionFailure(contract.id);
     }
   } catch (err) {
     // Network error at initiation: leave pending — the poll timeout will resolve it.
-    db.update(payments)
-      .set({ raw: JSON.stringify({ initiateError: String(err) }), updatedAt: Date.now() })
-      .where(eq(payments.id, payment.id))
-      .run();
+    (await db.update(payments)
+            .set({ raw: JSON.stringify({ initiateError: String(err) }), updatedAt: Date.now() })
+            .where(eq(payments.id, payment.id)));
   }
   return payment;
 }
@@ -91,37 +88,38 @@ export async function initiateHold(contractId: string): Promise<Payment> {
  * disputed re-grade that came back REJECT), it is not pulled back (Phase 3,
  * the same rule as a claim): the buyer gets the rest.
  */
-export function refundHold(contractId: string, payload?: Record<string, unknown>): Contract {
-  const contract = getContractRow(contractId);
-  const { landed, pending } = farmerPaid(contractId);
+export async function refundHold(contractId: string, payload?: Record<string, unknown>): Promise<Contract> {
+  const contract = await getContractRow(contractId);
+  const { landed, pending } = await farmerPaid(contractId);
   const refund = contract.holdAmount - landed - pending;
   return transitionContract(contractId, 'CANCELLED_REFUNDED', { type: 'system' }, {
     payload: { ...payload, ...(landed + pending > 0 ? { advanceKept: landed + pending } : {}) },
-    also: (tx) => {
-      postJournal(tx, contractId, [
-        { account: ACCOUNTS.escrow(contractId), debit: refund, memoKey: 'ledger.refund' },
-        { account: ACCOUNTS.buyerRefunds(contract.buyerId), credit: refund, memoKey: 'ledger.refund' },
-      ]);
+    also: async (tx) => {
+      await postJournal(tx, contractId, [
+                { account: ACCOUNTS.escrow(contractId), debit: refund, memoKey: 'ledger.refund' },
+                { account: ACCOUNTS.buyerRefunds(contract.buyerId), credit: refund, memoKey: 'ledger.refund' },
+              ]);
     },
   });
 }
 
-function handleCollectionFailure(contractId: string): void {
-  const contract = getContractRow(contractId);
+async function handleCollectionFailure(contractId: string): Promise<void> {
+  const contract = await getContractRow(contractId);
   if (contract.state !== 'ACCEPTED' && contract.state !== 'FUNDING_FAILED') return;
 
   if (contract.state === 'ACCEPTED') {
-    transitionContract(contractId, 'FUNDING_FAILED', { type: 'system' });
+    await transitionContract(contractId, 'FUNDING_FAILED', { type: 'system' });
   }
   const attempts = contract.fundingAttempts + 1;
-  db.update(contracts).set({ fundingAttempts: attempts }).where(eq(contracts.id, contractId)).run();
+  (await db.update(contracts).set({ fundingAttempts: attempts }).where(eq(contracts.id, contractId)));
 
   if (attempts < MAX_FUNDING_ATTEMPTS) {
     // One retry with a fresh reference UUID.
-    transitionContract(contractId, 'ACCEPTED', { type: 'system' });
-    void initiateHold(contractId).catch(() => {});
+    await transitionContract(contractId, 'ACCEPTED', { type: 'system' });
+    // Awaited: on serverless a function may stop the moment it answers, taking unawaited work with it.
+    await initiateHold(contractId).catch(() => {});
   } else {
-    transitionContract(contractId, 'CANCELLED', { type: 'system' });
+    await transitionContract(contractId, 'CANCELLED', { type: 'system' });
   }
 }
 
@@ -131,7 +129,7 @@ function handleCollectionFailure(contractId: string): void {
  */
 export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: number }> {
   const provider = getPaymentProvider();
-  const pending = db.select().from(payments).where(eq(payments.status, 'pending')).all();
+  const pending = (await db.select().from(payments).where(eq(payments.status, 'pending')));
   let resolved = 0;
 
   for (const payment of pending) {
@@ -157,60 +155,59 @@ export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: nu
     }
     if (status === 'pending') continue;
 
-    db.update(payments)
-      .set({ status, raw: JSON.stringify(raw), updatedAt: now })
-      .where(eq(payments.id, payment.id))
-      .run();
+    (await db.update(payments)
+            .set({ status, raw: JSON.stringify(raw), updatedAt: now })
+            .where(eq(payments.id, payment.id)));
     resolved += 1;
 
     // Transport-fee payments resolve through the delivery-job machine.
     if (payment.jobId) {
-      resolveJobPayment({ ...payment, status }, status);
+      await resolveJobPayment({ ...payment, status }, status);
       continue;
     }
 
-    const contract = getContractRow(payment.contractId);
+    const contract = await getContractRow(payment.contractId);
     if (payment.direction === 'collection') {
       if (status === 'successful' && contract.state === 'ACCEPTED') {
-        transitionContract(contract.id, 'FUNDS_HELD', { type: 'system' }, {
-          payload: { paymentId: payment.id, amount: payment.amount },
-          also: (tx) => {
-            postJournal(tx, contract.id, [
-              { account: ACCOUNTS.external, debit: contract.holdAmount, memoKey: 'ledger.hold' },
-              { account: ACCOUNTS.escrow(contract.id), credit: contract.holdAmount, memoKey: 'ledger.hold' },
-            ]);
-          },
-        });
-        const farmer = db.select().from(farmers).where(eq(farmers.id, contract.farmerId)).get();
-        const demand = db.select().from(demands).where(eq(demands.id, contract.demandId)).get();
+        await transitionContract(contract.id, 'FUNDS_HELD', { type: 'system' }, {
+                    payload: { paymentId: payment.id, amount: payment.amount },
+                    also: async (tx) => {
+                      await postJournal(tx, contract.id, [
+                                      { account: ACCOUNTS.external, debit: contract.holdAmount, memoKey: 'ledger.hold' },
+                                      { account: ACCOUNTS.escrow(contract.id), credit: contract.holdAmount, memoKey: 'ledger.hold' },
+                                    ]);
+                    },
+                  });
+        const farmer = (await db.select().from(farmers).where(eq(farmers.id, contract.farmerId)))[0];
+        const demand = (await db.select().from(demands).where(eq(demands.id, contract.demandId)))[0];
         if (farmer && demand) {
-          queueSms({
-            phone: farmer.phone,
-            locale: farmer.locale,
-            templateKey: 'sms.funded',
-            params: {
-              amount: formatGhs(contract.holdAmount),
-              commodity: t(farmer.locale, getCommodityById(contract.commodityId).nameKey),
-              start: smsDate(demand.windowStart),
-              end: smsDate(demand.windowEnd),
-            },
-            contractId: contract.id,
-            lotId: contract.lotId,
-          });
+          await queueSms({
+                        phone: farmer.phone,
+                        locale: farmer.locale,
+                        templateKey: 'sms.funded',
+                        params: {
+                          amount: formatGhs(contract.holdAmount),
+                          commodity: t(farmer.locale, getCommodityById(contract.commodityId).nameKey),
+                          start: smsDate(demand.windowStart),
+                          end: smsDate(demand.windowEnd),
+                        },
+                        contractId: contract.id,
+                        lotId: contract.lotId,
+                      });
         }
-        queueBuyerNotification({
-          buyerId: contract.buyerId,
-          templateKey: 'notif.fundsHeld',
-          params: {
-            amount: formatGhs(contract.holdAmount),
-            kg: contract.quantityKg,
-            commodity: t('en', getCommodityById(contract.commodityId).nameKey),
-          },
-          contractId: contract.id,
-          lotId: contract.lotId,
-        });
+        await queueBuyerNotification({
+                    buyerId: contract.buyerId,
+                    templateKey: 'notif.fundsHeld',
+                    params: {
+                      amount: formatGhs(contract.holdAmount),
+                      kg: contract.quantityKg,
+                      commodity: t('en', getCommodityById(contract.commodityId).nameKey),
+                    },
+                    contractId: contract.id,
+                    lotId: contract.lotId,
+                  });
       } else if (status === 'failed') {
-        handleCollectionFailure(contract.id);
+        await handleCollectionFailure(contract.id);
       }
     } else {
       // A farmer payout (Phase 3: the advance at pickup or the balance on
@@ -224,7 +221,7 @@ export async function pollPaymentsOnce(now = Date.now()): Promise<{ resolved: nu
 
 /** Poll one reference immediately — what a MoMo callback triggers (D-009). */
 export async function pollPaymentByReference(referenceId: string): Promise<void> {
-  const payment = db.select().from(payments).where(eq(payments.providerRef, referenceId)).get();
+  const payment = (await db.select().from(payments).where(eq(payments.providerRef, referenceId)))[0];
   if (!payment || payment.status !== 'pending') return;
   await pollPaymentsOnce();
 }
@@ -240,14 +237,14 @@ export async function acceptOfferThread(
   actorId: string,
   channel: Channel = 'web',
 ): Promise<{ offer: Offer; contract: Contract }> {
-  const { offer, contractId } = acceptProposal(offerId, party, actorId, channel);
+  const { offer, contractId } = await acceptProposal(offerId, party, actorId, channel);
   await initiateHold(contractId);
-  return { offer, contract: getContractRow(contractId) };
+  return { offer, contract: await getContractRow(contractId) };
 }
 
 /** Farmer accepts on USSD → the state transition and the funding hold, together. */
 export async function acceptOfferAndHold(contractId: string, farmerId: string): Promise<Contract> {
-  const contract = acceptOffer(contractId, farmerId);
+  const contract = await acceptOffer(contractId, farmerId);
   await initiateHold(contractId);
   return contract;
 }
@@ -259,17 +256,17 @@ const PICKUP_GRACE_MS = 24 * 60 * 60 * 1000; // one day beyond the delivery wind
  * plus a day of grace has passed with no pickup confirmation. Sweep-driven.
  * Lands CANCELLED_REFUNDED, which also counts against the farmer's history.
  */
-export function refundMissedPickups(now = Date.now()): number {
-  const held = db.select().from(contracts).where(eq(contracts.state, 'FUNDS_HELD')).all();
+export async function refundMissedPickups(now = Date.now()): Promise<number> {
+  const held = (await db.select().from(contracts).where(eq(contracts.state, 'FUNDS_HELD')));
   // Defensive (D-025): goods already on a truck are not a missed pickup, even
   // if the contract's own pickup confirmation hasn't landed yet.
-  const inTransit = contractsWithGoodsInTransit();
+  const inTransit = await contractsWithGoodsInTransit();
   let refunded = 0;
   for (const contract of held) {
     if (inTransit.has(contract.id)) continue;
-    const demand = db.select().from(demands).where(eq(demands.id, contract.demandId)).get();
+    const demand = (await db.select().from(demands).where(eq(demands.id, contract.demandId)))[0];
     if (demand && now > demand.windowEnd + PICKUP_GRACE_MS) {
-      refundHold(contract.id, { reason: 'pickup_window_missed' });
+      await refundHold(contract.id, { reason: 'pickup_window_missed' });
       refunded += 1;
     }
   }

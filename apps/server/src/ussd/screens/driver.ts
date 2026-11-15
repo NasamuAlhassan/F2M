@@ -63,15 +63,15 @@ export const driverRegRegion: UssdScreen = {
 
 export const driverRegVehicle: UssdScreen = {
   key: 'driver_reg_vehicle',
-  render: (ctx) => [
+  render: async (ctx) => [
     { key: 'ussd.driver.reg.vehicle' },
     ...listLines(
-      listVehicleClasses().map((v) => t(ctx.locale, v.nameKey)),
+      (await listVehicleClasses()).map((v) => t(ctx.locale, v.nameKey)),
       { hasMore: false, back: false },
     ),
   ],
-  handleInput: (input, ctx) => {
-    const classes = listVehicleClasses();
+  handleInput: async (input, ctx) => {
+    const classes = await listVehicleClasses();
     const idx = parseSelection(input, classes.length, 0);
     if (idx === null) return invalid();
     ctx.data.drvVehicle = classes[idx]!.code;
@@ -103,18 +103,18 @@ export const driverRegConfirm: UssdScreen = {
     { key: 'ussd.common.confirm' },
     { key: 'ussd.common.cancel' },
   ],
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '2') return { end: [{ key: 'ussd.common.cancelled' }] };
     if (input !== '1') return invalid();
     try {
-      const driver = registerDriver({
-        phone: ctx.phone,
-        name: String(ctx.data.drvName),
-        regionCode: String(ctx.data.drvRegion),
-        vehicleClassCode: String(ctx.data.drvVehicle),
-        pin: String(ctx.data.drvPin),
-        locale: typeof ctx.data.locale === 'string' ? ctx.data.locale : undefined,
-      });
+      const driver = await registerDriver({
+              phone: ctx.phone,
+              name: String(ctx.data.drvName),
+              regionCode: String(ctx.data.drvRegion),
+              vehicleClassCode: String(ctx.data.drvVehicle),
+              pin: String(ctx.data.drvPin),
+              locale: typeof ctx.data.locale === 'string' ? ctx.data.locale : undefined,
+            });
       return { end: [{ key: 'ussd.driver.reg.done', params: { name: driver.name } }] };
     } catch (err) {
       if (err instanceof DomainError && (err.code === 'DRIVER_EXISTS' || err.code === 'ROLE_TAKEN')) {
@@ -129,8 +129,8 @@ export const driverRegConfirm: UssdScreen = {
 
 export const driverHome: UssdScreen = {
   key: 'driver_home',
-  render: (ctx) => {
-    const offers = ctx.driver ? listOffersForDriver(ctx.driver.id).length : 0;
+  render: async (ctx) => {
+    const offers = ctx.driver ? (await listOffersForDriver(ctx.driver.id)).length : 0;
     const lines: I18nText[] = [
       { key: 'ussd.driver.home.title' },
       { key: 'ussd.driver.home.hello', params: { name: ctx.driver?.name ?? '' } },
@@ -163,23 +163,23 @@ export const driverHome: UssdScreen = {
 
 export const driverOffers: UssdScreen = {
   key: 'driver_offers',
-  render: (ctx) => {
+  render: async (ctx) => {
     if (!ctx.driver) return [{ key: 'ussd.driver.offers.none' }, { key: 'ussd.common.back' }];
-    const offers = listOffersForDriver(ctx.driver.id);
+    const offers = await listOffersForDriver(ctx.driver.id);
     ctx.data.drvOfferJobIds = offers.map((o) => o.jobId);
     if (offers.length === 0) return [{ key: 'ussd.driver.offers.none' }, { key: 'ussd.common.back' }];
     return [
       { key: 'ussd.driver.offers.title' },
       ...listLines(
-        offers.map((o) => {
-          const { quantityKg } = jobSummary(o.job);
-          return t(ctx.locale, 'ussd.driver.offers.item', {
-            code: o.job.jobCode,
-            kg: quantityKg,
-            km: o.job.distanceKm,
-            fee: formatGhs(o.job.quoteAmount),
-          });
-        }),
+        await Promise.all(offers.map(async (o) => {
+                    const { quantityKg } = await jobSummary(o.job);
+                    return t(ctx.locale, 'ussd.driver.offers.item', {
+                      code: o.job.jobCode,
+                      kg: quantityKg,
+                      km: o.job.distanceKm,
+                      fee: formatGhs(o.job.quoteAmount),
+                    });
+                  })),
         { hasMore: false },
       ),
     ];
@@ -196,9 +196,9 @@ export const driverOffers: UssdScreen = {
 
 export const driverOfferDetail: UssdScreen = {
   key: 'driver_offer_detail',
-  render: (ctx) => {
-    const job = getJob(String(ctx.data.drvJobId));
-    const { commodityCode, quantityKg } = jobSummary(job);
+  render: async (ctx) => {
+    const job = await getJob(String(ctx.data.drvJobId));
+    const { commodityCode, quantityKg } = await jobSummary(job);
     return [
       {
         key: 'ussd.driver.offer.detail',
@@ -231,7 +231,7 @@ export const driverOfferDetail: UssdScreen = {
       }
     }
     if (input === '2') {
-      declineJob(jobId, ctx.driver.id);
+      await declineJob(jobId, ctx.driver.id);
       return { end: [{ key: 'ussd.driver.offer.declined' }] };
     }
     return invalid();
@@ -240,9 +240,9 @@ export const driverOfferDetail: UssdScreen = {
 
 export const driverActive: UssdScreen = {
   key: 'driver_active',
-  render: (ctx) => {
+  render: async (ctx) => {
     if (!ctx.driver) return [{ key: 'ussd.driver.job.none' }, { key: 'ussd.common.back' }];
-    const active = listJobsForDriver(ctx.driver.id).find((j) =>
+    const active = (await listJobsForDriver(ctx.driver.id)).find((j) =>
       ['ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'ARRIVED', 'DELIVERED'].includes(j.state),
     );
     ctx.data.drvActiveJobId = active?.id ?? null;
@@ -266,26 +266,26 @@ export const driverActive: UssdScreen = {
     lines.push({ key: 'ussd.common.back' });
     return lines;
   },
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '0') return { next: 'driver_home' };
     if (!ctx.driver) return invalid();
     const jobId = ctx.data.drvActiveJobId as string | null;
     if (!jobId) return invalid();
-    const job = getJob(jobId);
+    const job = await getJob(jobId);
     if (job.state === 'FUNDS_HELD' && input === '1') {
-      confirmJobPickup(jobId, ctx.driver.id);
+      await confirmJobPickup(jobId, ctx.driver.id);
       return { end: [{ key: 'ussd.driver.job.pickupDone', params: { code: job.jobCode } }] };
     }
     if (job.state === 'FUNDS_HELD' && input === '2') {
-      driverAtPickup(jobId, ctx.driver.id);
+      await driverAtPickup(jobId, ctx.driver.id);
       return { end: [{ key: 'ussd.driver.job.atPickupDone', params: { code: job.jobCode } }] };
     }
     if (job.state === 'PICKED_UP' && input === '1') {
-      driverDeparted(jobId, ctx.driver.id);
+      await driverDeparted(jobId, ctx.driver.id);
       return { end: [{ key: 'ussd.driver.job.departedDone', params: { code: job.jobCode } }] };
     }
     if (job.state === 'PICKED_UP' && input === '2') {
-      driverArrived(jobId, ctx.driver.id);
+      await driverArrived(jobId, ctx.driver.id);
       return { end: [{ key: 'ussd.driver.job.arrivedDone', params: { code: job.jobCode } }] };
     }
     return invalid();
@@ -294,9 +294,9 @@ export const driverActive: UssdScreen = {
 
 export const driverPayments: UssdScreen = {
   key: 'driver_payments',
-  render: (ctx) => {
+  render: async (ctx) => {
     if (!ctx.driver) return [{ key: 'ussd.pay.none' }, { key: 'ussd.common.back' }];
-    const paid = listJobsForDriver(ctx.driver.id)
+    const paid = (await listJobsForDriver(ctx.driver.id))
       .filter((j) => j.state === 'PAID')
       .slice(0, 3);
     if (paid.length === 0) return [{ key: 'ussd.pay.none' }, { key: 'ussd.common.back' }];

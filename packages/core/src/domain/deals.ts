@@ -26,6 +26,7 @@ import { notFound } from './errors';
 import { getCommodityById, getRegion } from './registries';
 import { advanceFor, farmerPaid, orderTotal, stillHeld } from './settlement';
 import { getTrace } from './trace';
+import { mediaUrl } from '../storage/index';
 
 /**
  * One page per sale — "the deal" — for its buyer, farmer and driver alike
@@ -71,11 +72,11 @@ export interface TimelineItem {
 }
 
 /** Which party of this deal a login is, or null (the deal is then not theirs to see). */
-export function dealRoleOf(contract: Contract, login: { kind: string; sub: string }): DealRole | null {
+export async function dealRoleOf(contract: Contract, login: { kind: string; sub: string }): Promise<DealRole | null> {
   if (login.kind === 'buyer' && contract.buyerId === login.sub) return 'buyer';
   if (login.kind === 'farmer' && contract.farmerId === login.sub) return 'farmer';
   if (login.kind === 'driver') {
-    const job = getJobForContract(contract.id);
+    const job = await getJobForContract(contract.id);
     if (job?.driverId === login.sub) return 'driver';
   }
   return null;
@@ -84,8 +85,8 @@ export function dealRoleOf(contract: Contract, login: { kind: string; sub: strin
 const LIVE_JOB: DeliveryJob['state'][] = ['REQUESTED', 'NO_DRIVER', 'ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD', 'PICKED_UP', 'ARRIVED', 'DELIVERED', 'PAID'];
 
 /** Whose move it is, and what — the same answer for every screen and channel. */
-export function dealNextStep(contract: Contract): NextStep | null {
-  const job = getJobForContract(contract.id);
+export async function dealNextStep(contract: Contract): Promise<NextStep | null> {
+  const job = await getJobForContract(contract.id);
   const liveJob = job && LIVE_JOB.includes(job.state) ? job : undefined;
   switch (contract.state) {
     case 'OFFERED':
@@ -113,7 +114,7 @@ export function dealNextStep(contract: Contract): NextStep | null {
     case 'DELIVERED':
       return { actor: 'buyer', action: 'confirm_receipt', dueAt: contract.receiptDueAt };
     case 'CLAIMED': {
-      const claim = latestClaim(contract.id);
+      const claim = await latestClaim(contract.id);
       if (claim?.status === 'awaiting_farmer') return { actor: 'farmer', action: 'answer_claim', dueAt: claim.answerDueAt, ref: claim.id };
       return { actor: 'f2m', action: 'review_claim', dueAt: null, ref: claim?.id };
     }
@@ -124,8 +125,8 @@ export function dealNextStep(contract: Contract): NextStep | null {
   }
 }
 
-function latestClaim(contractId: string): OrderClaim | undefined {
-  return db.select().from(orderClaims).where(eq(orderClaims.contractId, contractId)).all().at(-1);
+async function latestClaim(contractId: string): Promise<OrderClaim | undefined> {
+  return (await db.select().from(orderClaims).where(eq(orderClaims.contractId, contractId))).at(-1);
 }
 
 const CHANNEL: Record<string, DealChannel> = { web: 'web', ussd: 'ussd', ivr: 'voice', system: null };
@@ -162,14 +163,14 @@ const JOB_KINDS: Record<string, string> = {
 /** What each role may see in a timeline item's data: the driver never sees prices or the haggle. */
 const MONEY_KEYS = ['amount', 'pricePerUnit', 'total', 'finalAmount', 'deduction', 'proposedDeduction', 'finalDeduction', 'refunded', 'paidToFarmer'];
 
-function timeline(contract: Contract, job: DeliveryJob | undefined, viewer: DealRole): TimelineItem[] {
+async function timeline(contract: Contract, job: DeliveryJob | undefined, viewer: DealRole): Promise<TimelineItem[]> {
   const items: TimelineItem[] = [];
   const add = (item: TimelineItem) => items.push(item);
 
   // The negotiation that made the deal (buyer and farmer only: it is their business).
-  const thread = db.select().from(offers).where(eq(offers.contractId, contract.id)).get();
+  const thread = (await db.select().from(offers).where(eq(offers.contractId, contract.id)))[0];
   if (thread && viewer !== 'driver') {
-    for (const e of db.select().from(offerEvents).where(eq(offerEvents.offerId, thread.id)).all()) {
+    for (const e of (await db.select().from(offerEvents).where(eq(offerEvents.offerId, thread.id)))) {
       if (e.action === 'accept') continue; // the order's own "accepted" step says it
       add({
         id: e.id,
@@ -183,7 +184,7 @@ function timeline(contract: Contract, job: DeliveryJob | undefined, viewer: Deal
   }
 
   // The order's and the transport's steps, from the lot's history.
-  for (const ev of getTrace(contract.lotId)) {
+  for (const ev of await getTrace(contract.lotId)) {
     const p = (ev.payload ?? {}) as Record<string, unknown>;
     const ofThisDeal = p.contractId === contract.id || (job && p.jobId === job.id);
     if (!ofThisDeal) continue;
@@ -207,7 +208,7 @@ function timeline(contract: Contract, job: DeliveryJob | undefined, viewer: Deal
   }
 
   // Money that landed.
-  for (const pay of db.select().from(payments).where(and(eq(payments.contractId, contract.id), eq(payments.status, 'successful'))).all()) {
+  for (const pay of (await db.select().from(payments).where(and(eq(payments.contractId, contract.id), eq(payments.status, 'successful'))))) {
     if (pay.direction !== 'disbursement') continue;
     const kind = pay.jobId ? 'driver_paid' : pay.kind === 'advance' ? 'advance_paid' : 'balance_paid';
     if (viewer === 'driver' && kind !== 'driver_paid') continue;
@@ -215,7 +216,7 @@ function timeline(contract: Contract, job: DeliveryJob | undefined, viewer: Deal
   }
 
   // Claims: opened is in the trace; the answer and F2M's decision come from the claim itself.
-  for (const claim of db.select().from(orderClaims).where(eq(orderClaims.contractId, contract.id)).all()) {
+  for (const claim of (await db.select().from(orderClaims).where(eq(orderClaims.contractId, contract.id)))) {
     if (claim.answeredAt) {
       add({ id: `${claim.id}:answer`, at: claim.answeredAt, kind: 'claim_answered', actor: claim.farmerAnswer === 'no_answer' ? 'system' : 'farmer', channel: null, data: { answer: claim.farmerAnswer } });
     }
@@ -226,13 +227,13 @@ function timeline(contract: Contract, job: DeliveryJob | undefined, viewer: Deal
 
   // What F2M told the farmer, so the buyer knows they were reached, in their own language.
   if (viewer !== 'driver') {
-    const farmer = db.select().from(farmers).where(eq(farmers.id, contract.farmerId)).get();
+    const farmer = (await db.select().from(farmers).where(eq(farmers.id, contract.farmerId)))[0];
     if (farmer) {
-      for (const n of db.select().from(notifications).where(and(eq(notifications.contractId, contract.id), eq(notifications.phone, farmer.phone))).all()) {
+      for (const n of (await db.select().from(notifications).where(and(eq(notifications.contractId, contract.id), eq(notifications.phone, farmer.phone))))) {
         add({ id: n.id, at: n.createdAt, kind: 'notice_sent', actor: 'system', channel: 'sms', data: { to: 'farmer', template: n.templateKey, locale: farmer.locale, status: n.status } });
       }
       const callFilter = thread ? or(eq(voiceCalls.contractId, contract.id), eq(voiceCalls.offerId, thread.id)) : eq(voiceCalls.contractId, contract.id);
-      for (const c of db.select().from(voiceCalls).where(and(eq(voiceCalls.phone, farmer.phone), callFilter!)).all()) {
+      for (const c of (await db.select().from(voiceCalls).where(and(eq(voiceCalls.phone, farmer.phone), callFilter!)))) {
         add({ id: c.id, at: c.createdAt, kind: 'notice_sent', actor: 'system', channel: 'voice', data: { to: 'farmer', flow: c.flow, locale: c.locale, status: c.status } });
       }
     }
@@ -250,22 +251,22 @@ function timeline(contract: Contract, job: DeliveryJob | undefined, viewer: Deal
  * while the deal is live (paid for and not yet closed), and the driver's only
  * while the job is.
  */
-export function getDealView(contractId: string, viewer: DealRole) {
-  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+export async function getDealView(contractId: string, viewer: DealRole) {
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, contractId)))[0];
   if (!contract) throw notFound('deal');
-  const lot = db.select().from(lots).where(eq(lots.id, contract.lotId)).get()!;
+  const lot = (await db.select().from(lots).where(eq(lots.id, contract.lotId)))[0]!;
   const commodity = getCommodityById(contract.commodityId);
-  const unit = db.select().from(units).where(eq(units.id, lot.unitId)).get();
-  const farmer = db.select().from(farmers).where(eq(farmers.id, contract.farmerId)).get();
-  const buyer = db.select().from(buyers).where(eq(buyers.id, contract.buyerId)).get();
-  const job = getJobForContract(contract.id);
-  const driver = job?.driverId ? db.select().from(drivers).where(eq(drivers.id, job.driverId)).get() : undefined;
+  const unit = (await db.select().from(units).where(eq(units.id, lot.unitId)))[0];
+  const farmer = (await db.select().from(farmers).where(eq(farmers.id, contract.farmerId)))[0];
+  const buyer = (await db.select().from(buyers).where(eq(buyers.id, contract.buyerId)))[0];
+  const job = await getJobForContract(contract.id);
+  const driver = job?.driverId ? (await db.select().from(drivers).where(eq(drivers.id, job.driverId)))[0] : undefined;
   const closed = ['SETTLED', 'CANCELLED', 'CANCELLED_REFUNDED', 'DECLINED', 'EXPIRED'].includes(contract.state);
   const paidFor = !['OFFERED', 'ACCEPTED', 'FUNDING_FAILED'].includes(contract.state);
   const phonesLive = paidFor && !closed;
   const jobLive = Boolean(job && ['ASSIGNED', 'FUNDS_HELD', 'PICKED_UP', 'ARRIVED'].includes(job.state));
   const total = orderTotal(contract) || contract.holdAmount;
-  const { landed, pending } = farmerPaid(contract.id);
+  const { landed, pending } = await farmerPaid(contract.id);
   const isDriver = viewer === 'driver';
 
   return {
@@ -308,7 +309,7 @@ export function getDealView(contractId: string, viewer: DealRole) {
           advance: advanceFor(contract),
           paidToFarmer: landed,
           onTheWay: pending,
-          stillHeld: stillHeld(contract),
+          stillHeld: await stillHeld(contract),
           deduction: contract.deductionAmount ?? 0,
           receiptDueAt: contract.receiptDueAt,
           deliveredAt: contract.deliveredAt,
@@ -317,23 +318,22 @@ export function getDealView(contractId: string, viewer: DealRole) {
     transport: job
       ? { jobId: job.id, jobCode: job.jobCode, state: job.state, ...(isDriver || viewer === 'buyer' ? { fee: job.quoteAmount } : {}) }
       : null,
-    claims: isDriver ? [] : db.select().from(orderClaims).where(eq(orderClaims.contractId, contract.id)).all(),
-    photos: db.select({ id: photos.id, path: photos.path }).from(photos).where(eq(photos.contractId, contract.id)).all().map((p) => ({ id: p.id, url: `/${p.path}` })),
-    next: dealNextStep(contract),
-    timeline: timeline(contract, job, viewer),
+    claims: isDriver ? [] : (await db.select().from(orderClaims).where(eq(orderClaims.contractId, contract.id))),
+    photos: (await db.select({ id: photos.id, path: photos.path }).from(photos).where(eq(photos.contractId, contract.id))).map((p) => ({ id: p.id, url: mediaUrl(p.path) })),
+    next: await dealNextStep(contract),
+    timeline: await timeline(contract, job, viewer),
   };
 }
 
 /** Every deal a login is a party to, newest first — for the "my sales" lists. */
-export function listDealsFor(login: { kind: string; sub: string }): string[] {
-  if (login.kind === 'buyer') return db.select({ id: contracts.id }).from(contracts).where(eq(contracts.buyerId, login.sub)).all().map((r) => r.id).reverse();
-  if (login.kind === 'farmer') return db.select({ id: contracts.id }).from(contracts).where(eq(contracts.farmerId, login.sub)).all().map((r) => r.id).reverse();
+export async function listDealsFor(login: { kind: string; sub: string }): Promise<string[]> {
+  if (login.kind === 'buyer') return (await db.select({ id: contracts.id }).from(contracts).where(eq(contracts.buyerId, login.sub))).map((r) => r.id).reverse();
+  if (login.kind === 'farmer') return (await db.select({ id: contracts.id }).from(contracts).where(eq(contracts.farmerId, login.sub))).map((r) => r.id).reverse();
   if (login.kind === 'driver') {
-    return db
-      .select({ id: deliveryJobs.contractId })
-      .from(deliveryJobs)
-      .where(and(eq(deliveryJobs.driverId, login.sub), inArray(deliveryJobs.state, LIVE_JOB)))
-      .all()
+    return (await db
+          .select({ id: deliveryJobs.contractId })
+          .from(deliveryJobs)
+          .where(and(eq(deliveryJobs.driverId, login.sub), inArray(deliveryJobs.state, LIVE_JOB))))
       .map((r) => r.id)
       .reverse();
   }

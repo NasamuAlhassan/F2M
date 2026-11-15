@@ -1,5 +1,7 @@
 # Deploy
 
+> **Current path: free hosting on Vercel + Supabase, see [HOSTING.md](HOSTING.md) (D-058).** The options below (Fly.io, or Vercel + Render) still work for an always-on server with a disk; their database is now a PGlite folder.
+
 Two ways to run this, and the difference is entirely about where the
 **backend** lives — the frontend is a static Vite build either way.
 

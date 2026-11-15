@@ -12,16 +12,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const dbPath = path.join(REPO_ROOT, 'data', 'demo.db');
+const dbPath = path.join(REPO_ROOT, 'data', 'demo-pglite'); // a PGlite folder (docs/HOSTING.md)
 const storageDir = path.join(REPO_ROOT, 'data', 'demo-storage');
 
-for (const suffix of ['', '-wal', '-shm']) fs.rmSync(dbPath + suffix, { force: true });
+fs.rmSync(dbPath, { recursive: true, force: true });
 fs.rmSync(storageDir, { recursive: true, force: true });
 process.env.DATABASE_PATH = dbPath;
+process.env.DATABASE_URL = ''; // never the real Supabase database, whatever .env says
 process.env.STORAGE_DIR = storageDir;
 
 const { runMigrations } = await import('../../../packages/core/src/db/migrate');
-runMigrations();
+await runMigrations();
 const { seed } = await import('../../../packages/core/src/db/seed');
 await seed();
 await import('./demo');

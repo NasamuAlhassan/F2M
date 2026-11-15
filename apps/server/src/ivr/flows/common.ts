@@ -3,7 +3,7 @@ import type { IvrCtx } from '../machine';
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function farmerOf(ctx: IvrCtx): Farmer | undefined {
+export async function farmerOf(ctx: IvrCtx): Promise<Farmer | undefined> {
   return getFarmerByPhone(ctx.call.phone);
 }
 

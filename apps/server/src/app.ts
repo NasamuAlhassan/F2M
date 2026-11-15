@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import formbody from '@fastify/formbody';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { accountRoleId, config, DomainError, getAccountByAuthUser, verifyAccessToken } from '@ftm/core';
+import { accountRoleId, config, DomainError, getAccountByAuthUser, verifyAccessToken,
+  getMediaStore,
+} from '@ftm/core';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { accountRoutes } from './routes/api/account';
@@ -25,6 +27,7 @@ import { priceRoutes } from './routes/api/prices';
 import { streamRoutes } from './routes/api/stream';
 import { publicRoutes } from './routes/api/public';
 import { registryRoutes } from './routes/api/registries';
+import { cronRoutes } from './routes/cron';
 import type { Role } from './types';
 import { ussdRoutes } from './routes/ussd';
 import { voiceRoutes } from './routes/voice';
@@ -55,6 +58,9 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     });
   }
   await app.register(fastifyStatic, { root: path.join(SERVER_ROOT, 'public') });
+  // Media is served from disk only when it lives on disk (local dev, tests). On Vercel it is in
+  // Supabase Storage, with its own public URLs, and the function's disk is read-only.
+  if (getMediaStore().name === 'disk') {
   fs.mkdirSync(path.join(config.storageDir, 'photos'), { recursive: true });
   await app.register(fastifyStatic, {
     root: path.join(config.storageDir, 'photos'),
@@ -83,6 +89,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
       if (filePath.endsWith('.webm')) res.header('content-type', 'audio/webm');
     },
   });
+  }
 
   // Web logins (D-047): verify the Supabase token, then the account behind
   // it. A valid login of the WRONG role must not pass (D-021).
@@ -102,7 +109,7 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
     reply.code(401).send({ error: { code: 'UNAUTHORIZED', message } });
   const roleGuard = (roles: Role[], message: string) => async (req: FastifyRequest, reply: FastifyReply) => {
     if (!(await readLogin(req))) return unauthorized(reply, message);
-    const account = getAccountByAuthUser(req.login.authUserId);
+    const account = await getAccountByAuthUser(req.login.authUserId);
     if (!account || !roles.includes(account.role)) return unauthorized(reply, message);
     req.user = { sub: accountRoleId(account), kind: account.role, authUserId: account.authUserId };
   };
@@ -148,11 +155,14 @@ export async function buildServer(opts: { logger?: boolean } = {}): Promise<Fast
   await app.register(engineRoutes, { prefix: '/api' });
   await app.register(marketRoutes, { prefix: '/api' });
   await app.register(priceRoutes, { prefix: '/api' });
-  await app.register(streamRoutes, { prefix: '/api' });
+  // The live stream needs one long-lived process (docs/HOSTING.md): off on Vercel, where the
+  // web polls instead and an open stream would hold a function for minutes per tab.
+  if (!process.env.VERCEL) await app.register(streamRoutes, { prefix: '/api' });
   await app.register(alertRoutes, { prefix: '/api' });
   await app.register(aiRoutes, { prefix: '/api' });
   await app.register(farmerPortalRoutes, { prefix: '/api' });
   await app.register(publicRoutes, { prefix: '/api' });
+  await app.register(cronRoutes, { prefix: '/api' }); // pg_cron's sweep (docs/HOSTING.md); closed without CRON_SECRET
   // Simulator surfaces (D-047): the handset's SMS/call inboxes and the test clock.
   if (config.simulatorEnabled) await app.register(devRoutes, { prefix: '/api' });
 

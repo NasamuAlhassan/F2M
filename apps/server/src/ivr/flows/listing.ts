@@ -96,8 +96,8 @@ function notUnderstood(ctx: IvrCtx, field: string, keypadNode?: string): IvrResu
   return nextStep(ctx);
 }
 
-function notRegistered(ctx: IvrCtx): I18nText[] | null {
-  return farmerOf(ctx) ? null : [{ key: 'voice.list.notRegistered', params: { code: config.USSD_SHORTCODE } }];
+async function notRegistered(ctx: IvrCtx): Promise<I18nText[] | null> {
+  return await farmerOf(ctx) ? null : [{ key: 'voice.list.notRegistered', params: { code: config.USSD_SHORTCODE } }];
 }
 
 // ── 1. tell us ───────────────────────────────────────────────────────────
@@ -277,15 +277,15 @@ const qualityNode: IvrNode = {
 };
 
 // ── 7. place ─────────────────────────────────────────────────────────────
-function placeName(ctx: IvrCtx): string {
-  const farmer = farmerOf(ctx)!;
+async function placeName(ctx: IvrCtx): Promise<string> {
+  const farmer = (await farmerOf(ctx))!;
   const region = t(ctx.locale, getRegion(farmer.regionCode).nameKey);
   return farmer.district ? `${farmer.district}, ${region}` : region;
 }
 
 const placeNode: IvrNode = {
   key: 'list_place',
-  say: (ctx) => [...takeFlash(ctx), { key: 'voice.listing.askPlace', params: { place: placeName(ctx) } }, HINT_KEY],
+  say: async (ctx) => [...takeFlash(ctx), { key: 'voice.listing.askPlace', params: { place: await placeName(ctx) } }, HINT_KEY],
   onDigits: (digits, ctx) => {
     if (digits === '1') {
       draftOf(ctx).placeOk = true;
@@ -312,7 +312,7 @@ const communityNode: IvrNode = {
 };
 
 // ── 8. read back, change, publish ────────────────────────────────────────
-export function reviewLines(ctx: IvrCtx): I18nText[] {
+export async function reviewLines(ctx: IvrCtx): Promise<I18nText[]> {
   const d = draftOf(ctx);
   const unit = unitSay(ctx, d.unitCode!);
   const lines: I18nText[] = [
@@ -334,13 +334,13 @@ export function reviewLines(ctx: IvrCtx): I18nText[] {
     r === 0 ? { key: 'voice.listing.reviewReadyNow' } : r === 1 ? { key: 'voice.listing.reviewReadyTomorrow' } : { key: 'voice.listing.reviewReadyDays', params: { n: r } },
   );
   lines.push({ key: 'voice.listing.reviewQuality', params: { band: d.declaredBand! } });
-  lines.push({ key: 'voice.listing.reviewPlace', params: { place: d.community ? `${d.community}, ${placeName(ctx)}` : placeName(ctx) } });
+  lines.push({ key: 'voice.listing.reviewPlace', params: { place: d.community ? `${d.community}, ${await placeName(ctx)}` : await placeName(ctx) } });
   return lines;
 }
 
 const reviewNode: IvrNode = {
   key: 'list_review',
-  say: (ctx) => [...takeFlash(ctx), ...reviewLines(ctx), { key: 'voice.listing.reviewMenu' }, HINT_KEY],
+  say: async (ctx) => [...takeFlash(ctx), ...await reviewLines(ctx), { key: 'voice.listing.reviewMenu' }, HINT_KEY],
   onDigits: (digits, ctx) => {
     if (digits === '1') return publish(ctx);
     if (digits === '2') return { next: 'list_change' };
@@ -386,38 +386,38 @@ const changeNode: IvrNode = {
   },
 };
 
-function publish(ctx: IvrCtx): IvrResult {
-  const farmer = farmerOf(ctx)!;
+async function publish(ctx: IvrCtx): Promise<IvrResult> {
+  const farmer = (await farmerOf(ctx))!;
   const d = draftOf(ctx);
   const heard = (ctx.state._heard as Heard[] | undefined) ?? [];
   const now = Date.now();
   try {
-    const lot = registerLot({
-      farmerId: farmer.id,
-      commodityCode: d.commodityCode!,
-      unitCode: d.unitCode!,
-      unitQty: d.unitQty!,
-      declaredBand: d.declaredBand!,
-      readyDate: now + d.readyInDays! * DAY_MS,
-      ...(d.pricePerUnit ? { askingPricePerUnit: d.pricePerUnit } : {}),
-      ...(d.harvestedDaysAgo! >= 0 ? { harvestedAt: now - d.harvestedDaysAgo! * DAY_MS } : {}),
-      ...(d.community ? { community: d.community } : {}),
-      channel: 'ivr',
-    });
-    saveVoiceListing({ phone: farmer.phone, farmerId: farmer.id, locale: ctx.locale, heard, parsed: d, lotId: lot.id });
-    queueSms({
-      phone: farmer.phone,
-      locale: farmer.locale,
-      templateKey: 'sms.listingCreated',
-      params: {
-        kg: lot.quantityKg,
-        commodity: t(farmer.locale, `commodity.${d.commodityCode}`),
-        band: d.declaredBand!,
-        lotCode: lot.lotCode,
-        code: config.USSD_SHORTCODE,
-      },
-      lotId: lot.id,
-    });
+    const lot = await registerLot({
+          farmerId: farmer.id,
+          commodityCode: d.commodityCode!,
+          unitCode: d.unitCode!,
+          unitQty: d.unitQty!,
+          declaredBand: d.declaredBand!,
+          readyDate: now + d.readyInDays! * DAY_MS,
+          ...(d.pricePerUnit ? { askingPricePerUnit: d.pricePerUnit } : {}),
+          ...(d.harvestedDaysAgo! >= 0 ? { harvestedAt: now - d.harvestedDaysAgo! * DAY_MS } : {}),
+          ...(d.community ? { community: d.community } : {}),
+          channel: 'ivr',
+        });
+    await saveVoiceListing({ phone: farmer.phone, farmerId: farmer.id, locale: ctx.locale, heard, parsed: d, lotId: lot.id });
+    await queueSms({
+            phone: farmer.phone,
+            locale: farmer.locale,
+            templateKey: 'sms.listingCreated',
+            params: {
+              kg: lot.quantityKg,
+              commodity: t(farmer.locale, `commodity.${d.commodityCode}`),
+              band: d.declaredBand!,
+              lotCode: lot.lotCode,
+              code: config.USSD_SHORTCODE,
+            },
+            lotId: lot.id,
+          });
     if (ctx.call.flow === 'line') {
       flash(ctx, 'voice.listing.publishedShort', { lotCode: lot.lotCode });
       return { next: 'line_menu' };
@@ -425,8 +425,8 @@ function publish(ctx: IvrCtx): IvrResult {
     return { end: [{ key: 'voice.listing.published', params: { lotCode: lot.lotCode } }], outcome: { result: 'listed', lotId: lot.id } };
   } catch (err) {
     if (!(err instanceof DomainError)) throw err;
-    saveVoiceListing({ phone: farmer.phone, farmerId: farmer.id, locale: ctx.locale, heard, parsed: d, error: err.message });
-    queueSms({ phone: farmer.phone, locale: farmer.locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
+    await saveVoiceListing({ phone: farmer.phone, farmerId: farmer.id, locale: ctx.locale, heard, parsed: d, error: err.message });
+    await queueSms({ phone: farmer.phone, locale: farmer.locale, templateKey: 'sms.listingFailed', params: { code: config.USSD_SHORTCODE } });
     return { end: [{ key: 'voice.listing.couldNot', params: { code: config.USSD_SHORTCODE } }], outcome: { result: 'failed', error: err.code } };
   }
 }

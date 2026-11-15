@@ -37,9 +37,9 @@ const profileSchema = z.object({
   locale: z.string().optional(), // SMS + call language (D-040)
 });
 
-function jobView(job: DeliveryJob) {
-  const driver = job.driverId ? getDriverById(job.driverId) : undefined;
-  const { commodityCode, quantityKg } = jobSummary(job);
+async function jobView(job: DeliveryJob) {
+  const driver = job.driverId ? await getDriverById(job.driverId) : undefined;
+  const { commodityCode, quantityKg } = await jobSummary(job);
   return {
     id: job.id,
     jobCode: job.jobCode,
@@ -66,10 +66,10 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
   // Instant quotes for every vehicle class that fits the load — the buyer picks.
   app.get('/contracts/:id/transport-quote', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
-    const contract = getContract(id);
+    const contract = await getContract(id);
     if (contract.buyerId !== req.user.sub) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
     return {
-      quotes: quoteTransportOptions(id).map((quote) => ({
+      quotes: (await quoteTransportOptions(id)).map((quote) => ({
         vehicleClassCode: quote.vehicleClass.code,
         vehicleClassName: t('en', quote.vehicleClass.nameKey),
         capacityKg: quote.vehicleClass.capacityKg,
@@ -84,16 +84,16 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
   app.post('/contracts/:id/transport', { preHandler: [app.authBuyer] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const { vehicleClassCode, preferredDriverId } = requestTransportSchema.parse(req.body ?? {});
-    const job = requestTransport(id, req.user.sub, vehicleClassCode, preferredDriverId);
-    return reply.code(201).send({ job: jobView(job) });
+    const job = await requestTransport(id, req.user.sub, vehicleClassCode, preferredDriverId);
+    return reply.code(201).send({ job: await jobView(job) });
   });
 
   // The side-hustle directory (D-037): online drivers, browsable by buyers AND
   // sellers — call to inquire, or hire directly on a funded contract.
   app.get('/drivers/available', { preHandler: [app.authBuyerOrFarmer] }, async () => {
-    const classes = new Map(listVehicleClasses().map((v) => [v.code, v]));
+    const classes = new Map((await listVehicleClasses()).map((v) => [v.code, v]));
     return {
-      drivers: listAvailableDrivers().map((d) => {
+      drivers: (await listAvailableDrivers()).map((d) => {
         const vc = classes.get(d.vehicleClassCode);
         return {
           ...d,
@@ -106,41 +106,41 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/contracts/:id/transport', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
-    const contract = getContract(id);
+    const contract = await getContract(id);
     if (contract.buyerId !== req.user.sub) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
-    const job = getJobForContract(id);
-    return { job: job ? jobView(job) : null };
+    const job = await getJobForContract(id);
+    return { job: job ? await jobView(job) : null };
   });
 
   app.post('/jobs/:id/retry-dispatch', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
-    return { job: jobView(retryDispatch(id, req.user.sub)) };
+    return { job: await jobView(await retryDispatch(id, req.user.sub)) };
   });
 
   app.post('/jobs/:id/deliver', { preHandler: [app.authBuyer] }, async (req) => {
     const { id } = req.params as { id: string };
     const job = await confirmJobDelivery(id, req.user.sub);
-    return { job: jobView(job) };
+    return { job: await jobView(job) };
   });
 
   // ---- Driver side (same domain calls the USSD screens make) ----
   app.get('/driver/jobs', { preHandler: [app.authDriver] }, async (req) => {
     const driverId = req.user.sub;
     return {
-      offers: listOffersForDriver(driverId).map((o) => ({
-        jobId: o.jobId,
-        expiresAt: o.expiresAt,
-        ...jobView(o.job),
-      })),
+      offers: await Promise.all((await listOffersForDriver(driverId)).map(async (o) => ({
+                jobId: o.jobId,
+                expiresAt: o.expiresAt,
+                ...await jobView(o.job),
+              }))),
       // Read-only queue behind the sequential dispatcher (D-023) — the board's
       // "open requests" section.
-      openRequests: listOpenRequestsForDriver(driverId).map(jobView),
-      jobs: listJobsForDriver(driverId).map(jobView),
+      openRequests: await Promise.all((await listOpenRequestsForDriver(driverId)).map(jobView)),
+      jobs: await Promise.all((await listJobsForDriver(driverId)).map(jobView)),
     };
   });
 
   app.get('/driver/profile', { preHandler: [app.authDriver] }, async (req) => {
-    const driver = getDriverById(req.user.sub);
+    const driver = await getDriverById(req.user.sub);
     if (!driver) throw new DomainError('Driver not found', 'NOT_FOUND', 404);
     return {
       profile: {
@@ -157,7 +157,7 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
 
   app.put('/driver/profile', { preHandler: [app.authDriver] }, async (req) => {
     const input = profileSchema.parse(req.body ?? {});
-    const driver = updateDriverProfile(req.user.sub, input);
+    const driver = await updateDriverProfile(req.user.sub, input);
     return {
       profile: {
         name: driver.name,
@@ -174,32 +174,32 @@ export async function logisticsRoutes(app: FastifyInstance): Promise<void> {
   app.post('/jobs/:id/accept', { preHandler: [app.authDriver] }, async (req) => {
     const { id } = req.params as { id: string };
     const job = await acceptJob(id, req.user.sub);
-    return { job: jobView(job) };
+    return { job: await jobView(job) };
   });
 
   app.post('/jobs/:id/decline', { preHandler: [app.authDriver] }, async (req) => {
     const { id } = req.params as { id: string };
-    declineJob(id, req.user.sub);
+    await declineJob(id, req.user.sub);
     return { ok: true };
   });
 
   app.post('/jobs/:id/pickup', { preHandler: [app.authDriver] }, async (req) => {
     const { id } = req.params as { id: string };
-    const job = confirmJobPickup(id, req.user.sub);
-    return { job: jobView(job) };
+    const job = await confirmJobPickup(id, req.user.sub);
+    return { job: await jobView(job) };
   });
 
   // Phase 3 (vision §10.4): the driver's other milestones.
   app.post('/jobs/:id/at-pickup', { preHandler: [app.authDriver] }, async (req) => {
     const { id } = req.params as { id: string };
-    return { job: jobView(driverAtPickup(id, req.user.sub)) };
+    return { job: await jobView(await driverAtPickup(id, req.user.sub)) };
   });
   app.post('/jobs/:id/departed', { preHandler: [app.authDriver] }, async (req) => {
     const { id } = req.params as { id: string };
-    return { job: jobView(driverDeparted(id, req.user.sub)) };
+    return { job: await jobView(await driverDeparted(id, req.user.sub)) };
   });
   app.post('/jobs/:id/arrived', { preHandler: [app.authDriver] }, async (req) => {
     const { id } = req.params as { id: string };
-    return { job: jobView(driverArrived(id, req.user.sub)) };
+    return { job: await jobView(await driverArrived(id, req.user.sub)) };
   });
 }

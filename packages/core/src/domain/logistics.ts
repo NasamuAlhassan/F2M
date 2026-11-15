@@ -45,34 +45,33 @@ export interface TransportQuote {
   dropoff: GeoPoint;
 }
 
-export function getJob(id: string): DeliveryJob {
-  const job = db.select().from(deliveryJobs).where(eq(deliveryJobs.id, id)).get();
+export async function getJob(id: string): Promise<DeliveryJob> {
+  const job = (await db.select().from(deliveryJobs).where(eq(deliveryJobs.id, id)))[0];
   if (!job) throw notFound('delivery job');
   return job;
 }
 
-export function getJobForContract(contractId: string): DeliveryJob | undefined {
-  return db
-    .select()
-    .from(deliveryJobs)
-    .where(eq(deliveryJobs.contractId, contractId))
-    .orderBy(desc(deliveryJobs.createdAt))
-    .get();
+export async function getJobForContract(contractId: string): Promise<DeliveryJob | undefined> {
+  return (await db
+      .select()
+      .from(deliveryJobs)
+      .where(eq(deliveryJobs.contractId, contractId))
+      .orderBy(desc(deliveryJobs.createdAt)))[0];
 }
 
 /**
  * Upfront quote (D-024), rate-card priced. Default = cheapest vehicle class
  * that carries the load; pass a class code to price a specific (fitting) one.
  */
-export function quoteTransport(contractId: string, vehicleClassCode?: string): TransportQuote {
-  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+export async function quoteTransport(contractId: string, vehicleClassCode?: string): Promise<TransportQuote> {
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, contractId)))[0];
   if (!contract) throw notFound('contract');
-  const lot = db.select().from(lots).where(eq(lots.id, contract.lotId)).get()!;
-  const demand = db.select().from(demands).where(eq(demands.id, contract.demandId)).get()!;
+  const lot = (await db.select().from(lots).where(eq(lots.id, contract.lotId)))[0]!;
+  const demand = (await db.select().from(demands).where(eq(demands.id, contract.demandId)))[0]!;
 
   const vehicleClass = vehicleClassCode
-    ? getVehicleClass(vehicleClassCode)
-    : listVehicleClasses().find((v) => v.capacityKg >= contract.quantityKg);
+    ? await getVehicleClass(vehicleClassCode)
+    : (await listVehicleClasses()).find((v) => v.capacityKg >= contract.quantityKg);
   if (!vehicleClass) {
     throw new DomainError('No vehicle class carries this load in one trip', 'NO_VEHICLE_CLASS', 409);
   }
@@ -87,12 +86,12 @@ export function quoteTransport(contractId: string, vehicleClassCode?: string): T
 }
 
 /** Instant quotes for EVERY vehicle class that fits the load — the buyer picks. */
-export function quoteTransportOptions(contractId: string): TransportQuote[] {
-  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+export async function quoteTransportOptions(contractId: string): Promise<TransportQuote[]> {
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, contractId)))[0];
   if (!contract) throw notFound('contract');
-  return listVehicleClasses()
-    .filter((v) => v.capacityKg >= contract.quantityKg)
-    .map((v) => quoteTransport(contractId, v.code));
+  return await Promise.all((await listVehicleClasses())
+      .filter((v) => v.capacityKg >= contract.quantityKg)
+      .map((v) => quoteTransport(contractId, v.code)));
 }
 
 /**
@@ -100,84 +99,82 @@ export function quoteTransportOptions(contractId: string): TransportQuote[] {
  * With `preferredDriverId` (D-037 direct hire), the quote prices that driver's
  * vehicle and dispatch offers them first; decline/TTL falls back to the ladder.
  */
-export function requestTransport(
+export async function requestTransport(
   contractId: string,
   buyerId: string,
   vehicleClassCode?: string,
   preferredDriverId?: string,
-): DeliveryJob {
-  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+): Promise<DeliveryJob> {
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, contractId)))[0];
   if (!contract) throw notFound('contract');
   if (contract.buyerId !== buyerId) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
   if (contract.state !== 'FUNDS_HELD') {
     throw new DomainError('Transport is requested after the produce hold is secured', 'INVALID_STATE', 409);
   }
-  const existing = getJobForContract(contractId);
+  const existing = await getJobForContract(contractId);
   if (existing && (LIVE_JOB_STATES as readonly string[]).includes(existing.state)) {
     throw new DomainError('A transport job already exists for this contract', 'JOB_EXISTS', 409);
   }
 
   if (preferredDriverId) {
-    const driver = getDriverById(preferredDriverId);
+    const driver = await getDriverById(preferredDriverId);
     if (!driver || !driver.active) throw new DomainError('This driver is not available right now', 'DRIVER_UNAVAILABLE', 409);
-    if (busyDriverIds().has(driver.id)) throw new DomainError('This driver is on another job', 'DRIVER_BUSY', 409);
+    if ((await busyDriverIds()).has(driver.id)) throw new DomainError('This driver is on another job', 'DRIVER_BUSY', 409);
     vehicleClassCode = driver.vehicleClassCode; // hire prices the driver's own vehicle (capacity-guarded below)
   }
-  const quote = quoteTransport(contractId, vehicleClassCode);
-  const job = db.transaction((tx) => {
-    let jobCode = generateJobCode();
-    while (tx.select().from(deliveryJobs).where(eq(deliveryJobs.jobCode, jobCode)).get()) jobCode = generateJobCode();
-    const inserted = tx
-      .insert(deliveryJobs)
-      .values({
-        jobCode,
-        contractId,
-        lotId: contract.lotId,
-        buyerId: contract.buyerId,
-        farmerId: contract.farmerId,
-        vehicleClassCode: quote.vehicleClass.code,
-        distanceKm: quote.distanceKm,
-        quoteAmount: quote.quoteAmount,
-        pickupLat: quote.pickup.lat,
-        pickupLng: quote.pickup.lng,
-        dropoffLat: quote.dropoff.lat,
-        dropoffLng: quote.dropoff.lng,
-      })
-      .returning()
-      .get();
-    appendLotEvent(tx, {
-      lotId: contract.lotId,
-      type: 'TRANSPORT_REQUESTED',
-      actorType: 'buyer',
-      actorId: buyerId,
-      payload: {
-        jobId: inserted.id,
-        jobCode,
-        vehicleClass: quote.vehicleClass.code,
-        distanceKm: quote.distanceKm,
-        quoteAmount: quote.quoteAmount,
-      },
+  const quote = await quoteTransport(contractId, vehicleClassCode);
+  const job = await db.transaction(async (tx) => {
+      let jobCode = generateJobCode();
+      while ((await tx.select().from(deliveryJobs).where(eq(deliveryJobs.jobCode, jobCode)))[0]) jobCode = generateJobCode();
+      const inserted = (await tx
+                  .insert(deliveryJobs)
+                  .values({
+                    jobCode,
+                    contractId,
+                    lotId: contract.lotId,
+                    buyerId: contract.buyerId,
+                    farmerId: contract.farmerId,
+                    vehicleClassCode: quote.vehicleClass.code,
+                    distanceKm: quote.distanceKm,
+                    quoteAmount: quote.quoteAmount,
+                    pickupLat: quote.pickup.lat,
+                    pickupLng: quote.pickup.lng,
+                    dropoffLat: quote.dropoff.lat,
+                    dropoffLng: quote.dropoff.lng,
+                  })
+                  .returning())[0]!;
+      await appendLotEvent(tx, {
+              lotId: contract.lotId,
+              type: 'TRANSPORT_REQUESTED',
+              actorType: 'buyer',
+              actorId: buyerId,
+              payload: {
+                jobId: inserted.id,
+                jobCode,
+                vehicleClass: quote.vehicleClass.code,
+                distanceKm: quote.distanceKm,
+                quoteAmount: quote.quoteAmount,
+              },
+            });
+      return inserted;
     });
-    return inserted;
-  });
-  dispatchJob(job.id, preferredDriverId);
+  await dispatchJob(job.id, preferredDriverId);
   return getJob(job.id);
 }
 
 /** Buyer retries dispatch after NO_DRIVER. */
-export function retryDispatch(jobId: string, buyerId: string): DeliveryJob {
-  transitionJob(jobId, 'REQUESTED', { type: 'buyer', id: buyerId });
-  dispatchJob(jobId);
+export async function retryDispatch(jobId: string, buyerId: string): Promise<DeliveryJob> {
+  await transitionJob(jobId, 'REQUESTED', { type: 'buyer', id: buyerId });
+  await dispatchJob(jobId);
   return getJob(jobId);
 }
 
-function busyDriverIds(): Set<string> {
+async function busyDriverIds(): Promise<Set<string>> {
   return new Set(
-    db
-      .select({ driverId: deliveryJobs.driverId })
-      .from(deliveryJobs)
-      .where(inArray(deliveryJobs.state, [...BUSY_STATES]))
-      .all()
+    (await db
+            .select({ driverId: deliveryJobs.driverId })
+            .from(deliveryJobs)
+            .where(inArray(deliveryJobs.state, [...BUSY_STATES])))
       .map((r) => r.driverId)
       .filter((id): id is string => id !== null),
   );
@@ -188,33 +185,30 @@ function busyDriverIds(): Set<string> {
  * TTL; declined/expired offers stay blocked (one shot per job+driver) and the
  * next-nearest candidate gets the job. No broadcast — no double-accept races.
  */
-export function dispatchJob(jobId: string, preferredDriverId?: string): DeliveryJobOffer | null {
-  const job = getJob(jobId);
+export async function dispatchJob(jobId: string, preferredDriverId?: string): Promise<DeliveryJobOffer | null> {
+  const job = await getJob(jobId);
   if (job.state !== 'REQUESTED') return null;
-  const live = db
-    .select()
-    .from(deliveryJobOffers)
-    .where(and(eq(deliveryJobOffers.jobId, jobId), eq(deliveryJobOffers.status, 'offered')))
-    .get();
+  const live = (await db
+      .select()
+      .from(deliveryJobOffers)
+      .where(and(eq(deliveryJobOffers.jobId, jobId), eq(deliveryJobOffers.status, 'offered'))))[0];
   if (live) return live; // one live offer at a time
 
   const tried = new Set(
-    db
-      .select({ driverId: deliveryJobOffers.driverId })
-      .from(deliveryJobOffers)
-      .where(eq(deliveryJobOffers.jobId, jobId))
-      .all()
+    (await db
+            .select({ driverId: deliveryJobOffers.driverId })
+            .from(deliveryJobOffers)
+            .where(eq(deliveryJobOffers.jobId, jobId)))
       .map((r) => r.driverId),
   );
-  const busy = busyDriverIds();
+  const busy = await busyDriverIds();
   const pickup: GeoPoint = { lat: job.pickupLat, lng: job.pickupLng };
-  const pickupRegion = db.select().from(lots).where(eq(lots.id, job.lotId)).get()?.regionCode;
+  const pickupRegion = (await db.select().from(lots).where(eq(lots.id, job.lotId)))[0]?.regionCode;
 
-  const candidates = db
-    .select()
-    .from(drivers)
-    .where(and(eq(drivers.vehicleClassCode, job.vehicleClassCode), eq(drivers.active, true)))
-    .all()
+  const candidates = (await db
+      .select()
+      .from(drivers)
+      .where(and(eq(drivers.vehicleClassCode, job.vehicleClassCode), eq(drivers.active, true))))
     .filter((d) => !tried.has(d.id) && !busy.has(d.id))
     // Regional routes: an empty list serves anywhere; otherwise the pickup
     // region must be on the driver's route.
@@ -234,73 +228,70 @@ export function dispatchJob(jobId: string, preferredDriverId?: string): Delivery
 
   const next = candidates[0];
   if (!next) {
-    transitionJob(jobId, 'NO_DRIVER', { type: 'system' }, { payload: { reason: 'no_available_driver' } });
-    queueBuyerNotification({
-      buyerId: job.buyerId,
-      templateKey: 'notif.noDriver',
-      params: { jobCode: job.jobCode },
-      contractId: job.contractId,
-      jobId: job.id,
-    });
+    await transitionJob(jobId, 'NO_DRIVER', { type: 'system' }, { payload: { reason: 'no_available_driver' } });
+    await queueBuyerNotification({
+            buyerId: job.buyerId,
+            templateKey: 'notif.noDriver',
+            params: { jobCode: job.jobCode },
+            contractId: job.contractId,
+            jobId: job.id,
+          });
     return null;
   }
 
   const now = Date.now();
-  const offer = db
-    .insert(deliveryJobOffers)
-    .values({
-      jobId,
-      driverId: next.driver.id,
-      offeredAt: now,
-      expiresAt: now + config.DISPATCH_OFFER_TTL_MINUTES * 60 * 1000,
-    })
-    .returning()
-    .get();
+  const offer = (await db
+        .insert(deliveryJobOffers)
+        .values({
+          jobId,
+          driverId: next.driver.id,
+          offeredAt: now,
+          expiresAt: now + config.DISPATCH_OFFER_TTL_MINUTES * 60 * 1000,
+        })
+        .returning())[0]!;
 
-  queueSms({
-    phone: next.driver.phone,
-    locale: next.driver.locale,
-    templateKey: 'sms.jobOffer',
-    params: {
-      code: job.jobCode,
-      kg: getContractQuantity(job.contractId),
-      km: job.distanceKm,
-      fee: formatGhs(job.quoteAmount),
-      ussd: config.USSD_SHORTCODE,
-    },
-    lotId: job.lotId,
-  });
+  await queueSms({
+        phone: next.driver.phone,
+        locale: next.driver.locale,
+        templateKey: 'sms.jobOffer',
+        params: {
+          code: job.jobCode,
+          kg: await getContractQuantity(job.contractId),
+          km: job.distanceKm,
+          fee: formatGhs(job.quoteAmount),
+          ussd: config.USSD_SHORTCODE,
+        },
+        lotId: job.lotId,
+      });
   return offer;
 }
 
-function getContractQuantity(contractId: string): number {
-  return db.select().from(contracts).where(eq(contracts.id, contractId)).get()?.quantityKg ?? 0;
+async function getContractQuantity(contractId: string): Promise<number> {
+  return (await db.select().from(contracts).where(eq(contracts.id, contractId)))[0]?.quantityKg ?? 0;
 }
 
-function liveOfferFor(jobId: string, driverId: string): DeliveryJobOffer {
-  const offer = db
-    .select()
-    .from(deliveryJobOffers)
-    .where(and(eq(deliveryJobOffers.jobId, jobId), eq(deliveryJobOffers.driverId, driverId)))
-    .get();
+async function liveOfferFor(jobId: string, driverId: string): Promise<DeliveryJobOffer> {
+  const offer = (await db
+      .select()
+      .from(deliveryJobOffers)
+      .where(and(eq(deliveryJobOffers.jobId, jobId), eq(deliveryJobOffers.driverId, driverId))))[0];
   if (!offer || offer.status !== 'offered') {
     throw new DomainError('No live offer for this job', 'NO_LIVE_OFFER', 409);
   }
   return offer;
 }
 
-export function listOffersForDriver(driverId: string): Array<DeliveryJobOffer & { job: DeliveryJob }> {
-  return db
-    .select()
-    .from(deliveryJobOffers)
-    .where(and(eq(deliveryJobOffers.driverId, driverId), eq(deliveryJobOffers.status, 'offered')))
-    .all()
-    .map((o) => ({ ...o, job: getJob(o.jobId) }))
+export async function listOffersForDriver(driverId: string): Promise<Array<DeliveryJobOffer & { job: DeliveryJob }>> {
+  return (await Promise.all((await db
+        .select()
+        .from(deliveryJobOffers)
+        .where(and(eq(deliveryJobOffers.driverId, driverId), eq(deliveryJobOffers.status, 'offered'))))
+      .map(async (o) => ({ ...o, job: await getJob(o.jobId) }))))
     .filter((o) => o.job.state === 'REQUESTED');
 }
 
-export function listJobsForDriver(driverId: string): DeliveryJob[] {
-  return db.select().from(deliveryJobs).where(eq(deliveryJobs.driverId, driverId)).orderBy(desc(deliveryJobs.createdAt)).all();
+export async function listJobsForDriver(driverId: string): Promise<DeliveryJob[]> {
+  return (await db.select().from(deliveryJobs).where(eq(deliveryJobs.driverId, driverId)).orderBy(desc(deliveryJobs.createdAt)));
 }
 
 /**
@@ -309,126 +300,121 @@ export function listJobsForDriver(driverId: string): DeliveryJob[] {
  * them — dispatch stays sequential nearest-first (D-023), the board just shows
  * the queue behind it.
  */
-export function listOpenRequestsForDriver(driverId: string): DeliveryJob[] {
-  const driver = getDriverById(driverId);
+export async function listOpenRequestsForDriver(driverId: string): Promise<DeliveryJob[]> {
+  const driver = await getDriverById(driverId);
   if (!driver) return [];
   const routes = driverRouteRegions(driver);
   const offeredToMe = new Set(
-    db
-      .select({ jobId: deliveryJobOffers.jobId })
-      .from(deliveryJobOffers)
-      .where(and(eq(deliveryJobOffers.driverId, driverId), eq(deliveryJobOffers.status, 'offered')))
-      .all()
+    (await db
+            .select({ jobId: deliveryJobOffers.jobId })
+            .from(deliveryJobOffers)
+            .where(and(eq(deliveryJobOffers.driverId, driverId), eq(deliveryJobOffers.status, 'offered'))))
       .map((r) => r.jobId),
   );
-  return db
-    .select()
-    .from(deliveryJobs)
-    .where(eq(deliveryJobs.state, 'REQUESTED'))
-    .orderBy(desc(deliveryJobs.createdAt))
-    .all()
-    .filter((j) => j.vehicleClassCode === driver.vehicleClassCode && !offeredToMe.has(j.id))
-    .filter((j) => {
-      if (routes.length === 0) return true;
-      const region = db.select().from(lots).where(eq(lots.id, j.lotId)).get()?.regionCode;
-      return region !== undefined && routes.includes(region);
-    })
-    .slice(0, 10);
+  const candidates = (await db
+      .select()
+      .from(deliveryJobs)
+      .where(eq(deliveryJobs.state, 'REQUESTED'))
+      .orderBy(desc(deliveryJobs.createdAt)))
+    .filter((j) => j.vehicleClassCode === driver.vehicleClassCode && !offeredToMe.has(j.id));
+  if (routes.length === 0) return candidates.slice(0, 10);
+  const lotRegions = new Map(
+    (candidates.length ? await db.select({ id: lots.id, regionCode: lots.regionCode }).from(lots).where(inArray(lots.id, candidates.map((j) => j.lotId))) : []).map((l) => [l.id, l.regionCode]),
+  );
+  return candidates.filter((j) => routes.includes(lotRegions.get(j.lotId) ?? '')).slice(0, 10);
 }
 
 export async function acceptJob(jobId: string, driverId: string): Promise<DeliveryJob> {
-  const offer = liveOfferFor(jobId, driverId);
+  const offer = await liveOfferFor(jobId, driverId);
   if (offer.expiresAt < Date.now()) {
-    db.update(deliveryJobOffers).set({ status: 'expired' }).where(eq(deliveryJobOffers.id, offer.id)).run();
-    dispatchJob(jobId);
+    (await db.update(deliveryJobOffers).set({ status: 'expired' }).where(eq(deliveryJobOffers.id, offer.id)));
+    await dispatchJob(jobId);
     throw new DomainError('This job offer has expired', 'OFFER_EXPIRED', 409);
   }
-  const job = transitionJob(jobId, 'ASSIGNED', { type: 'driver', id: driverId }, {
-    driverId,
-    payload: { driverId },
-    also: (tx) => {
-      tx.update(deliveryJobOffers).set({ status: 'accepted' }).where(eq(deliveryJobOffers.id, offer.id)).run();
-    },
-  });
+  const job = await transitionJob(jobId, 'ASSIGNED', { type: 'driver', id: driverId }, {
+      driverId,
+      payload: { driverId },
+      also: async (tx) => {
+        (await tx.update(deliveryJobOffers).set({ status: 'accepted' }).where(eq(deliveryJobOffers.id, offer.id)));
+      },
+    });
 
   // The farmer learns who is coming for her produce; the buyer sees the assignment.
-  const farmer = getFarmerById(job.farmerId);
-  const driver = getDriverById(driverId);
+  const farmer = await getFarmerById(job.farmerId);
+  const driver = await getDriverById(driverId);
   if (driver) {
-    queueBuyerNotification({
-      buyerId: job.buyerId,
-      templateKey: 'notif.driverAssigned',
-      params: { driver: driver.name, vehicle: t('en', `vehicle.${driver.vehicleClassCode}`), jobCode: job.jobCode },
-      contractId: job.contractId,
-      jobId: job.id,
-    });
+    await queueBuyerNotification({
+            buyerId: job.buyerId,
+            templateKey: 'notif.driverAssigned',
+            params: { driver: driver.name, vehicle: t('en', `vehicle.${driver.vehicleClassCode}`), jobCode: job.jobCode },
+            contractId: job.contractId,
+            jobId: job.id,
+          });
   }
   if (farmer && driver) {
-    queueSms({
-      phone: farmer.phone,
-      locale: farmer.locale,
-      templateKey: 'sms.jobAssigned',
-      params: {
-        driver: driver.name,
-        phone: driver.phone,
-        vehicle: t(farmer.locale, `vehicle.${driver.vehicleClassCode}`),
-        code: job.jobCode,
-      },
-      contractId: job.contractId,
-      lotId: job.lotId,
-    });
+    await queueSms({
+            phone: farmer.phone,
+            locale: farmer.locale,
+            templateKey: 'sms.jobAssigned',
+            params: {
+              driver: driver.name,
+              phone: driver.phone,
+              vehicle: t(farmer.locale, `vehicle.${driver.vehicleClassCode}`),
+              code: job.jobCode,
+            },
+            contractId: job.contractId,
+            lotId: job.lotId,
+          });
   }
 
   await initiateJobHold(jobId);
   return getJob(jobId);
 }
 
-export function declineJob(jobId: string, driverId: string): void {
-  const offer = liveOfferFor(jobId, driverId);
-  db.update(deliveryJobOffers).set({ status: 'declined' }).where(eq(deliveryJobOffers.id, offer.id)).run();
-  dispatchJob(jobId);
+export async function declineJob(jobId: string, driverId: string): Promise<void> {
+  const offer = await liveOfferFor(jobId, driverId);
+  (await db.update(deliveryJobOffers).set({ status: 'declined' }).where(eq(deliveryJobOffers.id, offer.id)));
+  await dispatchJob(jobId);
 }
 
 /** Sweep: expire stale dispatch offers and move to the next-nearest driver. */
-export function expireJobOffers(now = Date.now()): number {
-  const expired = db
-    .select()
-    .from(deliveryJobOffers)
-    .where(and(eq(deliveryJobOffers.status, 'offered'), lt(deliveryJobOffers.expiresAt, now)))
-    .all();
+export async function expireJobOffers(now = Date.now()): Promise<number> {
+  const expired = (await db
+      .select()
+      .from(deliveryJobOffers)
+      .where(and(eq(deliveryJobOffers.status, 'offered'), lt(deliveryJobOffers.expiresAt, now))));
   for (const offer of expired) {
-    db.update(deliveryJobOffers).set({ status: 'expired' }).where(eq(deliveryJobOffers.id, offer.id)).run();
-    dispatchJob(offer.jobId);
+    (await db.update(deliveryJobOffers).set({ status: 'expired' }).where(eq(deliveryJobOffers.id, offer.id)));
+    await dispatchJob(offer.jobId);
   }
   return expired.length;
 }
 
 /** Collect the transport fee from the requester (buyer) — fires at driver accept (D-024). */
 export async function initiateJobHold(jobId: string): Promise<Payment> {
-  const job = getJob(jobId);
+  const job = await getJob(jobId);
   if (job.state !== 'ASSIGNED') {
     throw new DomainError(`Cannot fund a job in ${job.state}`, 'INVALID_STATE', 409);
   }
-  const buyer = db.select().from(buyers).where(eq(buyers.id, job.buyerId)).get();
+  const buyer = (await db.select().from(buyers).where(eq(buyers.id, job.buyerId)))[0];
   if (!buyer) throw notFound('buyer');
 
   const provider = getPaymentProvider();
   const referenceId = crypto.randomUUID();
-  const payment = db
-    .insert(payments)
-    .values({
-      contractId: job.contractId,
-      jobId: job.id,
-      direction: 'collection',
-      provider: provider.name,
-      providerRef: referenceId,
-      amount: job.quoteAmount,
-      currency: provider.settlementCurrency,
-      counterpartyMsisdn: buyer.momoMsisdn,
-      status: 'pending',
-    })
-    .returning()
-    .get();
+  const payment = (await db
+        .insert(payments)
+        .values({
+          contractId: job.contractId,
+          jobId: job.id,
+          direction: 'collection',
+          provider: provider.name,
+          providerRef: referenceId,
+          amount: job.quoteAmount,
+          currency: provider.settlementCurrency,
+          counterpartyMsisdn: buyer.momoMsisdn,
+          status: 'pending',
+        })
+        .returning())[0]!;
 
   try {
     const result = await provider.requestHold({
@@ -440,47 +426,46 @@ export async function initiateJobHold(jobId: string): Promise<Payment> {
       note: `FTM transport ${job.jobCode}`,
     });
     if (result.status === 'failed') {
-      db.update(payments)
-        .set({ status: 'failed', raw: JSON.stringify(result.raw ?? null), updatedAt: Date.now() })
-        .where(eq(payments.id, payment.id))
-        .run();
-      handleJobFundingFailure(job.id);
+      (await db.update(payments)
+                .set({ status: 'failed', raw: JSON.stringify(result.raw ?? null), updatedAt: Date.now() })
+                .where(eq(payments.id, payment.id)));
+      await handleJobFundingFailure(job.id);
     }
   } catch (err) {
-    db.update(payments)
-      .set({ raw: JSON.stringify({ initiateError: String(err) }), updatedAt: Date.now() })
-      .where(eq(payments.id, payment.id))
-      .run();
+    (await db.update(payments)
+            .set({ raw: JSON.stringify({ initiateError: String(err) }), updatedAt: Date.now() })
+            .where(eq(payments.id, payment.id)));
   }
   return payment;
 }
 
-function handleJobFundingFailure(jobId: string): void {
-  const job = getJob(jobId);
+async function handleJobFundingFailure(jobId: string): Promise<void> {
+  const job = await getJob(jobId);
   if (job.state !== 'ASSIGNED' && job.state !== 'FUNDING_FAILED') return;
-  if (job.state === 'ASSIGNED') transitionJob(jobId, 'FUNDING_FAILED', { type: 'system' });
+  if (job.state === 'ASSIGNED') await transitionJob(jobId, 'FUNDING_FAILED', { type: 'system' });
   const attempts = job.fundingAttempts + 1;
-  db.update(deliveryJobs).set({ fundingAttempts: attempts }).where(eq(deliveryJobs.id, jobId)).run();
+  (await db.update(deliveryJobs).set({ fundingAttempts: attempts }).where(eq(deliveryJobs.id, jobId)));
   if (attempts < MAX_JOB_FUNDING_ATTEMPTS) {
-    transitionJob(jobId, 'ASSIGNED', { type: 'system' });
-    void initiateJobHold(jobId).catch(() => {});
+    await transitionJob(jobId, 'ASSIGNED', { type: 'system' });
+    // Awaited: on serverless a function may stop the moment it answers, taking unawaited work with it.
+    await initiateJobHold(jobId).catch(() => {});
   } else {
-    transitionJob(jobId, 'CANCELLED', { type: 'system' }, { payload: { reason: 'funding_failed' } });
-    notifyDriverCancelled(jobId);
+    await transitionJob(jobId, 'CANCELLED', { type: 'system' }, { payload: { reason: 'funding_failed' } });
+    await notifyDriverCancelled(jobId);
   }
 }
 
-function notifyDriverCancelled(jobId: string): void {
-  const job = getJob(jobId);
-  const driver = job.driverId ? getDriverById(job.driverId) : undefined;
+async function notifyDriverCancelled(jobId: string): Promise<void> {
+  const job = await getJob(jobId);
+  const driver = job.driverId ? await getDriverById(job.driverId) : undefined;
   if (driver) {
-    queueSms({
-      phone: driver.phone,
-      locale: driver.locale,
-      templateKey: 'sms.jobCancelled',
-      params: { code: job.jobCode },
-      lotId: job.lotId,
-    });
+    await queueSms({
+            phone: driver.phone,
+            locale: driver.locale,
+            templateKey: 'sms.jobCancelled',
+            params: { code: job.jobCode },
+            lotId: job.lotId,
+          });
   }
 }
 
@@ -489,64 +474,64 @@ function notifyDriverCancelled(jobId: string): void {
  * awaiting pickup confirmation, this confirms it too (D-025) — goods on a
  * truck means the pickup happened.
  */
-export function confirmJobPickup(jobId: string, driverId: string): DeliveryJob {
-  const job = transitionJob(jobId, 'PICKED_UP', { type: 'driver', id: driverId });
-  const contract = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get();
+export async function confirmJobPickup(jobId: string, driverId: string): Promise<DeliveryJob> {
+  const job = await transitionJob(jobId, 'PICKED_UP', { type: 'driver', id: driverId });
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, job.contractId)))[0];
   if (contract?.state === 'FUNDS_HELD') {
-    transitionContract(job.contractId, 'PICKUP_CONFIRMED', { type: 'system' }, { payload: { via: 'driver', jobId } });
+    await transitionContract(job.contractId, 'PICKUP_CONFIRMED', { type: 'system' }, { payload: { via: 'driver', jobId } });
   }
-  queueBuyerNotification({
-    buyerId: job.buyerId,
-    templateKey: 'notif.inTransit',
-    params: { jobCode: job.jobCode },
-    contractId: job.contractId,
-    jobId: job.id,
-  });
+  await queueBuyerNotification({
+        buyerId: job.buyerId,
+        templateKey: 'notif.inTransit',
+        params: { jobCode: job.jobCode },
+        contractId: job.contractId,
+        jobId: job.id,
+      });
   // The farmer hears that the produce left with the driver (vision §10.4).
-  notifyFarmerJob(job, 'sms.collected');
+  await notifyFarmerJob(job, 'sms.collected');
   return job;
 }
 
-function notifyFarmerJob(job: DeliveryJob, templateKey: 'sms.collected' | 'sms.driverAtPickup'): void {
-  const farmer = getFarmerById(job.farmerId);
-  const lot = db.select().from(lots).where(eq(lots.id, job.lotId)).get();
+async function notifyFarmerJob(job: DeliveryJob, templateKey: 'sms.collected' | 'sms.driverAtPickup'): Promise<void> {
+  const farmer = await getFarmerById(job.farmerId);
+  const lot = (await db.select().from(lots).where(eq(lots.id, job.lotId)))[0];
   if (!farmer || !lot) return;
-  const driver = job.driverId ? getDriverById(job.driverId) : undefined;
-  queueSms({
-    phone: farmer.phone,
-    locale: farmer.locale,
-    templateKey,
-    params: { commodity: t(farmer.locale, getCommodityById(lot.commodityId).nameKey), driver: driver?.name ?? '', lotCode: lot.lotCode },
-    contractId: job.contractId,
-    lotId: job.lotId,
-  });
+  const driver = job.driverId ? await getDriverById(job.driverId) : undefined;
+  await queueSms({
+        phone: farmer.phone,
+        locale: farmer.locale,
+        templateKey,
+        params: { commodity: t(farmer.locale, getCommodityById(lot.commodityId).nameKey), driver: driver?.name ?? '', lotCode: lot.lotCode },
+        contractId: job.contractId,
+        lotId: job.lotId,
+      });
 }
 
 /** A driver milestone that is not a state change: reached the pickup, or set off (vision §10.4). */
-function milestone(jobId: string, driverId: string, type: 'DRIVER_AT_PICKUP' | 'DRIVER_DEPARTED', states: string[]): DeliveryJob {
-  const job = getJob(jobId);
+async function milestone(jobId: string, driverId: string, type: 'DRIVER_AT_PICKUP' | 'DRIVER_DEPARTED', states: string[]): Promise<DeliveryJob> {
+  const job = await getJob(jobId);
   if (job.driverId !== driverId) throw new DomainError('Not your job', 'FORBIDDEN', 403);
   if (!states.includes(job.state)) throw new DomainError('That step does not fit this job now', 'INVALID_STATE', 409);
-  appendLotEvent(db, { lotId: job.lotId, type, actorType: 'system', payload: { jobId, driverId } }); // the trace's actors are farmer/buyer/system; job steps log as system
-  queueBuyerNotification({
-    buyerId: job.buyerId,
-    templateKey: type === 'DRIVER_AT_PICKUP' ? 'notif.driverAtPickup' : 'notif.driverDeparted',
-    params: { jobCode: job.jobCode },
-    contractId: job.contractId,
-    jobId: job.id,
-  });
+  await appendLotEvent(db, { lotId: job.lotId, type, actorType: 'system', payload: { jobId, driverId } }); // the trace's actors are farmer/buyer/system; job steps log as system
+  await queueBuyerNotification({
+        buyerId: job.buyerId,
+        templateKey: type === 'DRIVER_AT_PICKUP' ? 'notif.driverAtPickup' : 'notif.driverDeparted',
+        params: { jobCode: job.jobCode },
+        contractId: job.contractId,
+        jobId: job.id,
+      });
   return job;
 }
 
 /** The driver is at the farmer's pickup point. */
-export function driverAtPickup(jobId: string, driverId: string): DeliveryJob {
-  const job = milestone(jobId, driverId, 'DRIVER_AT_PICKUP', ['FUNDS_HELD']);
-  notifyFarmerJob(job, 'sms.driverAtPickup');
+export async function driverAtPickup(jobId: string, driverId: string): Promise<DeliveryJob> {
+  const job = await milestone(jobId, driverId, 'DRIVER_AT_PICKUP', ['FUNDS_HELD']);
+  await notifyFarmerJob(job, 'sms.driverAtPickup');
   return job;
 }
 
 /** The driver has set off for the buyer. */
-export function driverDeparted(jobId: string, driverId: string): DeliveryJob {
+export async function driverDeparted(jobId: string, driverId: string): Promise<DeliveryJob> {
   return milestone(jobId, driverId, 'DRIVER_DEPARTED', ['PICKED_UP']);
 }
 
@@ -554,10 +539,10 @@ export function driverDeparted(jobId: string, driverId: string): DeliveryJob {
  * The driver is at the destination (Phase 3). The buyer's 24 h receipt clock
  * starts once the produce is graded (it usually already is: grading runs at pickup).
  */
-export function driverArrived(jobId: string, driverId: string): DeliveryJob {
-  const job = transitionJob(jobId, 'ARRIVED', { type: 'driver', id: driverId });
-  const contract = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get();
-  if (contract?.state === 'GRADED') markDelivered(contract.id, 'driver');
+export async function driverArrived(jobId: string, driverId: string): Promise<DeliveryJob> {
+  const job = await transitionJob(jobId, 'ARRIVED', { type: 'driver', id: driverId });
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, job.contractId)))[0];
+  if (contract?.state === 'GRADED') await markDelivered(contract.id, 'driver');
   return job;
 }
 
@@ -568,15 +553,15 @@ export function driverArrived(jobId: string, driverId: string): DeliveryJob {
  * catches up when the grade lands.
  */
 export async function confirmJobDelivery(jobId: string, buyerId: string): Promise<DeliveryJob> {
-  const job = getJob(jobId);
+  const job = await getJob(jobId);
   if (job.buyerId !== buyerId) throw new DomainError('Not your job', 'FORBIDDEN', 403);
-  const contract = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get();
-  if (contract?.state === 'GRADED') markDelivered(contract.id, 'driver');
-  const now = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get();
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, job.contractId)))[0];
+  if (contract?.state === 'GRADED') await markDelivered(contract.id, 'driver');
+  const now = (await db.select().from(contracts).where(eq(contracts.id, job.contractId)))[0];
   if (now?.state === 'DELIVERED') {
     await confirmReceipt(now.id, { type: 'buyer', id: buyerId });
   } else {
-    transitionJob(jobId, 'DELIVERED', { type: 'buyer', id: buyerId });
+    await transitionJob(jobId, 'DELIVERED', { type: 'buyer', id: buyerId });
     await initiateJobRelease(jobId);
   }
   return getJob(jobId);
@@ -584,38 +569,36 @@ export async function confirmJobDelivery(jobId: string, buyerId: string): Promis
 
 /** Disburse the fee to the driver's MoMo. Idempotent like initiateRelease. */
 export async function initiateJobRelease(jobId: string): Promise<Payment> {
-  const job = getJob(jobId);
+  const job = await getJob(jobId);
   if (job.state !== 'DELIVERED') {
     throw new DomainError(`Cannot pay out a job in ${job.state}`, 'INVALID_STATE', 409);
   }
-  const existing = db
-    .select()
-    .from(payments)
-    .where(and(eq(payments.jobId, jobId), eq(payments.direction, 'disbursement')))
-    .all()
+  const existing = (await db
+      .select()
+      .from(payments)
+      .where(and(eq(payments.jobId, jobId), eq(payments.direction, 'disbursement'))))
     .find((p) => p.status !== 'failed');
   if (existing) return existing;
 
-  const driver = job.driverId ? getDriverById(job.driverId) : undefined;
+  const driver = job.driverId ? await getDriverById(job.driverId) : undefined;
   if (!driver) throw notFound('driver');
 
   const provider = getPaymentProvider();
   const referenceId = crypto.randomUUID();
-  const payment = db
-    .insert(payments)
-    .values({
-      contractId: job.contractId,
-      jobId: job.id,
-      direction: 'disbursement',
-      provider: provider.name,
-      providerRef: referenceId,
-      amount: job.quoteAmount,
-      currency: provider.settlementCurrency,
-      counterpartyMsisdn: driver.momoMsisdn,
-      status: 'pending',
-    })
-    .returning()
-    .get();
+  const payment = (await db
+        .insert(payments)
+        .values({
+          contractId: job.contractId,
+          jobId: job.id,
+          direction: 'disbursement',
+          provider: provider.name,
+          providerRef: referenceId,
+          amount: job.quoteAmount,
+          currency: provider.settlementCurrency,
+          counterpartyMsisdn: driver.momoMsisdn,
+          status: 'pending',
+        })
+        .returning())[0]!;
 
   try {
     const result = await provider.disburse({
@@ -627,143 +610,138 @@ export async function initiateJobRelease(jobId: string): Promise<Payment> {
       note: `FTM transport payout ${job.jobCode}`,
     });
     if (result.status === 'failed') {
-      db.update(payments)
-        .set({ status: 'failed', raw: JSON.stringify(result.raw ?? null), updatedAt: Date.now() })
-        .where(eq(payments.id, payment.id))
-        .run();
+      (await db.update(payments)
+                .set({ status: 'failed', raw: JSON.stringify(result.raw ?? null), updatedAt: Date.now() })
+                .where(eq(payments.id, payment.id)));
     }
   } catch (err) {
-    db.update(payments)
-      .set({ raw: JSON.stringify({ initiateError: String(err) }), updatedAt: Date.now() })
-      .where(eq(payments.id, payment.id))
-      .run();
+    (await db.update(payments)
+            .set({ raw: JSON.stringify({ initiateError: String(err) }), updatedAt: Date.now() })
+            .where(eq(payments.id, payment.id)));
   }
   return payment;
 }
 
 /** Payment-status resolution for job payments — called from pollPaymentsOnce. */
-export function resolveJobPayment(payment: Payment, status: 'successful' | 'failed'): void {
+export async function resolveJobPayment(payment: Payment, status: 'successful' | 'failed'): Promise<void> {
   if (!payment.jobId) return;
-  const job = getJob(payment.jobId);
+  const job = await getJob(payment.jobId);
 
   if (payment.direction === 'collection') {
     if (status === 'successful' && job.state === 'ASSIGNED') {
-      transitionJob(job.id, 'FUNDS_HELD', { type: 'system' }, {
-        payload: { paymentId: payment.id, amount: payment.amount },
-        also: (tx) => {
-          postJournal(
-            tx,
-            job.contractId,
-            [
-              { account: ACCOUNTS.external, debit: job.quoteAmount, memoKey: 'ledger.transportHold' },
-              { account: ACCOUNTS.escrowJob(job.id), credit: job.quoteAmount, memoKey: 'ledger.transportHold' },
-            ],
-            job.id,
-          );
-        },
-      });
+      await transitionJob(job.id, 'FUNDS_HELD', { type: 'system' }, {
+                payload: { paymentId: payment.id, amount: payment.amount },
+                also: async (tx) => {
+                  await postJournal(
+                                tx,
+                                job.contractId,
+                                [
+                                  { account: ACCOUNTS.external, debit: job.quoteAmount, memoKey: 'ledger.transportHold' },
+                                  { account: ACCOUNTS.escrowJob(job.id), credit: job.quoteAmount, memoKey: 'ledger.transportHold' },
+                                ],
+                                job.id,
+                              );
+                },
+              });
     } else if (status === 'failed') {
-      handleJobFundingFailure(job.id);
+      await handleJobFundingFailure(job.id);
     }
     return;
   }
 
   if (status === 'successful' && job.state === 'DELIVERED') {
-    transitionJob(job.id, 'PAID', { type: 'system' }, {
-      payload: { paymentId: payment.id, amount: job.quoteAmount },
-      also: (tx) => {
-        postJournal(
-          tx,
-          job.contractId,
-          [
-            { account: ACCOUNTS.escrowJob(job.id), debit: job.quoteAmount, memoKey: 'ledger.transportPayout' },
-            { account: ACCOUNTS.driverPayable(job.driverId!), credit: job.quoteAmount, memoKey: 'ledger.transportPayout' },
-          ],
-          job.id,
-        );
-      },
-    });
-    const driver = job.driverId ? getDriverById(job.driverId) : undefined;
+    await transitionJob(job.id, 'PAID', { type: 'system' }, {
+            payload: { paymentId: payment.id, amount: job.quoteAmount },
+            also: async (tx) => {
+              await postJournal(
+                          tx,
+                          job.contractId,
+                          [
+                            { account: ACCOUNTS.escrowJob(job.id), debit: job.quoteAmount, memoKey: 'ledger.transportPayout' },
+                            { account: ACCOUNTS.driverPayable(job.driverId!), credit: job.quoteAmount, memoKey: 'ledger.transportPayout' },
+                          ],
+                          job.id,
+                        );
+            },
+          });
+    const driver = job.driverId ? await getDriverById(job.driverId) : undefined;
     if (driver) {
-      queueSms({
-        phone: driver.phone,
-        locale: driver.locale,
-        templateKey: 'sms.jobPaid',
-        params: { amount: formatGhs(job.quoteAmount), code: job.jobCode },
-        lotId: job.lotId,
-      });
-      queueBuyerNotification({
-        buyerId: job.buyerId,
-        templateKey: 'notif.driverPaid',
-        params: { jobCode: job.jobCode, fee: formatGhs(job.quoteAmount), driver: driver.name },
-        contractId: job.contractId,
-        jobId: job.id,
-      });
+      await queueSms({
+                phone: driver.phone,
+                locale: driver.locale,
+                templateKey: 'sms.jobPaid',
+                params: { amount: formatGhs(job.quoteAmount), code: job.jobCode },
+                lotId: job.lotId,
+              });
+      await queueBuyerNotification({
+                buyerId: job.buyerId,
+                templateKey: 'notif.driverPaid',
+                params: { jobCode: job.jobCode, fee: formatGhs(job.quoteAmount), driver: driver.name },
+                contractId: job.contractId,
+                jobId: job.id,
+              });
     }
   }
 }
 
 /** Sweep: cancel jobs whose produce contract died; refund the fee if it was held. */
-export function cancelStaleJobs(now = Date.now()): number {
+export async function cancelStaleJobs(now = Date.now()): Promise<number> {
   void now;
   const deadContracts = new Set(
-    db
-      .select({ id: contracts.id })
-      .from(contracts)
-      .where(inArray(contracts.state, ['CANCELLED', 'CANCELLED_REFUNDED']))
-      .all()
+    (await db
+            .select({ id: contracts.id })
+            .from(contracts)
+            .where(inArray(contracts.state, ['CANCELLED', 'CANCELLED_REFUNDED'])))
       .map((r) => r.id),
   );
-  const liveJobs = db
-    .select()
-    .from(deliveryJobs)
-    .where(inArray(deliveryJobs.state, ['REQUESTED', 'NO_DRIVER', 'ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD']))
-    .all()
+  const liveJobs = (await db
+      .select()
+      .from(deliveryJobs)
+      .where(inArray(deliveryJobs.state, ['REQUESTED', 'NO_DRIVER', 'ASSIGNED', 'FUNDING_FAILED', 'FUNDS_HELD'])))
     .filter((j) => deadContracts.has(j.contractId));
 
   for (const job of liveJobs) {
     if (job.state === 'FUNDS_HELD') {
-      transitionJob(job.id, 'CANCELLED_REFUNDED', { type: 'system' }, {
-        payload: { reason: 'contract_dead' },
-        also: (tx) => {
-          postJournal(
-            tx,
-            job.contractId,
-            [
-              { account: ACCOUNTS.escrowJob(job.id), debit: job.quoteAmount, memoKey: 'ledger.transportRefund' },
-              { account: ACCOUNTS.buyerRefunds(job.buyerId), credit: job.quoteAmount, memoKey: 'ledger.transportRefund' },
-            ],
-            job.id,
-          );
-        },
-      });
+      await transitionJob(job.id, 'CANCELLED_REFUNDED', { type: 'system' }, {
+                payload: { reason: 'contract_dead' },
+                also: async (tx) => {
+                  await postJournal(
+                                tx,
+                                job.contractId,
+                                [
+                                  { account: ACCOUNTS.escrowJob(job.id), debit: job.quoteAmount, memoKey: 'ledger.transportRefund' },
+                                  { account: ACCOUNTS.buyerRefunds(job.buyerId), credit: job.quoteAmount, memoKey: 'ledger.transportRefund' },
+                                ],
+                                job.id,
+                              );
+                },
+              });
     } else if (job.state === 'REQUESTED' || job.state === 'NO_DRIVER' || job.state === 'ASSIGNED') {
-      transitionJob(job.id, 'CANCELLED', { type: 'system' }, { payload: { reason: 'contract_dead' } });
+      await transitionJob(job.id, 'CANCELLED', { type: 'system' }, { payload: { reason: 'contract_dead' } });
     } else {
       continue; // FUNDING_FAILED resolves through its own retry/cancel path
     }
-    notifyDriverCancelled(job.id);
+    await notifyDriverCancelled(job.id);
   }
   return liveJobs.length;
 }
 
 /** Contracts whose produce is already on a truck must not be refunded as missed pickups. */
-export function contractsWithGoodsInTransit(): Set<string> {
+export async function contractsWithGoodsInTransit(): Promise<Set<string>> {
   return new Set(
-    db
-      .select({ contractId: deliveryJobs.contractId })
-      .from(deliveryJobs)
-      .where(inArray(deliveryJobs.state, ['PICKED_UP', 'ARRIVED', 'DELIVERED', 'PAID']))
-      .all()
+    (await db
+            .select({ contractId: deliveryJobs.contractId })
+            .from(deliveryJobs)
+            .where(inArray(deliveryJobs.state, ['PICKED_UP', 'ARRIVED', 'DELIVERED', 'PAID'])))
       .map((r) => r.contractId),
   );
 }
 
-export function jobSummary(job: DeliveryJob): {
+export async function jobSummary(job: DeliveryJob): Promise<{
   commodityCode: string;
   quantityKg: number;
-} {
-  const contract = db.select().from(contracts).where(eq(contracts.id, job.contractId)).get()!;
+}> {
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, job.contractId)))[0]!;
   return { commodityCode: getCommodityById(contract.commodityId).code, quantityKg: contract.quantityKg };
 }
 
@@ -772,7 +750,7 @@ export function jobSummary(job: DeliveryJob): {
  * and whether they're currently on a job — buyers and sellers browse this to
  * call or hire directly.
  */
-export function listAvailableDrivers(): Array<{
+export async function listAvailableDrivers(): Promise<Array<{
   id: string;
   name: string;
   phone: string;
@@ -780,13 +758,12 @@ export function listAvailableDrivers(): Array<{
   vehicleClassCode: string;
   routeRegions: string[];
   busy: boolean;
-}> {
-  const busy = busyDriverIds();
-  return db
-    .select()
-    .from(drivers)
-    .where(eq(drivers.active, true))
-    .all()
+}>> {
+  const busy = await busyDriverIds();
+  return (await db
+      .select()
+      .from(drivers)
+      .where(eq(drivers.active, true)))
     .map((d) => ({
       id: d.id,
       name: d.name,
@@ -804,41 +781,41 @@ export function listAvailableDrivers(): Array<{
  * until the buyer approves and funds it. A trace event + a buyer alert with the
  * cheapest quote — no schema, no money.
  */
-export function suggestTransport(contractId: string, farmerId: string): void {
-  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+export async function suggestTransport(contractId: string, farmerId: string): Promise<void> {
+  const contract = (await db.select().from(contracts).where(eq(contracts.id, contractId)))[0];
   if (!contract) throw notFound('contract');
   if (contract.farmerId !== farmerId) throw new DomainError('Not your contract', 'FORBIDDEN', 403);
   if (contract.state !== 'FUNDS_HELD') {
     throw new DomainError('Delivery can be arranged once the buyer hold is secured', 'INVALID_STATE', 409);
   }
-  const existing = getJobForContract(contractId);
+  const existing = await getJobForContract(contractId);
   if (existing && (LIVE_JOB_STATES as readonly string[]).includes(existing.state)) {
     throw new DomainError('A transport job already exists for this contract', 'JOB_EXISTS', 409);
   }
 
-  const farmer = getFarmerById(farmerId);
-  const lot = db.select().from(lots).where(eq(lots.id, contract.lotId)).get()!;
-  const cheapest = quoteTransportOptions(contractId)[0];
-  db.transaction((tx) => {
-    appendLotEvent(tx, {
-      lotId: contract.lotId,
-      type: 'TRANSPORT_SUGGESTED',
-      actorType: 'farmer',
-      actorId: farmerId,
-      payload: cheapest
-        ? { vehicleClass: cheapest.vehicleClass.code, distanceKm: cheapest.distanceKm, quoteAmount: cheapest.quoteAmount }
-        : {},
-    });
-  });
-  queueBuyerNotification({
-    buyerId: contract.buyerId,
-    templateKey: 'notif.transportSuggested',
-    params: {
-      farmer: farmer?.name ?? 'The farmer',
-      lotCode: lot.lotCode,
-      fee: cheapest ? formatGhs(cheapest.quoteAmount) : '—',
-    },
-    contractId,
-    lotId: contract.lotId,
-  });
+  const farmer = await getFarmerById(farmerId);
+  const lot = (await db.select().from(lots).where(eq(lots.id, contract.lotId)))[0]!;
+  const cheapest = (await quoteTransportOptions(contractId))[0];
+  await db.transaction(async (tx) => {
+        await appendLotEvent(tx, {
+                lotId: contract.lotId,
+                type: 'TRANSPORT_SUGGESTED',
+                actorType: 'farmer',
+                actorId: farmerId,
+                payload: cheapest
+                  ? { vehicleClass: cheapest.vehicleClass.code, distanceKm: cheapest.distanceKm, quoteAmount: cheapest.quoteAmount }
+                  : {},
+              });
+      });
+  await queueBuyerNotification({
+        buyerId: contract.buyerId,
+        templateKey: 'notif.transportSuggested',
+        params: {
+          farmer: farmer?.name ?? 'The farmer',
+          lotCode: lot.lotCode,
+          fee: cheapest ? formatGhs(cheapest.quoteAmount) : '—',
+        },
+        contractId,
+        lotId: contract.lotId,
+      });
 }

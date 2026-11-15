@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 import { config } from '../../config';
+import { diskStore, getMediaStore, type MediaStore } from '../../storage/index';
 import { LOCALE_TO_SPACE, spaceCall, spaceFileUrl, type SpaceFile } from '../space';
 
 /**
@@ -48,15 +47,20 @@ const DEFAULT_SPACE_TTS_WAIT_MS = 6000;
  */
 export class SpaceTtsProvider implements TtsProvider {
   readonly name = 'space' as const;
-  private readonly cacheDir: string;
+  /** Where clips are cached: the shared media store (Supabase Storage on Vercel), or a test's own folder. */
+  private readonly store: MediaStore;
+  private readonly keyPrefix: string;
   private readonly baseUrl: string;
   private readonly waitMs: number;
-  /** Cache file → the synthesis already running for it, so two callers never double-synthesize one phrase. */
+  /** Clip key → the synthesis already running for it, so two callers never double-synthesize one phrase. */
   private readonly inflight = new Map<string, Promise<boolean>>();
+  /** Clips known to exist, so a cached clip costs no storage round trip on later calls. */
+  private readonly known = new Set<string>();
 
   constructor(opts?: { baseUrl?: string; cacheDir?: string; waitMs?: number }) {
     this.baseUrl = opts?.baseUrl ?? config.SPACE_URL;
-    this.cacheDir = opts?.cacheDir ?? path.join(config.storageDir, 'tts');
+    this.store = opts?.cacheDir ? diskStore(opts.cacheDir) : getMediaStore();
+    this.keyPrefix = opts?.cacheDir ? '' : 'tts/';
     this.waitMs = opts?.waitMs ?? DEFAULT_SPACE_TTS_WAIT_MS;
   }
 
@@ -70,8 +74,8 @@ export class SpaceTtsProvider implements TtsProvider {
       if (!res.ok) return false;
       const bytes = Buffer.from(await res.arrayBuffer());
       if (bytes.length === 0) return false;
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, bytes);
+      await this.store.put(file, bytes, 'audio/wav');
+      this.known.add(file);
       return true;
     } catch {
       return false;
@@ -86,8 +90,10 @@ export class SpaceTtsProvider implements TtsProvider {
     const hash = createHash('sha256').update(`space|${lang}|${opts.text}`).digest('hex');
     return {
       lang,
-      file: path.join(this.cacheDir, opts.locale, `${hash}.wav`),
-      url: `${config.PUBLIC_BASE_URL}/tts/${opts.locale}/${hash}.wav`,
+      file: `${this.keyPrefix}${opts.locale}/${hash}.wav`, // the clip's key in the store
+      url: this.keyPrefix
+        ? this.store.url(`${this.keyPrefix}${opts.locale}/${hash}.wav`, { absolute: true })
+        : `${config.PUBLIC_BASE_URL}/tts/${opts.locale}/${hash}.wav`,
     };
   }
 
@@ -101,7 +107,10 @@ export class SpaceTtsProvider implements TtsProvider {
       const clip = this.clip(opts);
       if (!clip) return null;
       const { lang, file, url } = clip;
-      if (fs.existsSync(file)) return { url };
+      if (this.known.has(file) || (await this.store.exists(file))) {
+        this.known.add(file);
+        return { url };
+      }
 
       let job = this.inflight.get(file);
       if (!job) {

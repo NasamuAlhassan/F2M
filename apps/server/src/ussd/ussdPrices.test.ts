@@ -17,12 +17,12 @@ async function dial(phone: string, inputs: string[]): Promise<string[]> {
   return responses;
 }
 
-beforeAll(() => {
-  registerFarmer({ phone: PHONE, name: 'Price Farmer', regionCode: 'ASHANTI' });
+beforeAll(async () => {
+  await registerFarmer({ phone: PHONE, name: 'Price Farmer', regionCode: 'ASHANTI' });
   // A run of recent maize deals around GHS 4/kg — GHS 400 for a 100 kg bag.
   const maize = getCommodityByCode('MAIZE').id;
   for (let i = 0; i < 6; i += 1) {
-    recordPrice({ commodityId: maize, pricePerKg: 400 + i, source: 'deal', regionCode: 'ASHANTI', refId: `ussd-maize-${i}`, observedAt: Date.now() - (i + 1) * DAY });
+    await recordPrice({ commodityId: maize, pricePerKg: 400 + i, source: 'deal', regionCode: 'ASHANTI', refId: `ussd-maize-${i}`, observedAt: Date.now() - (i + 1) * DAY });
   }
 });
 

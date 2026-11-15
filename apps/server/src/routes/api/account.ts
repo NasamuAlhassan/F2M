@@ -23,8 +23,8 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   // Who am I? `account: null` means "signed in, profile not created yet" —
   // the web then shows the second signup step.
   app.get('/account/me', { preHandler: [app.authLogin] }, async (req) => {
-    const account = getAccountByAuthUser(req.login.authUserId);
-    return { account: account ? describeAccount(account) : null };
+    const account = await getAccountByAuthUser(req.login.authUserId);
+    return { account: account ? await describeAccount(account) : null };
   });
 
   app.post('/account/register', { preHandler: [app.authLogin] }, async (req, reply) => {
@@ -32,7 +32,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       throw new DomainError('Sign in with your phone number to create an F2M profile', 'PHONE_REQUIRED', 400);
     }
     const input = registerSchema.parse(req.body ?? {});
-    const account = registerAccount({ ...input, authUserId: req.login.authUserId, phone: req.login.phone });
-    return reply.code(201).send({ account: describeAccount(account) });
+    const account = await registerAccount({ ...input, authUserId: req.login.authUserId, phone: req.login.phone });
+    return reply.code(201).send({ account: await describeAccount(account) });
   });
 }

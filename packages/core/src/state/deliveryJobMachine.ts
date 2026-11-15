@@ -51,21 +51,21 @@ export interface JobTransitionExtra {
   driverId?: string;
   payload?: Record<string, unknown>;
   /** Extra work (offer rows, ledger postings) that must commit atomically. */
-  also?: (tx: DbLike, job: DeliveryJob) => void;
+  also?: (tx: DbLike, job: DeliveryJob) => void | Promise<void>;
 }
 
 /**
  * Guarded delivery-job transition — the job update, its side effects, and the
  * lot trace event commit in ONE transaction (same shape as transitionContract).
  */
-export function transitionJob(
+export async function transitionJob(
   jobId: string,
   to: DeliveryJobState,
   actor: JobActor,
   extra: JobTransitionExtra = {},
-): DeliveryJob {
-  return db.transaction((tx) => {
-    const job = tx.select().from(deliveryJobs).where(eq(deliveryJobs.id, jobId)).get();
+): Promise<DeliveryJob> {
+  return db.transaction(async (tx) => {
+    const job = (await tx.select().from(deliveryJobs).where(eq(deliveryJobs.id, jobId)))[0];
     if (!job) throw notFound('delivery job');
 
     const rule = TRANSITIONS[`${job.state}>${to}`];
@@ -98,23 +98,24 @@ export function transitionJob(
     }
     if (TERMINAL_STATES.includes(to) && to !== 'PAID') updates.closedAt = now;
 
-    const updated = tx.update(deliveryJobs).set(updates).where(eq(deliveryJobs.id, jobId)).returning().get()!;
-    extra.also?.(tx, updated);
+    const updated = (await tx.update(deliveryJobs).set(updates).where(eq(deliveryJobs.id, jobId)).returning())[0]!;
+    // Awaited inside the transaction: the ledger lines commit with the state change, or neither does.
+    await extra.also?.(tx, updated);
 
     const eventType = EVENT_FOR_STATE[to];
     if (eventType && to !== 'REQUESTED') {
-      appendLotEvent(tx, {
-        lotId: job.lotId,
-        type: eventType,
-        actorType: actor.type === 'driver' ? 'system' : actor.type, // lot_events actor enum has no driver; payload carries it
-        actorId: actor.id ?? null,
-        payload: {
-          jobId,
-          jobCode: job.jobCode,
-          ...(actor.type === 'driver' ? { driverActor: actor.id } : {}),
-          ...(extra.payload ?? {}),
-        },
-      });
+      await appendLotEvent(tx, {
+                lotId: job.lotId,
+                type: eventType,
+                actorType: actor.type === 'driver' ? 'system' : actor.type, // lot_events actor enum has no driver; payload carries it
+                actorId: actor.id ?? null,
+                payload: {
+                  jobId,
+                  jobCode: job.jobCode,
+                  ...(actor.type === 'driver' ? { driverActor: actor.id } : {}),
+                  ...(extra.payload ?? {}),
+                },
+              });
     }
     return updated;
   });

@@ -21,18 +21,18 @@ import { farmerOf } from './common';
  * the rest), 4 or 9 hears it again. Same moves as USSD My lots.
  */
 
-function claimOf(ctx: IvrCtx) {
-  return ctx.call.contractId ? openClaimFor(ctx.call.contractId) : undefined;
+async function claimOf(ctx: IvrCtx) {
+  return ctx.call.contractId ? await openClaimFor(ctx.call.contractId) : undefined;
 }
 
-function guard(ctx: IvrCtx): I18nText[] | null {
-  return claimOf(ctx) ? null : [{ key: 'voice.claim.gone' }];
+async function guard(ctx: IvrCtx): Promise<I18nText[] | null> {
+  return await claimOf(ctx) ? null : [{ key: 'voice.claim.gone' }];
 }
 
-function say(ctx: IvrCtx): I18nText[] {
-  const claim = claimOf(ctx)!;
-  const contract = getContract(claim.contractId);
-  const buyer = getBuyerById(contract.buyerId);
+async function say(ctx: IvrCtx): Promise<I18nText[]> {
+  const claim = (await claimOf(ctx))!;
+  const contract = await getContract(claim.contractId);
+  const buyer = await getBuyerById(contract.buyerId);
   return [
     {
       key: 'voice.claim.intro',
@@ -41,7 +41,7 @@ function say(ctx: IvrCtx): I18nText[] {
         commodity: t(ctx.locale, getCommodityById(contract.commodityId).nameKey),
         reason: t(ctx.locale, `claim.reason.${claim.reason}`),
         amount: formatGhs(claim.proposedDeduction),
-        rest: formatGhs(stillHeld(contract)),
+        rest: formatGhs(await stillHeld(contract)),
       },
     },
     { key: 'voice.claim.menu', params: { hours: config.CLAIM_ANSWER_HOURS } },
@@ -49,12 +49,12 @@ function say(ctx: IvrCtx): I18nText[] {
 }
 
 async function onDigits(digits: string, ctx: IvrCtx): Promise<IvrResult> {
-  const claim = claimOf(ctx);
-  const farmer = farmerOf(ctx);
+  const claim = await claimOf(ctx);
+  const farmer = await farmerOf(ctx);
   if (!claim || !farmer) return { end: [{ key: 'voice.claim.gone' }], outcome: { result: 'gone' } };
   if (digits !== '1' && digits !== '2') return { next: 'claim_main' }; // 4, or any other key: again
-  const contract = getContract(claim.contractId);
-  const paidNow = formatGhs(Math.max(0, stillHeld(contract) - claim.proposedDeduction));
+  const contract = await getContract(claim.contractId);
+  const paidNow = formatGhs(Math.max(0, await stillHeld(contract) - claim.proposedDeduction));
   try {
     await answerClaim(claim.id, farmer.id, digits === '1');
   } catch (err) {

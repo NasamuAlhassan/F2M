@@ -225,21 +225,21 @@ export interface OfferAdvice {
  * say? Pure price arithmetic against the market range — the number suggested is
  * the market's middle, never invented — so it works with the assist off.
  */
-export function adviseOffer(offerId: string, party: 'buyer' | 'farmer', locale = 'en'): OfferAdvice {
-  const offer = db.select().from(offers).where(eq(offers.id, offerId)).get();
+export async function adviseOffer(offerId: string, party: 'buyer' | 'farmer', locale = 'en'): Promise<OfferAdvice> {
+  const offer = (await db.select().from(offers).where(eq(offers.id, offerId)))[0];
   if (!offer) throw notFound('offer');
-  const lot = db.select().from(lots).where(eq(lots.id, offer.lotId)).get();
-  const unit = lot ? db.select().from(units).where(eq(units.id, lot.unitId)).get() : undefined;
+  const lot = (await db.select().from(lots).where(eq(lots.id, offer.lotId)))[0];
+  const unit = lot ? (await db.select().from(units).where(eq(units.id, lot.unitId)))[0] : undefined;
   if (!lot || !unit) throw notFound('lot');
   const commodity = getCommodityById(lot.commodityId);
 
-  const g = priceGuidance({
-    commodityCode: commodity.code,
-    unitCode: unit.code,
-    regionCode: lot.regionCode,
-    price: offer.pricePerUnit,
-    side: party === 'farmer' ? 'sell' : 'buy',
-  });
+  const g = await priceGuidance({
+      commodityCode: commodity.code,
+      unitCode: unit.code,
+      regionCode: lot.regionCode,
+      price: offer.pricePerUnit,
+      side: party === 'farmer' ? 'sell' : 'buy',
+    });
   const solid = g.estimate && g.estimate.confidence !== 'reference' && g.estimate.confidence !== 'low';
   if (!solid || !g.suggested?.perUnit) {
     return { action: 'none', verdict: g.verdict, suggestedPricePerUnit: null, message: t(locale, 'advice.none') };
@@ -277,12 +277,12 @@ export interface PhotoCheck {
  */
 export async function checkListingPhoto(lotId: string): Promise<PhotoCheck | null> {
   if (!llmEnabled()) return null;
-  const lot = db.select().from(lots).where(eq(lots.id, lotId)).get();
+  const lot = (await db.select().from(lots).where(eq(lots.id, lotId)))[0];
   if (!lot) throw notFound('lot');
-  const photo = listListingPhotos(lotId)[0];
+  const photo = (await listListingPhotos(lotId))[0];
   if (!photo) return null;
   const commodity = getCommodityById(lot.commodityId);
-  const image = photoAsGradingImage(photo);
+  const image = await photoAsGradingImage(photo);
 
   const answer = await askLlm({
     system: [

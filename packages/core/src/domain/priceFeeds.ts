@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { config } from '../config';
 import { db } from '../db/client';
+import { getSetting, setSetting } from './settings';
 import { commodities, priceObservations, regions } from '../db/schema';
 import { clearPriceCaches } from './priceIntel';
 
@@ -110,7 +111,7 @@ export interface ImportResult {
  * in a unit we can turn into kilos; each becomes one `market` observation.
  * Running it again changes nothing that is already there.
  */
-export function importWfpCsv(csv: string): ImportResult {
+export async function importWfpCsv(csv: string): Promise<ImportResult> {
   const lines = csv.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const header = parseCsvLine(lines[0] ?? '');
   const col = (name: string) => header.indexOf(name);
@@ -126,8 +127,8 @@ export function importWfpCsv(csv: string): ImportResult {
   };
   if (Object.values(idx).some((i) => i < 0)) throw new Error('This does not look like a WFP food-price file');
 
-  const cropIds = new Map(db.select().from(commodities).all().map((c) => [c.code, c.id]));
-  const regionCodes = new Set(db.select().from(regions).all().map((r) => r.code));
+  const cropIds = new Map((await db.select().from(commodities)).map((c) => [c.code, c.id]));
+  const regionCodes = new Set((await db.select().from(regions)).map((r) => r.code));
 
   const rows: Array<typeof priceObservations.$inferInsert> = [];
   let read = 0;
@@ -163,17 +164,16 @@ export function importWfpCsv(csv: string): ImportResult {
     });
   }
 
-  db.transaction((tx) => {
-    for (let i = 0; i < rows.length; i += 200) {
-      tx.insert(priceObservations)
-        .values(rows.slice(i, i + 200))
-        .onConflictDoUpdate({
-          target: [priceObservations.source, priceObservations.refId],
-          set: { pricePerKg: sql`excluded.price_per_kg`, observedAt: sql`excluded.observed_at` },
-        })
-        .run();
-    }
-  });
+  await db.transaction(async (tx) => {
+        for (let i = 0; i < rows.length; i += 200) {
+          (await tx.insert(priceObservations)
+                    .values(rows.slice(i, i + 200))
+                    .onConflictDoUpdate({
+                      target: [priceObservations.source, priceObservations.refId],
+                      set: { pricePerKg: sql`excluded.price_per_kg`, observedAt: sql`excluded.observed_at` },
+                    }));
+        }
+      });
   clearPriceCaches();
   return { read, imported: rows.length, skipped: read - rows.length, newest };
 }
@@ -220,10 +220,10 @@ export interface FeedResult {
   rejected: Array<{ index: number; reason: string }>;
 }
 
-export function ingestFeed(raw: unknown): FeedResult {
+export async function ingestFeed(raw: unknown): Promise<FeedResult> {
   const feed = priceFeedSchema.parse(raw);
-  const cropIds = new Map(db.select().from(commodities).all().map((c) => [c.code, c.id]));
-  const regionCodes = new Set(db.select().from(regions).all().map((r) => r.code));
+  const cropIds = new Map((await db.select().from(commodities)).map((c) => [c.code, c.id]));
+  const regionCodes = new Set((await db.select().from(regions)).map((r) => r.code));
   const rejected: FeedResult['rejected'] = [];
   const rows: Array<typeof priceObservations.$inferInsert> = [];
 
@@ -250,25 +250,25 @@ export function ingestFeed(raw: unknown): FeedResult {
     });
   });
 
-  db.transaction((tx) => {
-    for (let i = 0; i < rows.length; i += 200) {
-      tx.insert(priceObservations)
-        .values(rows.slice(i, i + 200))
-        .onConflictDoUpdate({
-          target: [priceObservations.source, priceObservations.refId],
-          set: { pricePerKg: sql`excluded.price_per_kg`, observedAt: sql`excluded.observed_at` },
-        })
-        .run();
-    }
-  });
+  await db.transaction(async (tx) => {
+        for (let i = 0; i < rows.length; i += 200) {
+          (await tx.insert(priceObservations)
+                    .values(rows.slice(i, i + 200))
+                    .onConflictDoUpdate({
+                      target: [priceObservations.source, priceObservations.refId],
+                      set: { pricePerKg: sql`excluded.price_per_kg`, observedAt: sql`excluded.observed_at` },
+                    }));
+        }
+      });
   clearPriceCaches();
   return { accepted: rows.length, rejected };
 }
 
 // ── Keeping it current ───────────────────────────────────────────────────────
 
-let lastFeedPull = 0;
-let hdxTried = false;
+// Remembered in the database, not module variables: on serverless each call may be a new instance.
+const LAST_FEED_PULL = 'price_feed.last_pull';
+const HDX_TRIED = 'price_feed.hdx_tried';
 
 /**
  * Called by the sweep: pull the configured feed URL on its interval, and — only
@@ -279,17 +279,17 @@ export async function refreshPriceFeeds(now = Date.now()): Promise<{ feedAccepte
   let feedAccepted = 0;
   let wfpImported = 0;
   try {
-    if (config.PRICE_FEED_URL && now - lastFeedPull >= config.PRICE_FEED_INTERVAL_MINUTES * 60_000) {
-      lastFeedPull = now;
+    if (config.PRICE_FEED_URL && now - Number((await getSetting(LAST_FEED_PULL)) ?? 0) >= config.PRICE_FEED_INTERVAL_MINUTES * 60_000) {
+      await setSetting(LAST_FEED_PULL, String(now));
       const res = await fetch(config.PRICE_FEED_URL, {
         headers: config.PRICE_FEED_TOKEN ? { Authorization: `Bearer ${config.PRICE_FEED_TOKEN}` } : {},
       });
       if (!res.ok) throw new Error(`price feed answered ${res.status}`);
-      feedAccepted = ingestFeed(await res.json()).accepted;
+      feedAccepted = (await ingestFeed(await res.json())).accepted;
     }
-    if (config.PRICE_FEED_HDX === 'true' && !hdxTried) {
-      hdxTried = true;
-      const have = db.select({ n: sql<number>`count(*)` }).from(priceObservations).where(eq(priceObservations.dataset, 'wfp')).get();
+    if (config.PRICE_FEED_HDX === 'true' && (await getSetting(HDX_TRIED)) === null) {
+      await setSetting(HDX_TRIED, String(now));
+      const have = (await db.select({ n: sql<number>`count(*)::int` }).from(priceObservations).where(eq(priceObservations.dataset, 'wfp')))[0];
       if (!have || have.n === 0) wfpImported = (await fetchAndImportWfp()).imported;
     }
   } catch (err) {

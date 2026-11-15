@@ -52,7 +52,7 @@ export interface RecordPriceInput {
  * Remember a price. With a `refId` the same thing seen again updates its row
  * (a listing whose price changed, an import run twice) instead of adding one.
  */
-export function recordPrice(input: RecordPriceInput): PriceObservation {
+export async function recordPrice(input: RecordPriceInput): Promise<PriceObservation> {
   if (!Number.isFinite(input.pricePerKg) || input.pricePerKg <= 0 || input.pricePerKg > MAX_PRICE_PER_KG) {
     throw new DomainError('That price per kg is outside what we record', 'INVALID_PRICE');
   }
@@ -66,15 +66,14 @@ export function recordPrice(input: RecordPriceInput): PriceObservation {
     refId: input.refId ?? null,
     observedAt: input.observedAt ?? Date.now(),
   };
-  const row = db
-    .insert(priceObservations)
-    .values(values)
-    .onConflictDoUpdate({
-      target: [priceObservations.source, priceObservations.refId],
-      set: { pricePerKg: values.pricePerKg, observedAt: values.observedAt, regionCode: values.regionCode, market: values.market },
-    })
-    .returning()
-    .get();
+  const row = (await db
+        .insert(priceObservations)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [priceObservations.source, priceObservations.refId],
+          set: { pricePerKg: values.pricePerKg, observedAt: values.observedAt, regionCode: values.regionCode, market: values.market },
+        })
+        .returning())[0]!;
   publishLive({ topic: 'prices', audience: ['all'], ref: { commodityId: row.commodityId } });
   return row;
 }
@@ -84,9 +83,9 @@ export function recordPrice(input: RecordPriceInput): PriceObservation {
  * a deal). Never throws: a price we cannot record must not stop a farmer listing
  * or a buyer paying.
  */
-export function observePrice(input: RecordPriceInput): void {
+export async function observePrice(input: RecordPriceInput): Promise<void> {
   try {
-    recordPrice(input);
+    await recordPrice(input);
   } catch {
     // outside what we record, or a transient write — the trade itself carries on
   }
@@ -161,13 +160,12 @@ export interface PriceEstimate {
   scope: 'region' | 'national';
 }
 
-function loadObservations(commodityId: string, since: number): PriceObservation[] {
-  return db
-    .select()
-    .from(priceObservations)
-    .where(and(eq(priceObservations.commodityId, commodityId), gte(priceObservations.observedAt, since)))
-    .orderBy(asc(priceObservations.observedAt))
-    .all();
+async function loadObservations(commodityId: string, since: number): Promise<PriceObservation[]> {
+  return (await db
+      .select()
+      .from(priceObservations)
+      .where(and(eq(priceObservations.commodityId, commodityId), gte(priceObservations.observedAt, since)))
+      .orderBy(asc(priceObservations.observedAt)));
 }
 
 function weigh(o: PriceObservation, now: number, regionCode?: string | null): number {
@@ -183,12 +181,12 @@ function weigh(o: PriceObservation, now: number, regionCode?: string | null): nu
  * and say so. Returns null when there is nothing fresh enough to stand on —
  * never a stale number dressed up as today's.
  */
-export function estimatePrice(
+export async function estimatePrice(
   commodityId: string,
   opts: { regionCode?: string | null; now?: number } = {},
-): PriceEstimate | null {
+): Promise<PriceEstimate | null> {
   const now = opts.now ?? Date.now();
-  const all = loadObservations(commodityId, now - MAX_AGE_DAYS * DAY).filter((o) => o.observedAt <= now);
+  const all = (await loadObservations(commodityId, now - MAX_AGE_DAYS * DAY)).filter((o) => o.observedAt <= now);
   const live = all.filter((o) => o.source !== 'reference');
   const pool = live.length > 0 ? live : all; // placeholders only as a last resort
   if (pool.length === 0) return null;
@@ -246,14 +244,14 @@ const STEADY_BAND = 0.04;
  * The last window against the one before it. Null when either holds fewer than
  * two real observations: a "trend" from one quote is a rumour.
  */
-export function priceTrend(
+export async function priceTrend(
   commodityId: string,
   opts: { regionCode?: string | null; windowDays?: number; now?: number } = {},
-): PriceTrend | null {
+): Promise<PriceTrend | null> {
   const now = opts.now ?? Date.now();
   const windowDays = opts.windowDays ?? 30;
   const span = windowDays * DAY;
-  const obs = loadObservations(commodityId, now - 2 * span).filter(
+  const obs = (await loadObservations(commodityId, now - 2 * span)).filter(
     (o) => o.source !== 'reference' && o.observedAt <= now && (!opts.regionCode || !o.regionCode || o.regionCode === opts.regionCode),
   );
   const side = (from: number, to: number): Weighted[] =>
@@ -286,15 +284,15 @@ export interface SeriesPoint {
 }
 
 /** Weighted-median price per bucket, oldest first; buckets with no data are skipped. */
-export function priceSeries(
+export async function priceSeries(
   commodityId: string,
   opts: { regionCode?: string | null; days?: number; bucketDays?: number; now?: number } = {},
-): SeriesPoint[] {
+): Promise<SeriesPoint[]> {
   const now = opts.now ?? Date.now();
   const days = opts.days ?? 90;
   const bucket = (opts.bucketDays ?? 7) * DAY;
   const start = now - days * DAY;
-  const obs = loadObservations(commodityId, start).filter(
+  const obs = (await loadObservations(commodityId, start)).filter(
     (o) => o.source !== 'reference' && o.observedAt <= now && (!opts.regionCode || !o.regionCode || o.regionCode === opts.regionCode),
   );
   // Each period shows what was actually paid or reported when it has any; hopes (asks, offers,
@@ -340,7 +338,10 @@ export interface SeasonalOutlook {
   years: number;
 }
 
-const seasonCache = new Map<string, { epoch: number; value: SeasonalOutlook | null }>();
+// Per instance: on serverless an import on one instance cannot clear another's cache,
+// so an entry also expires after SEASON_CACHE_MS (the history changes rarely).
+const SEASON_CACHE_MS = 10 * 60_000;
+const seasonCache = new Map<string, { epoch: number; at: number; value: SeasonalOutlook | null }>();
 
 /**
  * What the official history says about the months ahead. Each market's monthly
@@ -348,17 +349,16 @@ const seasonCache = new Map<string, { epoch: number; value: SeasonalOutlook | nu
  * decades, and a market that joined late, compare), then averaged by calendar
  * month. It is a hint about the usual shape of the year, not a forecast.
  */
-export function seasonalOutlook(commodityId: string, now = Date.now()): SeasonalOutlook | null {
+export async function seasonalOutlook(commodityId: string, now = Date.now()): Promise<SeasonalOutlook | null> {
   const cached = seasonCache.get(commodityId);
-  if (cached && cached.epoch === priceCacheEpoch) return shiftOutlook(cached.value, now);
+  if (cached && cached.epoch === priceCacheEpoch && Date.now() - cached.at < SEASON_CACHE_MS) return shiftOutlook(cached.value, now);
 
-  const rows = db
-    .select()
-    .from(priceObservations)
-    .where(and(eq(priceObservations.commodityId, commodityId), eq(priceObservations.source, 'market'), eq(priceObservations.dataset, 'wfp')))
-    .all();
+  const rows = (await db
+      .select()
+      .from(priceObservations)
+      .where(and(eq(priceObservations.commodityId, commodityId), eq(priceObservations.source, 'market'), eq(priceObservations.dataset, 'wfp'))));
   const value = computeSeasonality(rows);
-  seasonCache.set(commodityId, { epoch: priceCacheEpoch, value });
+  seasonCache.set(commodityId, { epoch: priceCacheEpoch, at: Date.now(), value });
   return shiftOutlook(value, now);
 }
 
@@ -471,12 +471,12 @@ export interface GuidanceInput {
   now?: number;
 }
 
-export function priceGuidance(input: GuidanceInput): PriceGuidance {
+export async function priceGuidance(input: GuidanceInput): Promise<PriceGuidance> {
   const commodity = getCommodityByCode(input.commodityCode);
   const unit = input.unitCode ? getUnit(commodity.id, input.unitCode) : null;
   const unitInfo = unit ? { code: unit.code, kgPerUnit: unit.kgPerUnit } : null;
-  const estimate = estimatePrice(commodity.id, { regionCode: input.regionCode, now: input.now });
-  const trend = priceTrend(commodity.id, { regionCode: input.regionCode, now: input.now });
+  const estimate = await estimatePrice(commodity.id, { regionCode: input.regionCode, now: input.now });
+  const trend = await priceTrend(commodity.id, { regionCode: input.regionCode, now: input.now });
 
   const base = { commodityCode: commodity.code, side: input.side, unit: unitInfo, estimate, trend };
   if (!estimate) {
@@ -554,51 +554,48 @@ export interface CommodityOverview {
   balance: number | null;
 }
 
-export function marketOverview(opts: { regionCode?: string | null; now?: number } = {}): CommodityOverview[] {
+export async function marketOverview(opts: { regionCode?: string | null; now?: number } = {}): Promise<CommodityOverview[]> {
   const now = opts.now ?? Date.now();
-  const openLots = db
-    .select()
-    .from(lots)
-    .where(inArray(lots.status, ['registered', 'matched']))
-    .all()
+  const openLots = (await db
+      .select()
+      .from(lots)
+      .where(inArray(lots.status, ['registered', 'matched'])))
     .filter((l) => l.remainingKg > 0 && (l.expiresAt === null || l.expiresAt > now));
-  const openRequests = db
-    .select()
-    .from(demands)
-    .where(and(inArray(demands.status, ['open', 'partially_matched']), eq(demands.origin, 'request')))
-    .all()
+  const openRequests = (await db
+      .select()
+      .from(demands)
+      .where(and(inArray(demands.status, ['open', 'partially_matched']), eq(demands.origin, 'request'))))
     .filter((d) => d.remainingKg > 0 && d.windowEnd > now);
 
-  return listCommodities().map((c) => {
-    const estimate = estimatePrice(c.id, { regionCode: opts.regionCode, now });
-    const trend = priceTrend(c.id, { regionCode: opts.regionCode, now });
-    const mine = openLots.filter((l) => l.commodityId === c.id);
-    const supplyKg = Math.round(mine.reduce((s, l) => s + l.remainingKg, 0));
-    const demandKg = Math.round(openRequests.filter((d) => d.commodityId === c.id).reduce((s, d) => s + d.remainingKg, 0));
-    const spark = priceSeries(c.id, { regionCode: opts.regionCode, days: 84, bucketDays: 7, now }).map((p) => p.median);
-    return {
-      commodityCode: c.code,
-      estimate,
-      trend,
-      spark,
-      supplyKg,
-      demandKg,
-      sellers: new Set(mine.map((l) => l.farmerId)).size,
-      balance: demandKg > 0 ? supplyKg / demandKg : null,
-    };
-  });
+  return await Promise.all(listCommodities().map(async (c) => {
+      const estimate = await estimatePrice(c.id, { regionCode: opts.regionCode, now });
+      const trend = await priceTrend(c.id, { regionCode: opts.regionCode, now });
+      const mine = openLots.filter((l) => l.commodityId === c.id);
+      const supplyKg = Math.round(mine.reduce((s, l) => s + l.remainingKg, 0));
+      const demandKg = Math.round(openRequests.filter((d) => d.commodityId === c.id).reduce((s, d) => s + d.remainingKg, 0));
+      const spark = (await priceSeries(c.id, { regionCode: opts.regionCode, days: 84, bucketDays: 7, now })).map((p) => p.median);
+      return {
+        commodityCode: c.code,
+        estimate,
+        trend,
+        spark,
+        supplyKg,
+        demandKg,
+        sellers: new Set(mine.map((l) => l.farmerId)).size,
+        balance: demandKg > 0 ? supplyKg / demandKg : null,
+      };
+    }));
 }
 
 /** The latest observed price per market for one crop, newest first — the "where is it dearest" table. */
-export function latestByMarket(commodityId: string, now = Date.now()): Array<{ market: string; regionCode: string | null; pricePerKg: number; observedAt: number; source: PriceSource }> {
-  const rows = db
-    .select()
-    .from(priceObservations)
-    .where(and(eq(priceObservations.commodityId, commodityId), eq(priceObservations.source, 'market'), gte(priceObservations.observedAt, now - MAX_AGE_DAYS * DAY)))
-    .orderBy(desc(priceObservations.observedAt))
-    .all();
+export async function latestByMarket(commodityId: string, now = Date.now()): Promise<Array<{ market: string; regionCode: string | null; pricePerKg: number; observedAt: number; source: PriceSource }>> {
+  const rows = (await db
+      .select()
+      .from(priceObservations)
+      .where(and(eq(priceObservations.commodityId, commodityId), eq(priceObservations.source, 'market'), gte(priceObservations.observedAt, now - MAX_AGE_DAYS * DAY)))
+      .orderBy(desc(priceObservations.observedAt)));
   const seen = new Set<string>();
-  const out: ReturnType<typeof latestByMarket> = [];
+  const out: Awaited<ReturnType<typeof latestByMarket>> = [];
   for (const r of rows) {
     const k = r.market ?? '';
     if (!k || seen.has(k)) continue;

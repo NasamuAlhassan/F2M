@@ -28,8 +28,8 @@ import { parseGhs } from './offers';
 
 const MAX_LISTED = 5;
 
-function unitOf(lot: Lot) {
-  return db.select().from(schema.units).where(eq(schema.units.id, lot.unitId)).get()!;
+async function unitOf(lot: Lot) {
+  return (await db.select().from(schema.units).where(eq(schema.units.id, lot.unitId)))[0]!;
 }
 
 function shortDate(ms: number): string {
@@ -37,29 +37,29 @@ function shortDate(ms: number): string {
 }
 
 /** The most this farmer can offer from this listing on this request, in whole units. */
-function maxUnits(ctx: UssdCtx): number {
-  const lot = getLot(String(ctx.data.requestLotId));
-  const demand = getDemand(String(ctx.data.requestId));
-  return Math.min(unitsAvailable(lot), Math.floor(demand.remainingKg / unitOf(lot).kgPerUnit + 1e-9));
+async function maxUnits(ctx: UssdCtx): Promise<number> {
+  const lot = await getLot(String(ctx.data.requestLotId));
+  const demand = await getDemand(String(ctx.data.requestId));
+  return Math.min(await unitsAvailable(lot), Math.floor(demand.remainingKg / (await unitOf(lot)).kgPerUnit + 1e-9));
 }
 
 export const requestsList: UssdScreen = {
   key: 'requests_list',
-  render: (ctx) => {
-    const open = listOpenRequests().slice(0, MAX_LISTED);
+  render: async (ctx) => {
+    const open = (await listOpenRequests()).slice(0, MAX_LISTED);
     ctx.data.requestIds = open.map((d) => d.id);
     if (open.length === 0) return [{ key: 'ussd.requests.none' }, { key: 'ussd.common.back' }];
     return [
       { key: 'ussd.requests.title' },
       ...listLines(
-        open.map((d) => {
-          const buyer = getBuyerById(d.buyerId);
-          return t(ctx.locale, 'ussd.requests.item', {
-            kg: Math.round(d.remainingKg),
-            commodity: t(ctx.locale, getCommodityById(d.commodityId).nameKey),
-            buyer: buyer?.company ?? buyer?.name ?? '',
-          });
-        }),
+        await Promise.all(open.map(async (d) => {
+                    const buyer = await getBuyerById(d.buyerId);
+                    return t(ctx.locale, 'ussd.requests.item', {
+                      kg: Math.round(d.remainingKg),
+                      commodity: t(ctx.locale, getCommodityById(d.commodityId).nameKey),
+                      buyer: buyer?.company ?? buyer?.name ?? '',
+                    });
+                  })),
         { hasMore: false },
       ),
     ];
@@ -76,9 +76,9 @@ export const requestsList: UssdScreen = {
 
 export const requestDetail: UssdScreen = {
   key: 'request_detail',
-  render: (ctx) => {
-    const d = getDemand(String(ctx.data.requestId));
-    const buyer = getBuyerById(d.buyerId);
+  render: async (ctx) => {
+    const d = await getDemand(String(ctx.data.requestId));
+    const buyer = await getBuyerById(d.buyerId);
     const terms = priceTermsSchema.parse(JSON.parse(d.priceTerms));
     return [
       {
@@ -96,11 +96,11 @@ export const requestDetail: UssdScreen = {
       { key: 'ussd.common.back' },
     ];
   },
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '0') return { next: 'requests_list' };
     if (input !== '1' || !ctx.farmer) return invalid();
-    const d = getDemand(String(ctx.data.requestId));
-    const mine = listLotsByFarmer(ctx.farmer.id).filter(
+    const d = await getDemand(String(ctx.data.requestId));
+    const mine = (await listLotsByFarmer(ctx.farmer.id)).filter(
       (l) => l.commodityId === d.commodityId && (l.status === 'registered' || l.status === 'matched') && unitsAvailable(l) > 0,
     );
     if (mine.length === 0) {
@@ -113,19 +113,19 @@ export const requestDetail: UssdScreen = {
 
 export const requestPickLot: UssdScreen = {
   key: 'request_pick_lot',
-  render: (ctx) => {
+  render: async (ctx) => {
     const ids = (ctx.data.requestLotIds as string[]) ?? [];
     return [
       { key: 'ussd.requests.pickLot' },
       ...listLines(
-        ids.map((id) => {
-          const lot = getLot(id);
-          return t(ctx.locale, 'ussd.requests.lotItem', {
-            code: lot.lotCode,
-            units: unitsAvailable(lot),
-            unit: t(ctx.locale, unitOf(lot).nameKey),
-          });
-        }),
+        await Promise.all(ids.map(async (id) => {
+                    const lot = await getLot(id);
+                    return t(ctx.locale, 'ussd.requests.lotItem', {
+                      code: lot.lotCode,
+                      units: await unitsAvailable(lot),
+                      unit: t(ctx.locale, (await unitOf(lot)).nameKey),
+                    });
+                  })),
         { hasMore: false },
       ),
     ];
@@ -142,13 +142,13 @@ export const requestPickLot: UssdScreen = {
 
 export const requestUnits: UssdScreen = {
   key: 'request_units',
-  render: (ctx) => {
-    const lot = getLot(String(ctx.data.requestLotId));
-    return [{ key: 'ussd.requests.units', params: { unit: t(ctx.locale, unitOf(lot).nameKey), max: maxUnits(ctx) } }];
+  render: async (ctx) => {
+    const lot = await getLot(String(ctx.data.requestLotId));
+    return [{ key: 'ussd.requests.units', params: { unit: t(ctx.locale, (await unitOf(lot)).nameKey), max: await maxUnits(ctx) } }];
   },
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     const n = Number(input.trim());
-    if (!Number.isInteger(n) || n < 1 || n > maxUnits(ctx)) return { error: { key: 'ussd.sell.qtyInvalid' } };
+    if (!Number.isInteger(n) || n < 1 || n > await maxUnits(ctx)) return { error: { key: 'ussd.sell.qtyInvalid' } };
     ctx.data.requestUnits = n;
     return { next: 'request_price' };
   },
@@ -156,9 +156,9 @@ export const requestUnits: UssdScreen = {
 
 export const requestPrice: UssdScreen = {
   key: 'request_price',
-  render: (ctx) => {
-    const lot = getLot(String(ctx.data.requestLotId));
-    return [{ key: 'ussd.requests.price', params: { unit: t(ctx.locale, unitOf(lot).nameKey) } }];
+  render: async (ctx) => {
+    const lot = await getLot(String(ctx.data.requestLotId));
+    return [{ key: 'ussd.requests.price', params: { unit: t(ctx.locale, (await unitOf(lot)).nameKey) } }];
   },
   handleInput: (input, ctx) => {
     const pesewas = parseGhs(input);
@@ -170,10 +170,10 @@ export const requestPrice: UssdScreen = {
 
 export const requestConfirm: UssdScreen = {
   key: 'request_confirm',
-  render: (ctx) => {
-    const lot = getLot(String(ctx.data.requestLotId));
-    const d = getDemand(String(ctx.data.requestId));
-    const buyer = getBuyerById(d.buyerId);
+  render: async (ctx) => {
+    const lot = await getLot(String(ctx.data.requestLotId));
+    const d = await getDemand(String(ctx.data.requestId));
+    const buyer = await getBuyerById(d.buyerId);
     const units = Number(ctx.data.requestUnits);
     const price = Number(ctx.data.requestPrice);
     return [
@@ -181,7 +181,7 @@ export const requestConfirm: UssdScreen = {
         key: 'ussd.requests.confirm',
         params: {
           units,
-          unit: t(ctx.locale, unitOf(lot).nameKey),
+          unit: t(ctx.locale, (await unitOf(lot)).nameKey),
           commodity: t(ctx.locale, getCommodityById(lot.commodityId).nameKey),
           buyer: buyer?.company ?? buyer?.name ?? '',
           price: formatGhs(price),
@@ -192,18 +192,18 @@ export const requestConfirm: UssdScreen = {
       { key: 'ussd.common.cancel' },
     ];
   },
-  handleInput: (input, ctx) => {
+  handleInput: async (input, ctx) => {
     if (input === '2') return { end: [{ key: 'ussd.common.cancelled' }] };
     if (input !== '1' || !ctx.farmer) return invalid();
-    const offer = offerOnRequest({
-      farmerId: ctx.farmer.id,
-      demandId: String(ctx.data.requestId),
-      lotId: String(ctx.data.requestLotId),
-      units: Number(ctx.data.requestUnits),
-      pricePerUnit: Number(ctx.data.requestPrice),
-      channel: 'ussd',
-    });
-    const buyer = getBuyerById(offer.buyerId);
+    const offer = await offerOnRequest({
+          farmerId: ctx.farmer.id,
+          demandId: String(ctx.data.requestId),
+          lotId: String(ctx.data.requestLotId),
+          units: Number(ctx.data.requestUnits),
+          pricePerUnit: Number(ctx.data.requestPrice),
+          channel: 'ussd',
+        });
+    const buyer = await getBuyerById(offer.buyerId);
     return { end: [{ key: 'ussd.offer.counterSent', params: { buyer: buyer?.company ?? buyer?.name ?? '' } }] };
   },
 };

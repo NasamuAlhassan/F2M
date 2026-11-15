@@ -32,8 +32,8 @@ export interface RegisterAccountInput {
   locale?: string;
 }
 
-export function getAccountByAuthUser(authUserId: string): Account | undefined {
-  return db.select().from(accounts).where(eq(accounts.authUserId, authUserId)).get();
+export async function getAccountByAuthUser(authUserId: string): Promise<Account | undefined> {
+  return (await db.select().from(accounts).where(eq(accounts.authUserId, authUserId)))[0];
 }
 
 /** The id of the farmer, buyer or driver row this account acts as. */
@@ -43,51 +43,50 @@ export function accountRoleId(account: Account): string {
   return id;
 }
 
-export function registerAccount(input: RegisterAccountInput): Account {
+export async function registerAccount(input: RegisterAccountInput): Promise<Account> {
   const phone = normalizePhone(input.phone);
-  if (getAccountByAuthUser(input.authUserId)) {
+  if (await getAccountByAuthUser(input.authUserId)) {
     throw new DomainError('This login already has an F2M profile', 'ACCOUNT_EXISTS', 409);
   }
-  if (db.select().from(accounts).where(eq(accounts.phone, phone)).get()) {
+  if ((await db.select().from(accounts).where(eq(accounts.phone, phone)))[0]) {
     throw new DomainError('This phone number already has an F2M account', 'PHONE_TAKEN', 409);
   }
 
   // One role per phone (D-021), across USSD and the web alike.
-  const farmer = getFarmerByPhone(phone);
-  const driver = getDriverByPhone(phone);
-  const buyer = getBuyerByPhone(phone);
+  const farmer = await getFarmerByPhone(phone);
+  const driver = await getDriverByPhone(phone);
+  const buyer = await getBuyerByPhone(phone);
   const heldAs = farmer ? 'farmer' : driver ? 'driver' : buyer ? 'buyer' : null;
   if (heldAs && heldAs !== input.role) {
     throw new DomainError(`This phone number is already registered as a ${heldAs}`, 'ROLE_TAKEN', 409);
   }
 
-  return db.transaction(() => {
+  return db.transaction(async () => {
     let farmerId: string | null = null;
     let buyerId: string | null = null;
     let driverId: string | null = null;
     if (input.role === 'farmer') {
       farmerId =
         farmer?.id ??
-        registerFarmer({ phone, name: input.name, regionCode: input.regionCode, district: input.district, locale: input.locale }).id;
+        (await registerFarmer({ phone, name: input.name, regionCode: input.regionCode, district: input.district, locale: input.locale })).id;
     } else if (input.role === 'driver') {
       if (!driver && !input.vehicleClassCode) throw new DomainError('Choose your vehicle', 'VEHICLE_REQUIRED');
       driverId =
         driver?.id ??
-        registerDriver({
-          phone,
-          name: input.name,
-          regionCode: input.regionCode,
-          vehicleClassCode: input.vehicleClassCode!,
-          locale: input.locale,
-        }).id;
+        (await registerDriver({
+                    phone,
+                    name: input.name,
+                    regionCode: input.regionCode,
+                    vehicleClassCode: input.vehicleClassCode!,
+                    locale: input.locale,
+                  })).id;
     } else {
-      buyerId = buyer?.id ?? registerBuyer({ phone, name: input.name, company: input.company, regionCode: input.regionCode }).id;
+      buyerId = buyer?.id ?? (await registerBuyer({ phone, name: input.name, company: input.company, regionCode: input.regionCode })).id;
     }
-    return db
-      .insert(accounts)
-      .values({ authUserId: input.authUserId, phone, role: input.role, farmerId, buyerId, driverId })
-      .returning()
-      .get();
+    return (await db
+              .insert(accounts)
+              .values({ authUserId: input.authUserId, phone, role: input.role, farmerId, buyerId, driverId })
+              .returning())[0]!;
   });
 }
 
@@ -102,17 +101,17 @@ export interface AccountView {
   vehicleClassCode: string | null;
 }
 
-export function describeAccount(account: Account): AccountView {
+export async function describeAccount(account: Account): Promise<AccountView> {
   const id = accountRoleId(account);
   const base = { role: account.role, id, phone: account.phone, company: null, vehicleClassCode: null };
   if (account.role === 'farmer') {
-    const f = getFarmerById(id);
+    const f = await getFarmerById(id);
     return { ...base, name: f?.name ?? '', regionCode: f?.regionCode ?? null };
   }
   if (account.role === 'driver') {
-    const d = getDriverById(id);
+    const d = await getDriverById(id);
     return { ...base, name: d?.name ?? '', regionCode: d?.regionCode ?? null, vehicleClassCode: d?.vehicleClassCode ?? null };
   }
-  const b = getBuyerById(id);
+  const b = await getBuyerById(id);
   return { ...base, name: b?.name ?? '', regionCode: b?.regionCode ?? null, company: b?.company ?? null };
 }

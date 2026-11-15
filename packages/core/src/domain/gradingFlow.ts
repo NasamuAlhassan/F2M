@@ -21,12 +21,12 @@ import { t } from '../i18n';
 
 const MAX_GRADING_ATTEMPTS = 2; // initial + one re-grade after a dispute — the re-grade is final
 
-export function confirmPickup(contractId: string, actor: { type: 'farmer' | 'buyer'; id: string }): Contract {
+export async function confirmPickup(contractId: string, actor: { type: 'farmer' | 'buyer'; id: string }): Promise<Contract> {
   return transitionContract(contractId, 'PICKUP_CONFIRMED', actor);
 }
 
-export function listGradingsForContract(contractId: string): Grading[] {
-  return db.select().from(gradings).where(eq(gradings.contractId, contractId)).orderBy(desc(gradings.attempt)).all();
+export async function listGradingsForContract(contractId: string): Promise<Grading[]> {
+  return (await db.select().from(gradings).where(eq(gradings.contractId, contractId)).orderBy(desc(gradings.attempt)));
 }
 
 /**
@@ -35,16 +35,16 @@ export function listGradingsForContract(contractId: string): Grading[] {
  * onto the contract, and refunds outright on REJECT.
  */
 export async function runGrading(contractId: string): Promise<Grading> {
-  const contract = getContract(contractId);
+  const contract = await getContract(contractId);
   if (contract.state !== 'PICKUP_CONFIRMED' && contract.state !== 'DISPUTED') {
     throw new DomainError(`Cannot grade a contract in ${contract.state}`, 'INVALID_STATE', 409);
   }
-  const photos = listPhotosForContract(contractId);
+  const photos = await listPhotosForContract(contractId);
   if (photos.length === 0) {
     throw new DomainError('Grading requires at least one pickup photo', 'NO_PHOTOS', 409);
   }
 
-  const previous = listGradingsForContract(contractId);
+  const previous = await listGradingsForContract(contractId);
   const attempt = previous.length + 1;
   if (attempt > MAX_GRADING_ATTEMPTS) {
     throw new DomainError('Re-grade already performed — the second grade is final', 'GRADING_EXHAUSTED', 409);
@@ -56,28 +56,27 @@ export async function runGrading(contractId: string): Promise<Grading> {
     previous.length > 0 ? getRubricById(previous[previous.length - 1]!.rubricId) : getActiveRubric(commodity.id);
   rubricDocSchema.parse(doc); // belt and braces — the rubric drives money
 
-  const pending = db
-    .insert(gradings)
-    .values({
-      contractId,
-      lotId: contract.lotId,
-      rubricId: rubric.id,
-      attempt,
-      provider: 'mock', // overwritten with the provider that actually answered
-      status: 'pending',
-    })
-    .returning()
-    .get();
+  const pending = (await db
+        .insert(gradings)
+        .values({
+          contractId,
+          lotId: contract.lotId,
+          rubricId: rubric.id,
+          attempt,
+          provider: 'mock', // overwritten with the provider that actually answered
+          status: 'pending',
+        })
+        .returning())[0]!;
 
   let result;
   try {
     result = await gradeWithFallback({
       commodityCode: commodity.code,
       rubric: doc,
-      images: photos.map(photoAsGradingImage),
+      images: await Promise.all(photos.map(photoAsGradingImage)),
     });
   } catch (err) {
-    db.update(gradings).set({ status: 'failed', rawResponse: String(err) }).where(eq(gradings.id, pending.id)).run();
+    (await db.update(gradings).set({ status: 'failed', rawResponse: String(err) }).where(eq(gradings.id, pending.id)));
     throw err;
   }
 
@@ -89,45 +88,44 @@ export async function runGrading(contractId: string): Promise<Grading> {
       ? 0
       : (contract.agreedTotal ?? Math.round(contract.quantityKg * (terms[result.gradeBand as GradeBand] ?? 0)));
 
-  const completed = db
-    .update(gradings)
-    .set({
-      status: 'completed',
-      provider: result.provider,
-      model: result.model ?? null,
-      gradeBand: result.gradeBand,
-      confidence: result.confidence,
-      reasons: JSON.stringify(result.reasons),
-      rawResponse: typeof result.raw === 'string' ? result.raw : JSON.stringify(result.raw ?? null),
-    })
-    .where(eq(gradings.id, pending.id))
-    .returning()
-    .get()!;
+  const completed = (await db
+      .update(gradings)
+      .set({
+        status: 'completed',
+        provider: result.provider,
+        model: result.model ?? null,
+        gradeBand: result.gradeBand,
+        confidence: result.confidence,
+        reasons: JSON.stringify(result.reasons),
+        rawResponse: typeof result.raw === 'string' ? result.raw : JSON.stringify(result.raw ?? null),
+      })
+      .where(eq(gradings.id, pending.id))
+      .returning())[0]!;
 
-  transitionContract(contract.id, 'GRADED', { type: 'system' }, {
-    finalGrade: result.gradeBand,
-    finalAmount,
-    payload: {
-      attempt,
-      confidence: result.confidence,
-      provider: result.provider,
-      topReason: result.reasons[0]?.observation ?? null,
-    },
-  });
+  await transitionContract(contract.id, 'GRADED', { type: 'system' }, {
+        finalGrade: result.gradeBand,
+        finalAmount,
+        payload: {
+          attempt,
+          confidence: result.confidence,
+          provider: result.provider,
+          topReason: result.reasons[0]?.observation ?? null,
+        },
+      });
 
   if (previous.length > 0) {
     // The disputed first attempt is now resolved by this final re-grade.
-    db.update(gradings).set({ status: 'resolved' }).where(eq(gradings.id, previous[previous.length - 1]!.id)).run();
-    appendLotEvent(db, {
-      lotId: contract.lotId,
-      type: 'DISPUTE_RESOLVED',
-      actorType: 'system',
-      payload: { attempt, finalGrade: result.gradeBand },
-    });
+    (await db.update(gradings).set({ status: 'resolved' }).where(eq(gradings.id, previous[previous.length - 1]!.id)));
+    await appendLotEvent(db, {
+            lotId: contract.lotId,
+            type: 'DISPUTE_RESOLVED',
+            actorType: 'system',
+            payload: { attempt, finalGrade: result.gradeBand },
+          });
   }
 
   if (result.gradeBand === 'REJECT') {
-    refundHold(contractId, { reason: 'grade_reject', attempt });
+    await refundHold(contractId, { reason: 'grade_reject', attempt });
   } else {
     // Phase 3 (the owner's rule): the farmer's advance goes out at pickup.
     // Idempotent, so a re-grade after a dispute never sends it twice.
@@ -138,68 +136,68 @@ export async function runGrading(contractId: string): Promise<Grading> {
     // (sweepSettlement, or agreeGrading), so delivering never cuts it short.
     // This runs on a re-grade too: a driver who arrived during a dispute
     // could not deliver an order that was not GRADED, so the final grade does.
-    const job = getJobForContract(contractId);
+    const job = await getJobForContract(contractId);
     if (job && ['ARRIVED', 'DELIVERED', 'PAID'].includes(job.state)) {
-      markDelivered(contractId, 'driver');
+      await markDelivered(contractId, 'driver');
       if (job.state !== 'ARRIVED') await confirmReceipt(contractId, { type: 'system' });
     }
   }
 
-  queueBuyerNotification({
-    buyerId: contract.buyerId,
-    templateKey: result.gradeBand === 'REJECT' ? 'notif.rejected' : 'notif.graded',
-    params: {
-      band: result.gradeBand,
-      amount: formatGhs(finalAmount),
-      reason: result.reasons[0]?.observation ?? '',
-    },
-    contractId,
-    lotId: contract.lotId,
-  });
+  await queueBuyerNotification({
+        buyerId: contract.buyerId,
+        templateKey: result.gradeBand === 'REJECT' ? 'notif.rejected' : 'notif.graded',
+        params: {
+          band: result.gradeBand,
+          amount: formatGhs(finalAmount),
+          reason: result.reasons[0]?.observation ?? '',
+        },
+        contractId,
+        lotId: contract.lotId,
+      });
 
   // The grade reaches her phone the moment it exists — with the reason.
-  const farmer = getFarmerById(contract.farmerId);
+  const farmer = await getFarmerById(contract.farmerId);
   if (farmer) {
     const commodityName = t(farmer.locale, commodity.nameKey);
     const reason = result.reasons[0]?.observation ?? '';
-    queueSms(
-      result.gradeBand === 'REJECT'
-        ? {
-            phone: farmer.phone,
-            locale: farmer.locale,
-            templateKey: 'sms.rejected',
-            params: { commodity: commodityName, reason },
-            contractId,
-            lotId: contract.lotId,
-          }
-        : {
-            phone: farmer.phone,
-            locale: farmer.locale,
-            templateKey: 'sms.graded',
-            params: {
-              commodity: commodityName,
-              band: t(farmer.locale, `band.${result.gradeBand}`),
-              amount: formatGhs(finalAmount),
-              advance: formatGhs(advanceFor(getContract(contractId))),
-              rest: formatGhs(orderTotal(getContract(contractId)) - advanceFor(getContract(contractId))),
-              reason,
-              code: config.USSD_SHORTCODE,
-            },
-            contractId,
-            lotId: contract.lotId,
-          },
-    );
+    await queueSms(
+            result.gradeBand === 'REJECT'
+              ? {
+                  phone: farmer.phone,
+                  locale: farmer.locale,
+                  templateKey: 'sms.rejected',
+                  params: { commodity: commodityName, reason },
+                  contractId,
+                  lotId: contract.lotId,
+                }
+              : {
+                  phone: farmer.phone,
+                  locale: farmer.locale,
+                  templateKey: 'sms.graded',
+                  params: {
+                    commodity: commodityName,
+                    band: t(farmer.locale, `band.${result.gradeBand}`),
+                    amount: formatGhs(finalAmount),
+                    advance: formatGhs(advanceFor(await getContract(contractId))),
+                    rest: formatGhs(orderTotal(await getContract(contractId)) - advanceFor(await getContract(contractId))),
+                    reason,
+                    code: config.USSD_SHORTCODE,
+                  },
+                  contractId,
+                  lotId: contract.lotId,
+                },
+          );
     if (result.gradeBand !== 'REJECT') {
       // She can hear the grade and press 1 to agree / 2 to dispute.
-      queueVoiceCall({ phone: farmer.phone, locale: farmer.locale, flow: 'grade', contractId });
+      await queueVoiceCall({ phone: farmer.phone, locale: farmer.locale, flow: 'grade', contractId });
     }
   }
   return completed;
 }
 
 /** Farmer contests the grade within the dispute window. The re-grade is final. */
-export function disputeGrading(contractId: string, farmerId: string, note?: string): Contract {
-  const contract = getContract(contractId);
+export async function disputeGrading(contractId: string, farmerId: string, note?: string): Promise<Contract> {
+  const contract = await getContract(contractId);
   if (contract.state !== 'GRADED') {
     throw new DomainError(`Cannot dispute a contract in ${contract.state}`, 'INVALID_STATE', 409);
   }
@@ -207,12 +205,12 @@ export function disputeGrading(contractId: string, farmerId: string, note?: stri
   if (contract.gradedAt && Date.now() - contract.gradedAt > windowMs) {
     throw new DomainError('The dispute window has closed', 'DISPUTE_WINDOW_CLOSED', 409);
   }
-  if (listGradingsForContract(contractId).length >= MAX_GRADING_ATTEMPTS) {
+  if ((await listGradingsForContract(contractId)).length >= MAX_GRADING_ATTEMPTS) {
     throw new DomainError('The re-grade is final and cannot be disputed again', 'GRADING_EXHAUSTED', 409);
   }
-  const updated = transitionContract(contractId, 'DISPUTED', { type: 'farmer', id: farmerId }, { disputeNote: note });
-  const latest = listGradingsForContract(contractId)[0];
-  if (latest) db.update(gradings).set({ status: 'disputed' }).where(eq(gradings.id, latest.id)).run();
+  const updated = await transitionContract(contractId, 'DISPUTED', { type: 'farmer', id: farmerId }, { disputeNote: note });
+  const latest = (await listGradingsForContract(contractId))[0];
+  if (latest) (await db.update(gradings).set({ status: 'disputed' }).where(eq(gradings.id, latest.id)));
   return updated;
 }
 
@@ -222,17 +220,17 @@ export function disputeGrading(contractId: string, farmerId: string, note?: stri
  * sure the advance is on its way (it is idempotent).
  */
 export async function agreeGrading(contractId: string, farmerId: string): Promise<void> {
-  const contract = getContract(contractId);
+  const contract = await getContract(contractId);
   if (contract.farmerId !== farmerId) {
     throw new DomainError('Not your contract', 'FORBIDDEN_ACTOR', 403);
   }
   await payAdvance(contractId);
   // No dispute coming: an order with no transport job is the buyer's to receive now.
-  if (getContract(contractId).state === 'GRADED' && !liveTransport(contractId)) markDelivered(contractId, 'no_transport');
+  if ((await getContract(contractId)).state === 'GRADED' && !await liveTransport(contractId)) await markDelivered(contractId, 'no_transport');
 }
 
 /** A transport job still carrying this order (not cancelled). */
-export function liveTransport(contractId: string): boolean {
-  const job = getJobForContract(contractId);
+export async function liveTransport(contractId: string): Promise<boolean> {
+  const job = await getJobForContract(contractId);
   return Boolean(job && !['CANCELLED', 'CANCELLED_REFUNDED', 'NO_DRIVER'].includes(job.state));
 }

@@ -18,8 +18,8 @@ const open = new Map<string, Array<() => void>>();
  * browser's `EventSource` cannot set one, so the web app streams with `fetch`).
  */
 export async function streamRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/stream', { preHandler: [app.authAnyRole] }, (req, reply) => {
-    const account = getAccountByAuthUser(req.user.authUserId);
+  app.get('/stream', { preHandler: [app.authAnyRole] }, async (req, reply) => {
+    const account = await getAccountByAuthUser(req.user.authUserId);
     const keys = audienceKeys({ role: req.user.kind, id: req.user.sub, phone: account?.phone ?? null });
 
     reply.hijack();

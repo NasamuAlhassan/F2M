@@ -22,26 +22,24 @@ export interface RegionBalance {
   balance: number | null;
 }
 
-export function supplyDemandByRegion(commodityId: string, now = Date.now()): RegionBalance[] {
-  const supply = db
-    .select()
-    .from(lots)
-    .where(and(eq(lots.commodityId, commodityId), inArray(lots.status, ['registered', 'matched']), gt(lots.remainingKg, 0)))
-    .all()
+export async function supplyDemandByRegion(commodityId: string, now = Date.now()): Promise<RegionBalance[]> {
+  const supply = (await db
+      .select()
+      .from(lots)
+      .where(and(eq(lots.commodityId, commodityId), inArray(lots.status, ['registered', 'matched']), gt(lots.remainingKg, 0))))
     .filter((l) => l.expiresAt === null || l.expiresAt > now);
-  const wanted = db
-    .select()
-    .from(demands)
-    .where(
-      and(
-        eq(demands.commodityId, commodityId),
-        eq(demands.origin, 'request'),
-        inArray(demands.status, ['open', 'partially_matched']),
-        gt(demands.remainingKg, 0),
-        gt(demands.windowEnd, now),
-      ),
-    )
-    .all();
+  const wanted = (await db
+      .select()
+      .from(demands)
+      .where(
+        and(
+          eq(demands.commodityId, commodityId),
+          eq(demands.origin, 'request'),
+          inArray(demands.status, ['open', 'partially_matched']),
+          gt(demands.remainingKg, 0),
+          gt(demands.windowEnd, now),
+        ),
+      ));
 
   return listRegions()
     .map((r) => {
