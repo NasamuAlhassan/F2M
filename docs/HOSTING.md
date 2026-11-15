@@ -74,7 +74,7 @@ timers. Tests use an in-memory PGlite. No Docker, no cloud account.
 - Deploy. The build creates the tables and reference data. Note the URL, e.g.
   `https://f2m-server.vercel.app`. Check `https://f2m-server.vercel.app/health`.
 
-**3. Point the web at it.** Replace every `REPLACE-WITH-YOUR-SERVER.vercel.app` in
+**3. Point the web at it.** (Done: `https://f2m-server.vercel.app`.) Replace every server address in
 `apps/web/vercel.json` with the server's address, then commit and push.
 
 **4. Vercel: the web** (New Project → import the same repo again):

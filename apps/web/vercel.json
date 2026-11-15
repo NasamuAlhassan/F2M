@@ -2,39 +2,39 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/api/:path*"
+      "destination": "https://f2m-server.vercel.app/api/:path*"
     },
     {
       "source": "/ussd",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/ussd"
+      "destination": "https://f2m-server.vercel.app/ussd"
     },
     {
       "source": "/voice/:path*",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/voice/:path*"
+      "destination": "https://f2m-server.vercel.app/voice/:path*"
     },
     {
       "source": "/photos/:path*",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/photos/:path*"
+      "destination": "https://f2m-server.vercel.app/photos/:path*"
     },
     {
       "source": "/tts/:path*",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/tts/:path*"
+      "destination": "https://f2m-server.vercel.app/tts/:path*"
     },
     {
       "source": "/recordings/:path*",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/recordings/:path*"
+      "destination": "https://f2m-server.vercel.app/recordings/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/health"
+      "destination": "https://f2m-server.vercel.app/health"
     },
     {
       "source": "/ussd-tester.html",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/ussd-tester.html"
+      "destination": "https://f2m-server.vercel.app/ussd-tester.html"
     },
     {
       "source": "/ivr-tester.html",
-      "destination": "https://REPLACE-WITH-YOUR-SERVER.vercel.app/ivr-tester.html"
+      "destination": "https://f2m-server.vercel.app/ivr-tester.html"
     },
     {
       "source": "/(.*)",
