@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "demo": "tsx scripts/demo-run.ts",
-    "vercel-build": "tsx ../../packages/core/src/db/run-setup.ts"
+    "vercel-build": "node scripts/bundle.mjs && tsx ../../packages/core/src/db/run-setup.ts"
   },
   "dependencies": {
     "@fastify/formbody": "^9.0.0",
@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15"
   }
 }
