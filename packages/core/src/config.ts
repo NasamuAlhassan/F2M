@@ -21,7 +21,7 @@ const envSchema = z
     // Web logins (D-047): the server verifies Supabase tokens against this
     // project's public keys. The same value the browser uses, so one setting.
     VITE_SUPABASE_URL: z.string().optional(),
-    // Supabase Postgres (transaction pooler URL, port 6543) in production. Unset → PGlite at
+    // Supabase Postgres (session pooler URL, port 5432) in production. Unset → PGlite at
     // DATABASE_PATH (a folder; ':memory:' for tests). docs/HOSTING.md.
     DATABASE_URL: blankIsUnset(z.string().url().optional()),
     DATABASE_PATH: z.string().default('data/pglite'),

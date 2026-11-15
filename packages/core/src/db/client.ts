@@ -10,9 +10,10 @@ import * as schema from './schema';
 /**
  * The database (docs/HOSTING.md). One Postgres API, two engines:
  *
- * - `DATABASE_URL` set → Supabase Postgres through its transaction pooler
- *   (port 6543). The pooler cannot keep prepared statements, hence
- *   `prepare: false`; a serverless instance needs only a few connections.
+ * - `DATABASE_URL` set → Supabase Postgres through its SESSION pooler (port
+ *   5432). Not the transaction pooler (6543): postgres-js loses queries through
+ *   it, the answer never coming back (porsager/postgres#970), which hung the
+ *   first deploys. One connection per serverless instance.
  * - otherwise → PGlite, Postgres compiled to run in-process: a folder under
  *   `data/` for local dev, or memory (`DATABASE_PATH=:memory:`) for tests. No
  *   Docker, no cloud, works offline.
@@ -23,14 +24,21 @@ export type Db = PostgresJsDatabase<typeof schema>;
 
 export type DbEngine = 'postgres' | 'pglite';
 
+/**
+ * Supabase's pooler serves both modes on one host: 6543 = transaction, 5432 =
+ * session. A URL copied from the "Transaction pooler" tab is moved to session
+ * mode here (same host, user and password), so the deploy can't hang on it.
+ */
+export function sessionPoolerUrl(url: string): string {
+  return url.replace(/(@[^/@]*\.pooler\.supabase\.com):6543(?=\/|$)/, '$1:5432');
+}
+
 function connect(): { db: Db; engine: DbEngine; close: () => Promise<void>; pglite?: PGlite } {
   if (config.DATABASE_URL) {
-    // One connection, one query in flight: parallel queries (the four registry
-    // loads) hung the deploy, the extra connections never getting through the
-    // pooler. Supabase advises max 1 for serverless anyway, and PGlite (local,
-    // tests) is a single connection too, so the code already lives with it.
-    // fetch_types off: no extra type-lookup query on connect.
-    const client = postgres(config.DATABASE_URL, {
+    // One connection, one query in flight: Supabase advises max 1 for
+    // serverless, and PGlite (local, tests) is a single connection too, so the
+    // code already lives with it. fetch_types off: no type lookup on connect.
+    const client = postgres(sessionPoolerUrl(config.DATABASE_URL), {
       prepare: false,
       max: 1,
       ...({ max_pipeline: 1 } as object), // a real postgres-js option its types leave out
