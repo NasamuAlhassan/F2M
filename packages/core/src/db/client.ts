@@ -24,15 +24,21 @@ export type Db = PostgresJsDatabase<typeof schema>;
 
 export type DbEngine = 'postgres' | 'pglite';
 
+/**
+ * Supabase's pooler serves both modes on one host: 6543 = transaction, 5432 =
+ * session. A URL copied from the "Transaction pooler" tab is moved to session
+ * mode here (same host, user and password), so the deploy can't hang on it.
+ */
+export function sessionPoolerUrl(url: string): string {
+  return url.replace(/(@[^/@]*\.pooler\.supabase\.com):6543(?=\/|$)/, '$1:5432');
+}
+
 function connect(): { db: Db; engine: DbEngine; close: () => Promise<void>; pglite?: PGlite } {
   if (config.DATABASE_URL) {
-    if (/:6543\//.test(config.DATABASE_URL)) {
-      console.warn('[db] DATABASE_URL uses the transaction pooler (port 6543), which can lose queries. Use the session pooler, port 5432 (docs/HOSTING.md).');
-    }
     // One connection, one query in flight: Supabase advises max 1 for
     // serverless, and PGlite (local, tests) is a single connection too, so the
     // code already lives with it. fetch_types off: no type lookup on connect.
-    const client = postgres(config.DATABASE_URL, {
+    const client = postgres(sessionPoolerUrl(config.DATABASE_URL), {
       prepare: false,
       max: 1,
       ...({ max_pipeline: 1 } as object), // a real postgres-js option its types leave out
