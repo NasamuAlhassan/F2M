@@ -25,6 +25,8 @@ function alive(pid: number): boolean {
 export async function setup(): Promise<void> {
   process.env.DATABASE_PATH = ':memory:';
   process.env.DATABASE_URL = '';
+  // Same pins as setup.ts: building the snapshot must not depend on the developer's .env.
+  Object.assign(process.env, { GRADING_PROVIDER: 'mock', LLM_PROVIDER: 'off', STORAGE_PROVIDER: 'disk' });
   const { runMigrations } = await import('../db/migrate');
   await runMigrations();
   const { seed } = await import('../db/seed');

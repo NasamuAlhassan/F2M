@@ -9,6 +9,8 @@ process.env.DATABASE_PATH = ':memory:';
 process.env.DATABASE_URL = ''; // set-but-empty: .env cannot fill it in, and config reads it as unset
 Object.assign(process.env, {
   GRADING_PROVIDER: 'mock',
+  LLM_PROVIDER: 'off', // tests that need the assist install a stand-in with setLlmProvider
+  STORAGE_PROVIDER: 'disk',
   PAYMENT_PROVIDER: 'mock',
   NOTIFY_PROVIDER: 'mock',
   VOICE_PROVIDER: 'mock',

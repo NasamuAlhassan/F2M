@@ -2,7 +2,8 @@ import { config } from '../../config';
 import { extractJson } from './extractJson';
 import { modelOutputSchema, type GradingProvider, type GradingRequest, type GradingResult } from './types';
 
-const ROUTER_URL = 'https://router.huggingface.co/v1/chat/completions';
+
+const trimSlash = (url: string) => url.replace(/\/+$/, '');
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -10,7 +11,10 @@ interface ChatMessage {
 }
 
 /**
- * Free vision models via HuggingFace's OpenAI-compatible router (D-006).
+ * Open vision models over an OpenAI-compatible API (D-006, D-059): Hugging Face's
+ * router by default, or any other such host via GRADING_BASE_URL (Groq runs
+ * qwen/qwen3.8-27b, which reads photos, on its free tier). The name stays 'hf'
+ * because graded records already carry it.
  * Pipeline: prompt embeds the rubric verbatim → strict JSON extraction → Zod
  * validation bound to the rubric → one repair round-trip on invalid JSON →
  * exponential backoff on 429/503. Throws when exhausted; the grading flow
@@ -20,8 +24,20 @@ export class HfGradingProvider implements GradingProvider {
   readonly name = 'hf' as const;
 
   constructor(
-    private readonly opts: { model?: string; token?: string; retryDelayMs?: number } = {},
+    private readonly opts: { model?: string; token?: string; baseUrl?: string; retryDelayMs?: number } = {},
   ) {}
+
+  private get url(): string {
+    return `${trimSlash(this.opts.baseUrl ?? config.GRADING_BASE_URL)}/chat/completions`;
+  }
+
+  /** The grading key; on the AI assist's host, the assist's key, so it is entered once. */
+  private get token(): string | undefined {
+    if (this.opts.token) return this.opts.token;
+    if (config.GRADING_API_KEY) return config.GRADING_API_KEY;
+    const sameHost = trimSlash(config.GRADING_BASE_URL) === trimSlash(config.LLM_BASE_URL);
+    return sameHost ? config.LLM_API_KEY : config.HF_TOKEN;
+  }
 
   private get model(): string {
     return this.opts.model ?? config.GRADING_MODEL;
@@ -31,10 +47,10 @@ export class HfGradingProvider implements GradingProvider {
     const maxAttempts = 3;
     let lastError = '';
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const res = await fetch(ROUTER_URL, {
+      const res = await fetch(this.url, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${this.opts.token ?? config.HF_TOKEN}`,
+          Authorization: `Bearer ${this.token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ model: this.model, max_tokens: 800, temperature: 0.1, messages }),
@@ -42,7 +58,7 @@ export class HfGradingProvider implements GradingProvider {
       if (res.ok) {
         const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
         const content = body.choices?.[0]?.message?.content;
-        if (!content) throw new Error('Empty completion from HF router');
+        if (!content) throw new Error('Empty completion from the grading model');
         return content;
       }
       lastError = `${res.status} ${await res.text()}`;
@@ -54,7 +70,7 @@ export class HfGradingProvider implements GradingProvider {
       }
       break; // 4xx other than 429: retrying won't help
     }
-    throw new Error(`HF router failed: ${lastError}`);
+    throw new Error(`Grading model failed: ${lastError}`);
   }
 
   async grade(req: GradingRequest): Promise<GradingResult> {

@@ -59,7 +59,7 @@ reviewer's job in Phase 4 (`POST /api/dev/claims/:id/resolve`).
 |---|---|
 | Website, server, database, logins | real (Vercel + Supabase) |
 | Speech recognition, translation, spoken prompts | real: the Tekyerema Space. English is the strongest; the other languages work and improve as the models are fine-tuned |
-| Photo grading | real: an open vision model on Hugging Face |
+| Photo grading | real: an open vision model (Qwen) on Groq |
 | AI assist (filling gaps in a spoken listing, reading a buyer's request) | real: an open model on Groq |
 | SMS and calls | simulated: they appear in the phone simulator, not on real phones |
 | Payments (mobile money) | simulated: the ledger is real, no money moves |
