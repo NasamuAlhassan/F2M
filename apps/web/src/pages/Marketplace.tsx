@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ghs, placeName, sellerName, shortDate, type MarketLot, type Registries } from '../api';
 import { POLL } from '../poll';
@@ -13,6 +13,28 @@ import { useAccount } from '../lib/session';
 import { PoolBuilder } from './Consolidate';
 
 type SortKey = 'newest' | 'nearest' | 'largest' | 'cheapest';
+
+/** A lot photo: fades in over the crop's colour once loaded, at once if it
+ *  was cached. The first cards on screen load first. */
+function LotPhoto({ src, alt, priority }: { src: string; alt: string; priority: boolean }) {
+  const ref = useRef<HTMLImageElement>(null);
+  const [state, setState] = useState<'cached' | 'loading' | 'loaded'>('loading');
+  useLayoutEffect(() => {
+    if (ref.current?.complete && ref.current.naturalWidth > 0) setState('cached');
+  }, [src]);
+  return (
+    <img
+      ref={ref}
+      src={src}
+      alt={alt}
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : 'auto'}
+      decoding="async"
+      onLoad={() => setState((s) => (s === 'cached' ? s : 'loaded'))}
+      className={`h-full w-full object-cover ${state === 'cached' ? '' : `photo-fade ${state === 'loaded' ? 'is-loaded' : ''}`}`}
+    />
+  );
+}
 
 export function MarketplacePage() {
   const navigate = useNavigate();
@@ -67,6 +89,13 @@ export function MarketplacePage() {
   const setMaxKm = (km: number) => setParam('km', km >= 700 ? null : String(km));
   const setSort = (k: SortKey) => setParam('sort', k === 'newest' ? null : k);
   const [bidLot, setBidLot] = useState<MarketLot | null>(null);
+  // Lots already on screen do not animate again when the list refetches.
+  // (first-seen time, so a re-render mid-animation keeps the class until it ends).
+  const seenLots = useRef(new Map<string, number>());
+  useEffect(() => {
+    const now = Date.now();
+    for (const l of data?.lots ?? []) if (!seenLots.current.has(l.id)) seenLots.current.set(l.id, now);
+  });
   // On phones the certificates lead; the filter ledger folds behind a summary row.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const activeFilters = crops.size + grades.size + (perish !== 'all' ? 1 : 0) + (maxKm < 700 ? 1 : 0);
@@ -377,37 +406,46 @@ export function MarketplacePage() {
               />
             )
           ) : (
+            <>
+            {lots.some((l) => l.channel !== 'web') && (
+              <p className="mb-4 flex items-start gap-2.5 rounded-2xl bg-[var(--paper-deep)] px-4 py-3 text-sm leading-relaxed text-[var(--ink-7)]">
+                <Glyph name="phone" className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--forest)]" />
+                {t(
+                  'web.market.phoneNote',
+                  'Most farmers here list from a basic phone. Bid, and they hear your offer in a voice call in their own language. Or call them.',
+                )}
+              </p>
+            )}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {lots.map((l) => (
+              {lots.map((l, i) => {
+                const seenAt = seenLots.current.get(l.id);
+                const first = seenAt === undefined || Date.now() - seenAt < 600;
+                const accent = cropAccent(l.commodityCode);
+                return (
                 <article
                   key={l.id}
-                  className="certificate flex flex-col overflow-hidden"
+                  className={`certificate flex flex-col overflow-hidden ${first ? 'rise-in' : ''}`}
+                  style={first ? { animationDelay: `${Math.min(i, 5) * 35}ms` } : undefined}
                 >
                   {/* media well — full bleed to the card's own rounded corners. A real
                       seller photo where one was uploaded; otherwise a representative
                       stock photo of the commodity (D-042 — supersedes D-036's icon-only
                       placeholder), always labeled "Representative photo" so it's never
                       mistaken for this specific farmer's own produce. */}
-                  <div className="relative h-44 flex-shrink-0 overflow-hidden">
+                  <div className="relative aspect-[16/9] flex-shrink-0 overflow-hidden" style={{ background: accent.wash }}>
                     {l.photoUrl ? (
-                      <img src={l.photoUrl} alt={l.commodityName} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                      <LotPhoto src={l.photoUrl} alt={l.commodityName} priority={i < 2} />
                     ) : cropPhoto(l.commodityCode) ? (
                       <>
-                        <img
-                          src={cropPhoto(l.commodityCode)!}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
+                        <LotPhoto src={cropPhoto(l.commodityCode)!} alt="" priority={i < 2} />
                         <span className="stamp absolute bottom-2 left-2 bg-[var(--ink)]/80 px-1.5 py-0.5 text-[11px] text-[var(--paper)] backdrop-blur-sm">
-                          Representative photo
+                          {t('web.market.repPhoto', 'Representative photo')}
                         </span>
                       </>
                     ) : (
                       <div
                         className="flex h-full w-full items-center justify-center"
-                        style={{ background: cropAccent(l.commodityCode).wash, color: cropAccent(l.commodityCode).ink }}
+                        style={{ color: accent.ink }}
                       >
                         <CropMark code={l.commodityCode} className="h-20 w-20" />
                       </div>
@@ -433,88 +471,78 @@ export function MarketplacePage() {
                     )}
                   </div>
 
-                  <div className="flex flex-1 flex-col p-3">
+                  <div className="flex flex-1 flex-col p-4">
                     {!l.photoUrl && (
-                      <div className="mb-1 flex items-baseline justify-between gap-2">
-                        <h2 className="truncate text-base font-bold text-[var(--ink)]">{l.commodityName}</h2>
-                        <span className="serial flex-shrink-0 text-[11px] text-[var(--ink-6)]">{l.distanceKm} km</span>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <h2 className="truncate text-[17px] font-bold text-[var(--ink)]">{l.commodityName}</h2>
+                        <span className="serial flex-shrink-0 text-xs text-[var(--ink-6)]">{l.distanceKm} km</span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-sm text-[var(--ink-6)]">
-                        {sellerName(l.farmerName)} · {placeName(l.district) ? `${placeName(l.district)}, ` : ''}
-                        {l.regionName}
-                      </p>
-                      {l.channel !== 'web' && (
-                        <span className="stamp flex-shrink-0 bg-[var(--paper)] px-1.5 py-0.5 text-[11px] text-[var(--ink-6)]">
-                          {l.channel === 'ivr' ? 'Voice listing' : 'USSD listing'}
-                        </span>
-                      )}
-                    </div>
+                    <p className="mt-0.5 truncate text-sm text-[var(--ink-6)]">
+                      {sellerName(l.farmerName)} · {placeName(l.district) ? `${placeName(l.district)}, ` : ''}
+                      {l.regionName}
+                    </p>
 
-                    {/* value line */}
-                    <div className="mt-2.5 flex items-baseline justify-between gap-2 border-t border-[var(--ink-2)] pt-2.5">
-                      <div className="whitespace-nowrap">
+                    <div className="mt-3 flex items-baseline justify-between gap-2">
+                      <p className="whitespace-nowrap">
                         <span className="serial text-2xl font-bold text-[var(--gold-deep)]">
-                          {l.pricePerUnit !== null ? ghs(l.pricePerUnit) : '—'}
+                          {l.pricePerUnit !== null ? ghs(l.pricePerUnit) : t('web.market.noPrice', 'Make an offer')}
                         </span>
-                        <span className="smallcaps ml-1.5 text-[var(--ink-6)]">/ {l.unitName}</span>
-                      </div>
+                        {l.pricePerUnit !== null && <span className="ml-1.5 text-sm text-[var(--ink-6)]">/ {l.unitName.toLowerCase()}</span>}
+                      </p>
                       {l.fairPrice && l.pricePerUnit !== null && (
                         <span
                           className="stamp whitespace-nowrap bg-[var(--success-wash)] px-1.5 py-0.5 text-[11px] text-[var(--success)]"
-                          title="At or below the cross-market reference average"
+                          title={t('web.market.fairHint', 'At or below the average across markets')}
                         >
-                          Fair price
+                          {t('web.market.fair', 'Fair price')}
                         </span>
                       )}
                     </div>
-                    <p className="serial text-[11px] text-[var(--ink-6)]">
-                      {l.unitsRemaining !== null ? `${l.unitsRemaining} × ${l.unitName} · ` : ''}
-                      {t('web.market.kgAvailable', '{kg} kg available', { kg: l.remainingKg.toLocaleString() })}
+                    <p className="mt-0.5 text-xs text-[var(--ink-6)]">
+                      {l.unitsRemaining !== null
+                        ? t('web.market.unitsLeft', '{n} × {unit} · {kg} kg left', {
+                            n: l.unitsRemaining,
+                            unit: l.unitName.toLowerCase(),
+                            kg: l.remainingKg.toLocaleString(),
+                          })
+                        : t('web.market.kgAvailable', '{kg} kg available', { kg: l.remainingKg.toLocaleString() })}
                       {l.priceSource === 'market' ? ` · ${t('web.market.atMarket', 'priced at market')}` : ''}
-                      <span className="text-[var(--ink-4)]"> · LOT №&nbsp;{l.lotCode.replace('FTM-', '')}</span>
                     </p>
 
-                    {l.farmerPhone && (
-                      <a
-                        href={`tel:${l.farmerPhone}`}
-                        className="mt-2.5 flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--forest)] py-2 text-sm font-semibold text-[var(--forest-deep)] transition-[background-color,scale] hover:bg-[var(--forest-wash)] active:scale-[0.97] active:bg-[var(--forest-wash)] lg:min-h-0"
-                      >
-                        <Glyph name="phone" className="h-4 w-4" />
-                        {t('web.market.call', 'Call the farmer')} <span className="serial text-xs">{l.farmerPhone}</span>
-                      </a>
-                    )}
-                    {l.channel !== 'web' && (
-                      <p className="mt-1.5 text-[11px] leading-snug text-[var(--ink-6)]">
-                        {l.channel === 'ivr'
-                          ? t('web.market.channelIvr', 'Listed by voice call. Call to agree a price, or bid and they get a voice call.')
-                          : t('web.market.channelUssd', 'Listed from a basic phone. Call to agree a price, or bid and they get a voice call.')}
-                      </p>
-                    )}
-
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <Link
-                        to={`/lots/${l.id}/trace`}
-                        className={`${btnGhostCls} flex items-center justify-center text-center`}
-                      >
-                        {t('web.market.viewTrace', 'View trace')}
-                      </Link>
+                    <div className="mt-auto flex items-center gap-2 pt-4">
                       <button
                         type="button"
-                        className={btnCls}
+                        className={`${btnCls} flex-1`}
                         onClick={() => setBidLot(l)}
                         disabled={registriesPending}
                         aria-busy={registriesPending || undefined}
-                        title={registriesPending ? 'Loading the crop registry…' : undefined}
                       >
                         <BusyLabel busy={registriesPending} label={t('web.market.placeBid', 'Place a bid')} />
                       </button>
+                      {l.farmerPhone && (
+                        <a
+                          href={`tel:${l.farmerPhone}`}
+                          className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-[var(--forest)] text-[var(--forest-deep)] transition-[background-color,scale] hover:bg-[var(--forest-wash)] active:scale-[0.95] active:bg-[var(--forest-wash)]"
+                          aria-label={t('web.market.callWho', 'Call {name} on {phone}', { name: sellerName(l.farmerName), phone: l.farmerPhone })}
+                          title={l.farmerPhone}
+                        >
+                          <Glyph name="phone" className="h-4 w-4" />
+                        </a>
+                      )}
                     </div>
+                    <Link
+                      to={`/lots/${l.id}/trace`}
+                      className="mt-2 inline-flex min-h-9 items-center self-start text-xs font-semibold text-[var(--ink-6)] underline decoration-[var(--ink-3)] underline-offset-4 transition-colors hover:text-[var(--ink)] hover:decoration-[var(--ink-6)]"
+                    >
+                      {t('web.market.lotHistory', 'Lot {code} · history', { code: l.lotCode.replace('FTM-', '') })}
+                    </Link>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
+            </>
           )}
         </div>
 

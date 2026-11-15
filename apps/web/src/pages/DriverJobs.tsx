@@ -344,7 +344,7 @@ export function DriverJobsPage() {
               <div key={j.id} className="flex flex-wrap items-center gap-5 rounded-2xl border border-[var(--ink-2)] bg-[var(--paper)] p-4">
                 <JobStats job={j} crop={cropName(j.commodityCode)} />
                 <StateBadge state={j.state} />
-                <Link to={`/deals/${j.contractId}`} className={pillCls}>
+                <Link to={`/deals/${j.contractId}`} viewTransition className={pillCls}>
                   {t('web.driver.openJob', 'Open')}
                 </Link>
                 <div className="ml-auto">

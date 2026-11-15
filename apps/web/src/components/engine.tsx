@@ -148,7 +148,7 @@ export function MatchBanner({
             </p>
           )}
           <Link
-            to={`/deals/${match.contractId}`}
+            viewTransition to={`/deals/${match.contractId}`}
             className={`${textLinkCls} ${hitAreaCls} text-xs font-semibold text-[var(--ink)] hover:text-[var(--gold-deep)]`}
           >
             View Contract
@@ -206,7 +206,7 @@ export function MatchRow({
       <button type="button" className={btnGhostCls} onClick={onPreview}>
         Voice & SMS
       </button>
-      <Link to={`/deals/${match.contractId}`} className={`${textLinkCls} ${hitAreaCls} text-sm font-semibold text-[var(--gold-deep)]`}>
+      <Link viewTransition to={`/deals/${match.contractId}`} className={`${textLinkCls} ${hitAreaCls} text-sm font-semibold text-[var(--gold-deep)]`}>
         Contract
       </Link>
     </div>

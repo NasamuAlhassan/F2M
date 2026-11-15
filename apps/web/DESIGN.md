@@ -159,7 +159,20 @@ Three durations and two curves, set in `index.css` `:root`. Use them instead of 
 - **Arrivals**: dialogs grow from the top, the Voice & SMS drawer slides in from the right, toasts grow from the bottom. Confirmation cards (offer, match, payout) rise 6px and fade in. Only the grade badge keeps a stamp.
 - **Live**: the ember pulse marks something happening now (recording, live matching). Static content never pulses.
 - **Nothing shifts**: hover, focus and selection change colour or a ring, never border width, font weight or size. Wave bars animate `scaleY`, not height.
+- **Moving between pages**: tabs and links into a sale use React Router's `viewTransition`. There is no whole-page crossfade: the header (`vt-header`) and tab bar (`vt-tabbar`) hold still, and only the page (`vt-page`) fades and rises 4px. Name nothing else; a duplicate `view-transition-name` cancels the transition.
+- **First sight, not every refetch**: lot cards rise in once (6px, `--dur-base`), staggered 35ms for at most six. A card already seen never animates again. Photos fade in over their crop's colour once loaded; a cached photo shows at once.
+- **Money moments**: confirming receipt, reporting a problem and answering a claim end on a success sheet: a drawn tick (circle, then tick), one sentence on what happens next, and a reference. Android phones also get a short vibration (`haptic('success')` in `lib/haptics.ts`); never on scroll, typing or errors. Driver steps are quick and repeated, so they get a toast.
+- **Amounts** count to a new value only when it changes while the page is open (700ms), never on first paint.
+- **Timelines**: the step everyone waits on has a solid gold ring that breathes; a step that arrives while the page is open draws its rail down, pops its dot and is read out by screen readers.
 - Every keyframe sits in one section of `index.css`, and one `prefers-reduced-motion` block switches them all off.
+
+## Trust details
+
+- **Money shows its state.** Paid reads solid with a tick; on its way has a clock; held has a lock and says what releases it ("Released to Ama when you confirm it arrived"). Held money is never counted as paid.
+- **Deadlines say the time first, then how long, then the default**: "By tomorrow 15:00 · in 18 hours. If you do nothing, it confirms itself at tomorrow 15:00 and Ama is paid." They turn red only inside the last hour.
+- **Offline is not an error.** A slim bar says "Offline. Showing what you saw at 10:42." and the page keeps what it had.
+- **Fonts never jump.** Georgia/Times and Segoe UI/Arial stand in at measured sizes (`size-adjust`, `ascent-override`) until Newsreader and Hanken Grotesk arrive.
+- **One primary action per card.** On a lot card that is "Place a bid"; calling is a round button beside it, and the lot's history is a quiet link. Advice that applies to every card is said once above the grid.
 
 ## Don't
 
