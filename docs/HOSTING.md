@@ -28,6 +28,12 @@ timers. Tests use an in-memory PGlite. No Docker, no cloud account.
   is that transaction (`db/client.ts`), so helpers called inside one stay inside it.
 - **Registries** (regions, crops, units, rubrics) are cached in memory per
   instance (`loadRegistries()`), so crop names cost no round trip.
+- **The server is bundled before Vercel sees it.** `vercel-build` runs
+  `apps/server/scripts/bundle.mjs` (esbuild): `src/index.ts` and `@ftm/core`
+  become one file, `dist/server.mjs`, with npm packages left external. Vercel's
+  Fastify preset picks `src/app.mjs`, which only imports that bundle. Left to
+  itself, Vercel would compile the TypeScript and fail (no file extensions on
+  imports, TypeScript source in `node_modules`).
 - **Cold starts don't migrate or seed.** The server's build runs `vercel-build`,
   which migrates and adds missing reference data. A cold start loads only the registry cache.
 - **Nothing important is kept in memory between requests.** The price-feed clock
