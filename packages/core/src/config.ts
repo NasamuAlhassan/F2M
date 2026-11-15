@@ -41,8 +41,13 @@ const envSchema = z
     CLAIM_ANSWER_HOURS: z.coerce.number().positive().default(24),
     PUBLIC_BASE_URL: z.string().default('http://localhost:3000'),
 
+    // 'hf' = an open vision model over an OpenAI-compatible API (the name predates other hosts).
     GRADING_PROVIDER: z.enum(['mock', 'hf']).default('mock'),
     HF_TOKEN: z.string().optional(),
+    // Where grading runs. Default: Hugging Face's router (HF_TOKEN). On the AI assist's host
+    // (e.g. Groq, model qwen/qwen3.8-27b) it uses LLM_API_KEY unless GRADING_API_KEY is set.
+    GRADING_BASE_URL: z.string().default('https://router.huggingface.co/v1'),
+    GRADING_API_KEY: blankIsUnset(z.string().optional()),
     // Must exist in the HF router catalog (GET router.huggingface.co/v1/models);
     // the original 7B VL retired from the router, verified live 2026-08-24.
     GRADING_MODEL: z.string().default('Qwen/Qwen3-VL-30B-A3B-Instruct'),
@@ -128,8 +133,16 @@ const envSchema = z
   })
   .superRefine((env, ctx) => {
     // Fail at boot with the exact missing keys for the providers actually selected.
-    if (env.GRADING_PROVIDER === 'hf' && !env.HF_TOKEN) {
-      ctx.addIssue({ code: 'custom', message: 'GRADING_PROVIDER=hf requires HF_TOKEN' });
+    if (env.GRADING_PROVIDER === 'hf') {
+      const trim = (url: string) => url.replace(/\/+$/, '');
+      const sameHostAsAssist = trim(env.GRADING_BASE_URL) === trim(env.LLM_BASE_URL);
+      const key = env.GRADING_API_KEY ?? (sameHostAsAssist ? env.LLM_API_KEY : env.HF_TOKEN);
+      if (!key) {
+        ctx.addIssue({
+          code: 'custom',
+          message: "GRADING_PROVIDER=hf needs a key: GRADING_API_KEY, or HF_TOKEN (Hugging Face), or LLM_API_KEY when grading on the assist's host",
+        });
+      }
     }
     if (env.LLM_PROVIDER === 'openai-compatible' && !env.LLM_API_KEY) {
       ctx.addIssue({ code: 'custom', message: 'LLM_PROVIDER=openai-compatible requires LLM_API_KEY (a Groq key by default)' });
