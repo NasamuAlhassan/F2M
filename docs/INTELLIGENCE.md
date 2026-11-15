@@ -53,20 +53,23 @@ proposes fields; whatever it proposes is checked and a person confirms it.
   region, no names. It is on the Prices page.
 - Manage alerts: `GET/POST/DELETE /api/watches`, or the "Alerts" card on a crop.
 
-## 4. The language-model assist (D-056)
+## 4. The language-model assist (D-056, D-059)
 
 **Off by default.** With `LLM_PROVIDER=off` nothing leaves the server and every
-feature runs on its rules exactly as before. To switch it on the owner sets
-`LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`; `LLM_MODEL` (default
-`claude-opus-5-5`), `LLM_EFFORT` (default `low`) and `LLM_TIMEOUT_MS` tune it.
-For in-call speed and lower cost a smaller model such as `claude-haiku-5-5`
-is the likely choice; that is the owner's call.
+feature runs on its rules exactly as before. It runs on **open models** on an
+OpenAI-compatible host, Groq by default (free tier). To switch it on, set
+`LLM_PROVIDER=openai-compatible` and `LLM_API_KEY` (a key from console.groq.com).
+`LLM_MODEL` (default `openai/gpt-oss-120b`), `LLM_BASE_URL` (default
+`https://api.groq.com/openai/v1`) and `LLM_TIMEOUT_MS` tune it. Another host
+(OpenRouter, Hugging Face's router, a self-hosted server) is a change of those
+three settings. The photo check needs `LLM_VISION_MODEL`, a model that can see;
+unset, that check is skipped.
 
 **What goes out, and what does not.** Only short text being understood: a
 farmer's translated listing sentence, a buyer's typed request, a failed-call
 transcript for the triage script, or a listing photo for the photo check.
 Phone numbers and e-mail addresses are removed first. Names and ids are never
-sent. The owner must approve this knowingly; D-047 keeps personal data in-house.
+sent. The owner approved sending this to an open-model host (D-059).
 
 What it does:
 
@@ -82,15 +85,10 @@ Not model-driven on purpose: price guidance, offer advice
 alerts. They work with the assist off.
 
 Any failure (down, slow, refused, malformed, fails validation) returns nothing
-and the feature carries on without it. The provider calls Anthropic's Messages
-API with structured output and low effort, and opts into the refusal rescue on
-models that have it. It uses `fetch` rather than the SDK because npm could not
-resolve the shared workspace tree when this was built; swapping to
-`@anthropic-ai/sdk` is a change inside `providers/llm/index.ts` only.
-
-**Not yet verified live:** there was no API key, so the Anthropic request has
-been tested against its documented shape with a stand-in `fetch`, not against
-the real service. Run one real call before relying on it.
+and the feature carries on without it. The provider calls the host's
+chat-completions endpoint in JSON mode, with the schema in the instructions;
+the Zod check afterwards is what enforces it. A fenced or chatty answer is
+unwrapped before parsing.
 
 ## Operating notes
 

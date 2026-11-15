@@ -40,7 +40,7 @@ for (const [reason, rows] of [...byReason].sort((a, b) => b[1].length - a[1].len
 }
 
 if (!llmEnabled()) {
-  console.log('(The language-model assist is off, so no pattern analysis. Set LLM_PROVIDER=anthropic to add one.)');
+  console.log('(The language-model assist is off, so no pattern analysis. Set LLM_PROVIDER=openai-compatible and LLM_API_KEY to add one.)');
   process.exit(0);
 }
 

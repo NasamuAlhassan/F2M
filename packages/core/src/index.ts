@@ -66,7 +66,7 @@ export * from './domain/events';
 export * from './domain/alerts';
 export * from './domain/supply';
 export * from './domain/aiAssist';
-export { setLlmProvider, getLlmProvider, llmEnabled, scrubPii, AnthropicLlmProvider, LlmError, type LlmProvider, type LlmRequest } from './providers/llm/index';
+export { setLlmProvider, getLlmProvider, llmEnabled, scrubPii, OpenAiCompatibleLlmProvider, LlmError, type LlmProvider, type LlmRequest } from './providers/llm/index';
 export * from './domain/notifications';
 export * from './domain/buyerNotifications';
 export * from './domain/voiceCalls';

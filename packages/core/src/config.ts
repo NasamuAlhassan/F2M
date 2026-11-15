@@ -82,15 +82,16 @@ const envSchema = z
     ALERT_SMS_PER_FARMER_PER_DAY: z.coerce.number().int().min(0).default(2),
     ALERT_PRICE_MOVE_PCT: z.coerce.number().min(1).default(10),
 
-    // The language-model assist (D-056). OFF by default: with 'off' every feature runs on
-    // its own rules, exactly as before. 'anthropic' sends short, scrubbed pieces of text
-    // (a farmer's listing sentence, a buyer's typed request) to Anthropic's API, so the
-    // owner must switch it on knowingly (D-047 keeps personal data in-house).
-    LLM_PROVIDER: z.enum(['off', 'anthropic']).default('off'),
-    ANTHROPIC_API_KEY: blankIsUnset(z.string().optional()),
-    LLM_MODEL: z.string().default('claude-opus-5-5'),
-    // Low effort keeps a call quick enough for a live phone call; the answer is only ever a suggestion.
-    LLM_EFFORT: z.enum(['low', 'medium', 'high']).default('low'),
+    // The language-model assist (D-056, D-059). OFF by default: with 'off' every feature runs
+    // on its own rules, exactly as before. 'openai-compatible' sends short, scrubbed pieces
+    // of text (a farmer's listing sentence, a buyer's typed request) to an open model on an
+    // OpenAI-compatible host: Groq by default, free tier. The owner chose this (D-059).
+    LLM_PROVIDER: z.enum(['off', 'openai-compatible']).default('off'),
+    LLM_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
+    LLM_API_KEY: blankIsUnset(z.string().optional()),
+    LLM_MODEL: z.string().default('openai/gpt-oss-120b'),
+    // For the listing-photo check. Unset = that check is skipped (grading has its own model).
+    LLM_VISION_MODEL: blankIsUnset(z.string().optional()),
     LLM_TIMEOUT_MS: z.coerce.number().default(8000),
 
     VOICE_PROVIDER: z.enum(['mock', 'at']).default('mock'),
@@ -130,8 +131,8 @@ const envSchema = z
     if (env.GRADING_PROVIDER === 'hf' && !env.HF_TOKEN) {
       ctx.addIssue({ code: 'custom', message: 'GRADING_PROVIDER=hf requires HF_TOKEN' });
     }
-    if (env.LLM_PROVIDER === 'anthropic' && !env.ANTHROPIC_API_KEY) {
-      ctx.addIssue({ code: 'custom', message: 'LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY' });
+    if (env.LLM_PROVIDER === 'openai-compatible' && !env.LLM_API_KEY) {
+      ctx.addIssue({ code: 'custom', message: 'LLM_PROVIDER=openai-compatible requires LLM_API_KEY (a Groq key by default)' });
     }
     if (env.NOTIFY_PROVIDER === 'at' && !env.AT_API_KEY) {
       ctx.addIssue({ code: 'custom', message: 'NOTIFY_PROVIDER=at requires AT_API_KEY' });

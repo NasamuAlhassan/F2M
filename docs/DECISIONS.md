@@ -555,3 +555,13 @@ The order gains three states: `DELIVERED` (the receipt clock runs), `CLAIMED` an
 - the owner's laptop with a tunnel (online only while the laptop is);
 - Vercel's multi-service import as proposed (it would have run the server as a container and built the web twice);
 - keeping F2M's tables in `public` behind row-level security (a single missed policy would open the data; a private schema is closed by default).
+
+## D-059 · 2026-11-15 · The assist runs on open models (Groq), not Anthropic
+
+**Decision:** The owner removed the Anthropic provider ("we don't have money for that") and chose open models on a free host. The assist now speaks the OpenAI chat-completions API, which Groq, OpenRouter, Hugging Face's router and self-hosted servers all offer, so the host is three settings (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`). Groq is the default (`openai/gpt-oss-120b`): fast enough for a live phone call, with a free tier. The owner approves sending the same short, scrubbed text D-056 describes to that host.
+
+**What stays:** everything D-056 promised. Off unless switched on; a validated object or nothing; numbers only ones the person said; never the crop or grade for a farmer; any failure falls back to the rules.
+
+**Notes:** JSON mode with the schema in the instructions is used rather than a host's strict structured-output mode, because not every host or open model supports the latter; the Zod check enforces the shape either way. Groq listed no production model that reads images (2026-11-15), so the listing-photo check needs `LLM_VISION_MODEL` set and is skipped otherwise; photo grading has its own vision model on Hugging Face (D-006).
+
+**Rejected:** Anthropic (cost); Hugging Face's router as the default (the free allowance is small and shared with photo grading); OpenRouter's free models as the default (busier and slower at times; still one setting away).

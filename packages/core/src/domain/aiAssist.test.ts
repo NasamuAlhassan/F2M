@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { AnthropicLlmProvider, jsonSchemaFor, LlmError, scrubPii, setLlmProvider, type LlmProvider, type LlmRequest } from '../providers/llm/index';
+import { jsonSchemaFor, OpenAiCompatibleLlmProvider, LlmError, scrubPii, setLlmProvider, type LlmProvider, type LlmRequest } from '../providers/llm/index';
 import { adviseOffer, assistListingDraft, checkListingPhoto, fillGaps, understandRequest } from './aiAssist';
 import { registerFarmer } from './farmers';
 import { registerLot } from './lots';
@@ -35,71 +35,91 @@ describe('scrubPii', () => {
   });
 });
 
-describe('AnthropicLlmProvider', () => {
+describe('OpenAiCompatibleLlmProvider', () => {
   const schema = z.object({ answer: z.string().nullable(), count: z.number().int().min(0) });
-  const okReply = (text: string, stop = 'end_turn') => async () =>
-    new Response(JSON.stringify({ stop_reason: stop, content: [{ type: 'thinking', thinking: '' }, { type: 'text', text }] }), { status: 200 });
+  const okReply = (content: string | null, finish = 'stop', extra: Record<string, unknown> = {}) => async () =>
+    new Response(JSON.stringify({ choices: [{ finish_reason: finish, message: { role: 'assistant', content, ...extra } }] }), { status: 200 });
 
-  function provider(fetchImpl: typeof fetch, model = 'claude-opus-5-5') {
-    return new AnthropicLlmProvider({ apiKey: 'sk-test', model, effort: 'low', timeoutMs: 1000, fetchImpl });
+  function provider(fetchImpl: typeof fetch, opts: { visionModel?: string } = {}) {
+    return new OpenAiCompatibleLlmProvider({
+      apiKey: 'gsk-test',
+      baseUrl: 'https://api.groq.com/openai/v1/',
+      model: 'openai/gpt-oss-120b',
+      timeoutMs: 1000,
+      fetchImpl,
+      ...opts,
+    });
   }
 
-  it('sends the documented request: key and version headers, structured output, effort, no sampling or prefill', async () => {
-    let seen: { headers: Record<string, string>; body: Record<string, any> } | null = null;
-    const p = provider((async (_url: string, init: RequestInit) => {
-      seen = { headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) };
+  it('sends a chat-completions request: bearer key, JSON mode, the schema in the instructions', async () => {
+    let seen: { url: string; headers: Record<string, string>; body: Record<string, any> } | null = null;
+    const p = provider((async (url: string, init: RequestInit) => {
+      seen = { url, headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) };
       return okReply('{"answer":"hi","count":2}')();
     }) as unknown as typeof fetch);
     const out = await p.extract({ system: 'sys', user: 'text', schema });
     expect(out).toEqual({ answer: 'hi', count: 2 });
-    expect(seen!.headers['x-api-key']).toBe('sk-test');
-    expect(seen!.headers['anthropic-version']).toBe('2026-10-21');
+    expect(seen!.url).toBe('https://api.groq.com/openai/v1/chat/completions');
+    expect(seen!.headers.authorization).toBe('Bearer gsk-test');
     const body = seen!.body;
-    expect(body.model).toBe('claude-opus-5-5');
-    expect(body.output_config.effort).toBe('low');
-    expect(body.output_config.format.type).toBe('json_schema');
-    expect(body).not.toHaveProperty('temperature');
-    expect(body).not.toHaveProperty('thinking');
-    expect(body.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'text' }] }]);
-    // The refusal rescue is requested for this model...
-    expect(body.fallbacks).toBe('default');
-    expect(seen!.headers['anthropic-beta']).toBe('server-side-fallback-2026-07-01');
+    expect(body.model).toBe('openai/gpt-oss-120b');
+    expect(body.response_format).toEqual({ type: 'json_object' });
+    expect(body.temperature).toBe(0);
+    expect(body.messages[0].role).toBe('system');
+    expect(body.messages[0].content).toContain('sys');
+    expect(body.messages[0].content).toContain('"count"'); // the schema travels with the instructions
+    expect(body.messages[1]).toEqual({ role: 'user', content: 'text' });
   });
 
-  it('does not ask for a rescue model on a model that has none', async () => {
+  it('sends pictures to the vision model as data URLs after the text', async () => {
     let body: Record<string, any> = {};
-    let headers: Record<string, string> = {};
-    const p = provider((async (_u: string, init: RequestInit) => {
-      body = JSON.parse(String(init.body));
-      headers = init.headers as Record<string, string>;
-      return okReply('{"answer":null,"count":0}')();
-    }) as unknown as typeof fetch, 'claude-haiku-5-5');
-    await p.extract({ system: 's', user: 'u', schema });
-    expect(body).not.toHaveProperty('fallbacks');
-    expect(headers).not.toHaveProperty('anthropic-beta');
-  });
-
-  it('attaches images as base64 blocks before the text', async () => {
-    let body: Record<string, any> = {};
-    const p = provider((async (_u: string, init: RequestInit) => {
-      body = JSON.parse(String(init.body));
-      return okReply('{"answer":null,"count":0}')();
-    }) as unknown as typeof fetch);
+    const p = provider(
+      (async (_u: string, init: RequestInit) => {
+        body = JSON.parse(String(init.body));
+        return okReply('{"answer":null,"count":0}')();
+      }) as unknown as typeof fetch,
+      { visionModel: 'some/vision-model' },
+    );
     await p.extract({ system: 's', user: 'u', schema, images: [{ mime: 'image/jpeg', base64: 'AAAA' }] });
-    expect(body.messages[0].content[0]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } });
-    expect(body.messages[0].content[1].type).toBe('text');
+    expect(body.model).toBe('some/vision-model');
+    expect(body.messages[1].content[0]).toEqual({ type: 'text', text: 'u' });
+    expect(body.messages[1].content[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,AAAA' } });
+  });
+
+  it('skips a picture when no vision model is configured, without calling out', async () => {
+    let called = false;
+    const p = new OpenAiCompatibleLlmProvider({
+      apiKey: 'gsk-test',
+      model: 'text-only',
+      fetchImpl: (async () => {
+        called = true;
+        return new Response('{}');
+      }) as unknown as typeof fetch,
+    });
+    await expect(p.extract({ system: 's', user: 'u', schema, images: [{ mime: 'image/png', base64: 'AA' }] })).rejects.toThrow(/vision/);
+    expect(called).toBe(false);
+  });
+
+  it('reads JSON wrapped in a code fence or stray words', async () => {
+    const fenced = provider(okReply('```json\n{"answer":"a","count":1}\n```') as unknown as typeof fetch);
+    expect(await fenced.extract({ system: 's', user: 'u', schema })).toEqual({ answer: 'a', count: 1 });
+    const chatty = provider(okReply('Here it is: {"answer":"b","count":3} Hope that helps.') as unknown as typeof fetch);
+    expect(await chatty.extract({ system: 's', user: 'u', schema })).toEqual({ answer: 'b', count: 3 });
   });
 
   it('turns every kind of failure into an error the caller can swallow', async () => {
-    await expect(provider(okReply('{"answer":"x","count":1}', 'refusal') as unknown as typeof fetch).extract({ system: 's', user: 'u', schema })).rejects.toThrow(LlmError);
-    await expect(provider(okReply('{"answer":"x","count":1}', 'max_tokens') as unknown as typeof fetch).extract({ system: 's', user: 'u', schema })).rejects.toThrow(/cut off/);
-    await expect(provider(okReply('not json') as unknown as typeof fetch).extract({ system: 's', user: 'u', schema })).rejects.toThrow(/not JSON/);
-    await expect(provider(okReply('{"answer":"x","count":-4}') as unknown as typeof fetch).extract({ system: 's', user: 'u', schema })).rejects.toThrow(/schema/);
-    await expect(provider((async () => new Response('{}', { status: 500 })) as unknown as typeof fetch).extract({ system: 's', user: 'u', schema })).rejects.toThrow(/500/);
+    const ask = (f: unknown) => provider(f as typeof fetch).extract({ system: 's', user: 'u', schema });
+    await expect(ask(okReply(null, 'stop', { refusal: 'no' }))).rejects.toThrow(/declined/);
+    await expect(ask(okReply('{"answer":"x","count":1}', 'content_filter'))).rejects.toThrow(LlmError);
+    await expect(ask(okReply('{"answer":"x","cou', 'length'))).rejects.toThrow(/cut off/);
+    await expect(ask(okReply('not json'))).rejects.toThrow(/not JSON/);
+    await expect(ask(okReply('{"answer":"x","count":-4}'))).rejects.toThrow(/schema/);
+    await expect(ask(async () => new Response('{"choices":[]}', { status: 200 }))).rejects.toThrow(/no answer/);
+    await expect(ask(async () => new Response('{}', { status: 429 }))).rejects.toThrow(/429/);
   });
 
   it('refuses to run without a key', async () => {
-    const p = new AnthropicLlmProvider({ apiKey: '', fetchImpl: (async () => new Response('{}')) as unknown as typeof fetch });
+    const p = new OpenAiCompatibleLlmProvider({ apiKey: '', fetchImpl: (async () => new Response('{}')) as unknown as typeof fetch });
     await expect(p.extract({ system: 's', user: 'u', schema })).rejects.toThrow(/key/);
   });
 });
