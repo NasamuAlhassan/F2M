@@ -60,7 +60,14 @@ class SupabaseStore implements MediaStore {
   async put(key: string, bytes: Buffer, contentType: string): Promise<void> {
     const res = await fetch(this.objectUrl(key), {
       method: 'POST',
-      headers: { authorization: `Bearer ${this.serviceKey}`, 'content-type': contentType, 'x-upsert': 'true' },
+      // Both headers: a new-style `sb_secret_…` key is only accepted via `apikey`
+      // (and as a Bearer only when it equals `apikey`); a legacy service_role JWT works either way.
+      headers: {
+        apikey: this.serviceKey,
+        authorization: `Bearer ${this.serviceKey}`,
+        'content-type': contentType,
+        'x-upsert': 'true',
+      },
       body: new Uint8Array(bytes),
     });
     if (!res.ok) throw new Error(`Storage upload failed (${res.status}): ${await res.text().catch(() => '')}`);

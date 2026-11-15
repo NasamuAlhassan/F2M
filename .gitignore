@@ -4,6 +4,8 @@ data/
 *.db
 *.db-journal
 .env
+.env.*
+!.env.example
 apps/server/storage/
 coverage/
 .vite/
