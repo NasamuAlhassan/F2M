@@ -76,6 +76,12 @@ function Frame({ title, note, children }: { title: string; note?: string; childr
           {note && <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-7)]">{note}</p>}
           <div className="mb-8" />
           {children}
+          {/* The story panel is desktop-only; a farmer on a borrowed smartphone
+              still needs to hear that the website is optional. */}
+          <p className="mt-8 flex items-start gap-2.5 rounded-2xl bg-[var(--paper-deep)] px-4 py-3 text-sm leading-relaxed text-[var(--ink-7)] lg:hidden">
+            <Glyph name="phone" className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--forest)]" />
+            {t('web.login.phoneNote', 'Selling from a basic phone? You do not need this website. Dial *384*7247# from any phone.')}
+          </p>
         </div>
       </main>
     </div>
