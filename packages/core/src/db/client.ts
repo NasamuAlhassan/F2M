@@ -10,9 +10,10 @@ import * as schema from './schema';
 /**
  * The database (docs/HOSTING.md). One Postgres API, two engines:
  *
- * - `DATABASE_URL` set → Supabase Postgres through its transaction pooler
- *   (port 6543). The pooler cannot keep prepared statements, hence
- *   `prepare: false`; a serverless instance needs only a few connections.
+ * - `DATABASE_URL` set → Supabase Postgres through its SESSION pooler (port
+ *   5432). Not the transaction pooler (6543): postgres-js loses queries through
+ *   it, the answer never coming back (porsager/postgres#970), which hung the
+ *   first deploys. One connection per serverless instance.
  * - otherwise → PGlite, Postgres compiled to run in-process: a folder under
  *   `data/` for local dev, or memory (`DATABASE_PATH=:memory:`) for tests. No
  *   Docker, no cloud, works offline.
@@ -25,11 +26,12 @@ export type DbEngine = 'postgres' | 'pglite';
 
 function connect(): { db: Db; engine: DbEngine; close: () => Promise<void>; pglite?: PGlite } {
   if (config.DATABASE_URL) {
-    // One connection, one query in flight: parallel queries (the four registry
-    // loads) hung the deploy, the extra connections never getting through the
-    // pooler. Supabase advises max 1 for serverless anyway, and PGlite (local,
-    // tests) is a single connection too, so the code already lives with it.
-    // fetch_types off: no extra type-lookup query on connect.
+    if (/:6543\//.test(config.DATABASE_URL)) {
+      console.warn('[db] DATABASE_URL uses the transaction pooler (port 6543), which can lose queries. Use the session pooler, port 5432 (docs/HOSTING.md).');
+    }
+    // One connection, one query in flight: Supabase advises max 1 for
+    // serverless, and PGlite (local, tests) is a single connection too, so the
+    // code already lives with it. fetch_types off: no type lookup on connect.
     const client = postgres(config.DATABASE_URL, {
       prepare: false,
       max: 1,

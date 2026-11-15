@@ -8,7 +8,7 @@ everything that must last.
 |---|---|
 | Web portal | Vercel project **f2m-web**: root `apps/web`, Vite |
 | API, USSD and voice callbacks | Vercel project **f2m-server**: root `apps/server`, Fastify as a function |
-| Database | **Supabase Postgres**, schema `f2m` (kept out of Supabase's public REST API), through the transaction pooler |
+| Database | **Supabase Postgres**, schema `f2m` (kept out of Supabase's public REST API), through the session pooler (port 5432) |
 | Photos, recordings, voice clips | **Supabase Storage**, public bucket `media` (written only with the server's service key) |
 | The sweep (offer expiry, calls, payments, SMS, the 24 h receipt clock…) | **Supabase `pg_cron` + `pg_net`**, calling `POST /api/cron/sweep` every minute (and the fast lane every 20 s) with a secret |
 | Logins | Supabase Auth (unchanged) |
@@ -40,7 +40,8 @@ timers. Tests use an in-memory PGlite. No Docker, no cloud account.
 **1. Supabase** (the project you already use for logins):
 - Settings → API: copy the **service_role** key. It's secret; you'll paste it into
   Vercel only, never into the web project or the repo.
-- Connect → **Transaction pooler**: copy the URI (port **6543**) and put your
+- Connect → **Session pooler**: copy the URI (port **5432**, not the transaction
+  pooler on 6543, which loses queries from this driver) and put your
   database password in it. That's `DATABASE_URL`.
 
 **2. Vercel: the server first** (New Project → import `NasamuAlhassan/F2M`):
@@ -49,7 +50,7 @@ timers. Tests use an in-memory PGlite. No Docker, no cloud account.
 
   | Name | Value |
   |---|---|
-  | `DATABASE_URL` | the transaction pooler URI from step 1 |
+  | `DATABASE_URL` | the session pooler URI from step 1 |
   | `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
   | `SUPABASE_SERVICE_ROLE_KEY` | the service_role key |
   | `STORAGE_PROVIDER` | `supabase` |
