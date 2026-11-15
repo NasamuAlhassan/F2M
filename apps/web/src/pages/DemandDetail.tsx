@@ -116,7 +116,7 @@ export function DemandDetailPage() {
                 <div className="flex w-36 flex-col items-end gap-1.5 text-right">
                   <StateBadge state={m.contractState ?? m.status} />
                   {m.contractId && (
-                    <Link className={pillCls} to={`/deals/${m.contractId}`}>
+                    <Link className={pillCls} viewTransition to={`/deals/${m.contractId}`}>
                       {t('web.demand.viewContract', 'See contract')}
                     </Link>
                   )}

@@ -171,6 +171,23 @@ export const LANGUAGE_NAME: Record<string, string> = {
 /** "Ama Atinga" → "Ama"; a company stays whole. */
 export const firstName = (name: string): string => name.trim().split(/\s+/)[0] ?? name;
 
+/** A deadline as people say it: "tomorrow 15:00", with "in 18 hours" beside
+ *  it, and whether it is close (under an hour) or gone. */
+export function deadline(at: number, now = Date.now()): { when: string; left: string; soon: boolean; past: boolean } {
+  const d = new Date(at);
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const day = new Date(now);
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  const tomorrow = new Date(now + 86_400_000);
+  const when = sameDay(d, day)
+    ? `today ${time}`
+    : sameDay(d, tomorrow)
+      ? `tomorrow ${time}`
+      : `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}, ${time}`;
+  const ms = at - now;
+  return { when, left: dueIn(at, now), soon: ms > 0 && ms < 3_600_000, past: ms <= 0 };
+}
+
 /** A short, human span until a deadline: "in 18 hours", "by Fri 10:00". */
 export function dueIn(at: number, now = Date.now()): string {
   const ms = at - now;

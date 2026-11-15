@@ -54,7 +54,7 @@ export function ContractsPage() {
               {data.contracts.map((c) => (
                 <Link
                   key={c.id}
-                  to={`/deals/${c.id}`}
+                  viewTransition to={`/deals/${c.id}`}
                   className={`${rowLinkCls} block border-b border-[var(--ink-2)] px-1 py-3 last:border-b-0`}
                 >
                   <span className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export function ContractsPage() {
                   </td>
                   <td className={`${tdCls} text-xs text-[var(--ink-6)]`}>{shortDate(c.createdAt)}</td>
                   <td className={`${tdCls} text-right`}>
-                    <Link className={pillCls} to={`/deals/${c.id}`}>
+                    <Link className={pillCls} viewTransition to={`/deals/${c.id}`}>
                       Open
                     </Link>
                   </td>

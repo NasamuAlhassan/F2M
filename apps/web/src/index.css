@@ -12,6 +12,43 @@
   src: url('/fonts/HankenGrotesk-variable.woff2') format('woff2');
 }
 
+/* Fallbacks shaped like the web fonts, so text keeps its width and line
+   height while the real font arrives on a slow connection (no jump when it
+   swaps in). Measured against Newsreader and Hanken Grotesk at 100px over a
+   sample line; Safari reads size-adjust only, which still keeps the width. */
+@font-face {
+  font-family: 'Newsreader Fallback Georgia';
+  src: local('Georgia');
+  size-adjust: 101.93%;
+  ascent-override: 72.6%;
+  descent-override: 26.49%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Newsreader Fallback Times';
+  src: local('Times New Roman');
+  size-adjust: 110.65%;
+  ascent-override: 66.88%;
+  descent-override: 24.4%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Hanken Fallback Segoe';
+  src: local('Segoe UI');
+  size-adjust: 101.48%;
+  ascent-override: 98.54%;
+  descent-override: 29.56%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Hanken Fallback Arial';
+  src: local('Arial');
+  size-adjust: 100.25%;
+  ascent-override: 99.75%;
+  descent-override: 29.93%;
+  line-gap-override: 0%;
+}
+
 /* Newsreader — the editorial serif for headlines (D-048). Variable over
    weight 300–600 and optical size; latin + latin-ext so Ghanaian letters
    (ɛ, ɔ, ŋ) never fall back to another face mid-word. */
@@ -110,7 +147,7 @@
   /* Input borders must show where a field is: 3:1 against both grounds. */
   --field-border: #80857b;
 
-  --serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --serif: 'Newsreader', 'Newsreader Fallback Georgia', 'Newsreader Fallback Times', Georgia, serif;
 
   /* The motion scale. One curve for anything that answers a person (quick
      start, long soft landing), one for ambient loops, and three durations:
@@ -133,7 +170,7 @@
    layered class, which silently kept .headline in Hanken Grotesk. */
 @layer base {
   * {
-    font-family: 'Hanken Grotesk', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Hanken Grotesk', 'Hanken Fallback Segoe', 'Hanken Fallback Arial', system-ui, sans-serif;
     box-sizing: border-box;
   }
 
@@ -587,10 +624,131 @@ select {
 
 html {
   scroll-behavior: smooth;
+  /* A sheet that locks scrolling hides the scrollbar; the gutter stays, so
+     the page behind does not jump sideways. */
+  scrollbar-gutter: stable;
+}
+
+/* Cards rise in the first time they appear (never on a refetch); the page
+   staggers at most six of them, 35ms apart. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.rise-in {
+  animation: rise-in var(--dur-base) var(--ease-out) both;
+}
+
+/* A photo fades in over its crop's own colour once it has loaded. A cached
+   photo is shown at once (the class is never added). */
+.photo-fade {
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.photo-fade.is-loaded {
+  opacity: 1;
+}
+
+/* Timeline: a step that arrives while the page is open draws its rail down
+   and its dot pops in; the current step breathes a soft halo. */
+@keyframes rail-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes dot-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+.step-new .step-rail {
+  transform-origin: top;
+  animation: rail-grow var(--dur-slow) var(--ease-out) both;
+}
+.step-new .step-dot {
+  animation: dot-pop var(--dur-base) var(--ease-out) var(--dur-fast) both;
+}
+.step-new .step-text {
+  animation: rise-in var(--dur-base) var(--ease-out) var(--dur-fast) both;
+}
+@keyframes halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 22%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--gold) 8%, transparent);
+  }
+}
+.step-current {
+  animation: halo 2.4s ease-in-out infinite;
+}
+
+/* A confirmation: the circle draws, then the tick. */
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+.check-draw circle {
+  stroke-dasharray: 1;
+  animation: draw var(--dur-slow) var(--ease-out) both;
+}
+.check-draw path {
+  stroke-dasharray: 1;
+  animation: draw var(--dur-base) var(--ease-out) 0.28s both;
+}
+
+/* Moving between pages (React Router viewTransition): no whole-page
+   crossfade. The header and tab bar hold still; only the page content fades
+   and rises a few pixels. */
+::view-transition-group(root) {
+  animation: none;
+}
+::view-transition-old(page) {
+  animation: page-out var(--dur-fast) var(--ease-in-out) both;
+}
+::view-transition-new(page) {
+  animation: page-in var(--dur-base) var(--ease-out) both;
+}
+@keyframes page-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.vt-page {
+  view-transition-name: page;
+}
+.vt-header {
+  view-transition-name: site-header;
+}
+.vt-tabbar {
+  view-transition-name: tab-bar;
 }
 
 /* The off switch for everything above. */
 @media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .rise-in,
+  .step-new .step-rail,
+  .step-new .step-dot,
+  .step-new .step-text,
+  .step-current,
+  .check-draw circle,
+  .check-draw path,
   .seal-land,
   .stamp-land,
   .route-ink,

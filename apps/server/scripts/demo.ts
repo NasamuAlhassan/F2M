@@ -47,6 +47,7 @@ import {
   registerAccount,
   runMigrations,
   schema,
+  seed,
   sendPendingNotifications,
   setTokenVerifier,
 } from '@ftm/core';
@@ -69,6 +70,10 @@ async function sleep(ms: number): Promise<void> {
 }
 
 await runMigrations();
+// As the server does at a local start: add missing reference data (insert-only), which
+// also loads the registry cache. Run directly on a fresh database, the demo otherwise
+// stopped at its first registry lookup ("Registries not loaded").
+await seed({ refresh: false });
 const app = await buildServer({ logger: false });
 
 // The demo buyer signs in the way every web user does (D-047) — a Supabase

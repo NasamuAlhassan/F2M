@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api, dateTime, ghs } from '../api';
 import { CropMark, Glyph } from '../components/engrave';
@@ -24,7 +24,8 @@ import {
   StateBadge,
   toast,
 } from '../components/ui';
-import { DEAL_PATH, dueIn, firstName, LANGUAGE_NAME, type ClaimReason, type DealActor, type DealEvent, type DealRole, type DealView } from '../lib/deal';
+import { haptic } from '../lib/haptics';
+import { DEAL_PATH, deadline, firstName, LANGUAGE_NAME, type ClaimReason, type DealActor, type DealEvent, type DealRole, type DealView } from '../lib/deal';
 import { useT } from '../lib/i18n';
 
 type T = ReturnType<typeof useT>['t'];
@@ -80,7 +81,7 @@ function DealBody({ view, sample }: { view: DealView; sample: boolean }) {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link to={back.to} className={backLinkCls}>
+      <Link to={back.to} viewTransition className={backLinkCls}>
         ← {back.label}
       </Link>
 
@@ -175,8 +176,14 @@ function NextStep({ view, sample }: { view: DealView; sample: boolean }) {
   const { name } = useNames(view);
   const { next, viewer, deal, money, claims, people } = view;
   const [sheet, setSheet] = useState<null | 'receive' | 'report' | 'accept' | 'refuse'>(null);
+  const [done, setDone] = useState<null | { title: string; body: string }>(null);
   const act = useDealAction(view, sample);
   const now = useMinuteClock();
+  const finish = (title: string, body: string) => {
+    setSheet(null);
+    setDone({ title, body });
+    haptic('success');
+  };
 
   if (!next) {
     const done = ['SETTLED', 'CANCELLED', 'CANCELLED_REFUNDED'].includes(deal.state);
@@ -192,7 +199,7 @@ function NextStep({ view, sample }: { view: DealView; sample: boolean }) {
     );
   }
 
-  const due = next.dueAt ? dueIn(next.dueAt, now) : null;
+  const due = next.dueAt ? deadline(next.dueAt, now) : null;
   const claim = next.ref ? claims.find((c) => c.id === next.ref) : claims.find((c) => c.status === 'awaiting_farmer');
   const crop = deal.crop.name.toLowerCase();
 
@@ -208,10 +215,16 @@ function NextStep({ view, sample }: { view: DealView; sample: boolean }) {
           <span aria-hidden className="ember mt-2 inline-block h-2 w-2 flex-shrink-0 rounded-full bg-[var(--gold)]" />
           {waitingFor}
         </p>
-        {due && <p className="mt-1.5 pl-[18px] text-sm text-[var(--ink-6)]">{t('web.deal.dueLine', 'Due {when}.', { when: due })}</p>}
-        {next.action === 'confirm_receipt' && (
+        {due && (
+          <p className={`mt-1.5 pl-[18px] text-sm ${due.soon || due.past ? 'font-semibold text-[var(--stamp-deep)]' : 'text-[var(--ink-6)]'}`}>
+            {t('web.deal.dueLine', 'By {when} · {left}', { when: due.when, left: due.left })}
+          </p>
+        )}
+        {next.action === 'confirm_receipt' && due && (
           <p className="mt-1 pl-[18px] text-sm text-[var(--ink-6)]">
-            {t('web.deal.autoConfirm', 'If nobody answers, it confirms itself after 24 hours.')}
+            {viewer === 'farmer'
+              ? t('web.deal.autoConfirmFarmer', 'If they do nothing, it confirms itself at {when} and your balance is sent.', { when: due.when })
+              : t('web.deal.autoConfirm', 'If nobody answers, it confirms itself at {when}.', { when: due.when })}
           </p>
         )}
       </section>
@@ -303,9 +316,21 @@ function NextStep({ view, sample }: { view: DealView; sample: boolean }) {
       </h2>
       {body && <p className="mt-2 text-[15px] leading-relaxed text-[var(--ink-2)]">{body}</p>}
       {due && (
-        <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-[var(--paper-lift)]/10 px-3 py-1 text-sm font-semibold text-[var(--gold-bright)]">
-          <Glyph name="bell" className="h-4 w-4" />
-          {t('web.deal.answerBy', 'Answer {when}', { when: due })}
+        <p
+          className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${
+            due.soon || due.past ? 'bg-[var(--stamp)] text-[var(--paper-lift)]' : 'bg-[var(--paper-lift)]/10 text-[var(--gold-bright)]'
+          }`}
+        >
+          <Glyph name="clock" className="h-4 w-4" />
+          {t('web.deal.answerBy', 'By {when} · {left}', { when: due.when, left: due.left })}
+        </p>
+      )}
+      {next.action === 'confirm_receipt' && due && money && (
+        <p className="mt-2 text-sm text-[var(--ink-2)]">
+          {t('web.deal.autoConfirmYou', 'If you do nothing, it confirms itself at {when} and {farmer} is paid.', {
+            when: due.when,
+            farmer: firstName(people.farmer.name),
+          })}
         </p>
       )}
       {act.error && (
@@ -323,12 +348,45 @@ function NextStep({ view, sample }: { view: DealView; sample: boolean }) {
           )}
           confirm={t('web.deal.receiveConfirm', 'Yes, it arrived')}
           busy={act.isPending}
-          onConfirm={() => act.mutate({ kind: 'receive' }, { onSuccess: () => setSheet(null) })}
+          onConfirm={() =>
+            act.mutate(
+              { kind: 'receive' },
+              {
+                onSuccess: () =>
+                  finish(
+                    t('web.deal.doneReceived', 'Confirmed. Thank you.'),
+                    t('web.deal.doneReceivedBody', '{farmer} is being paid the balance of {amount}, and the driver their fee. You will find the receipt under Payments.', {
+                      farmer: firstName(people.farmer.name),
+                      amount: ghs(money.stillHeld),
+                    }),
+                  ),
+              },
+            )
+          }
           onClose={() => setSheet(null)}
         />
       )}
       {sheet === 'report' && money && (
-        <ReportSheet view={view} busy={act.isPending} onClose={() => setSheet(null)} onSend={(c) => act.mutate({ kind: 'claim', ...c }, { onSuccess: () => setSheet(null) })} />
+        <ReportSheet
+          view={view}
+          busy={act.isPending}
+          onClose={() => setSheet(null)}
+          onSend={(c) =>
+            act.mutate(
+              { kind: 'claim', ...c },
+              {
+                onSuccess: () =>
+                  finish(
+                    t('web.deal.doneClaim', 'Your report is sent'),
+                    t('web.deal.doneClaimBody', '{farmer} is called and asked to accept or refuse {amount} off. The rest of the money stays held until then.', {
+                      farmer: firstName(people.farmer.name),
+                      amount: ghs(c.deduction),
+                    }),
+                  ),
+              },
+            )
+          }
+        />
       )}
       {(sheet === 'accept' || sheet === 'refuse') && claim && (
         <ConfirmSheet
@@ -349,10 +407,29 @@ function NextStep({ view, sample }: { view: DealView; sample: boolean }) {
           }
           confirm={sheet === 'accept' ? t('web.deal.acceptConfirm', 'Accept') : t('web.deal.refuseConfirm', 'Refuse')}
           busy={act.isPending}
-          onConfirm={() => act.mutate({ kind: 'answer', claimId: claim.id, accept: sheet === 'accept' }, { onSuccess: () => setSheet(null) })}
+          onConfirm={() =>
+            act.mutate(
+              { kind: 'answer', claimId: claim.id, accept: sheet === 'accept' },
+              {
+                onSuccess: (_d, a) =>
+                  a.kind === 'answer' && a.accept
+                    ? finish(
+                        t('web.deal.doneAccepted', 'Accepted'),
+                        t('web.deal.doneAcceptedBody', 'Your balance of {left} is on its way to your mobile money.', {
+                          left: ghs(Math.max(0, (money?.stillHeld ?? 0) - claim.proposedDeduction)),
+                        }),
+                      )
+                    : finish(
+                        t('web.deal.doneRefused', 'Refused'),
+                        t('web.deal.doneRefusedBody', 'F2M will look at the photos from pickup and what both of you said, then decide. We will text you.'),
+                      ),
+              },
+            )
+          }
           onClose={() => setSheet(null)}
         />
       )}
+      {done && <SuccessSheet title={done.title} body={done.body} reference={deal.lotCode} onClose={() => setDone(null)} />}
     </section>
   );
 }
@@ -495,16 +572,38 @@ function MoneyCard({ view }: { view: DealView }) {
   }
 
   const farmer = firstName(people.farmer.name);
+  const buyer = people.buyer.company ?? firstName(people.buyer.name);
+  // Settled money reads solid; money on its way and money held say so, and
+  // held money says what releases it. Held is never counted as paid.
   const parts = [
-    { key: 'paid', amount: money.paidToFarmer, cls: 'bg-[var(--forest)]', label: viewer === 'farmer' ? t('web.deal.mPaidYou', 'Paid to you') : t('web.deal.mPaid', 'Paid to {farmer}', { farmer }) },
-    { key: 'way', amount: money.onTheWay, cls: 'bg-[var(--gold)]', label: viewer === 'farmer' ? t('web.deal.mWayYou', 'On its way to you') : t('web.deal.mWay', 'On its way') },
+    {
+      key: 'paid',
+      amount: money.paidToFarmer,
+      cls: 'bg-[var(--forest)]',
+      icon: 'check',
+      label: viewer === 'farmer' ? t('web.deal.mPaidYou', 'Paid to you') : t('web.deal.mPaid', 'Paid to {farmer}', { farmer }),
+      note: null as string | null,
+    },
+    {
+      key: 'way',
+      amount: money.onTheWay,
+      cls: 'bg-[var(--gold)]',
+      icon: 'clock',
+      label: viewer === 'farmer' ? t('web.deal.mWayYou', 'On its way to you') : t('web.deal.mWay', 'On its way to {farmer}', { farmer }),
+      note: t('web.deal.mWayNote', 'Usually within minutes'),
+    },
     {
       key: 'held',
       amount: money.stillHeld,
-      cls: 'bg-[repeating-linear-gradient(135deg,var(--paper-deep)_0_6px,var(--ink-1)_6px_8px)]',
+      cls: 'bg-[repeating-linear-gradient(135deg,var(--paper-deep)_0_6px,var(--ink-3)_6px_8px)]',
+      icon: 'lock',
       label: viewer === 'farmer' ? t('web.deal.mHeldYou', 'Held for you by F2M') : t('web.deal.mHeld', 'Held by F2M'),
+      note:
+        viewer === 'farmer'
+          ? t('web.deal.mHeldNoteFarmer', 'Sent to you when {buyer} confirms it arrived', { buyer })
+          : t('web.deal.mHeldNote', 'Released to {farmer} when you confirm it arrived', { farmer }),
     },
-    { key: 'off', amount: money.deduction, cls: 'bg-[var(--stamp)]', label: t('web.deal.mOff', 'Taken off for a problem') },
+    { key: 'off', amount: money.deduction, cls: 'bg-[var(--stamp)]', icon: 'cross', label: t('web.deal.mOff', 'Taken off for a problem'), note: null },
   ].filter((p) => p.amount > 0);
 
   return (
@@ -515,7 +614,7 @@ function MoneyCard({ view }: { view: DealView }) {
       {viewer === 'farmer' ? (
         // What has reached her phone comes first; the total is the context.
         <>
-          <p className="serial mt-1 text-3xl font-bold text-[var(--forest)]">{ghs(money.paidToFarmer)}</p>
+          <Amount value={money.paidToFarmer} className="serial mt-1 block text-3xl font-bold text-[var(--forest)]" />
           <p className="text-xs text-[var(--ink-6)]">
             {t('web.deal.moneyFarmerSub', 'paid to your mobile money so far, of {total}', { total: ghs(money.total) })}
           </p>
@@ -531,19 +630,32 @@ function MoneyCard({ view }: { view: DealView }) {
           </p>
         </>
       )}
-      <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-[var(--paper-deep)]" aria-hidden>
+      <div className="mt-4 flex h-3 gap-0.5 overflow-hidden rounded-full bg-[var(--paper-deep)]" aria-hidden>
         {parts.map((p) => (
-          <span key={p.key} className={`${p.cls} h-full`} style={{ width: `${(p.amount / Math.max(1, money.total)) * 100}%` }} />
+          <span
+            key={p.key}
+            className={`${p.cls} h-full transition-[width] duration-[var(--dur-slow)] ease-[var(--ease-out)]`}
+            style={{ width: `${(p.amount / Math.max(1, money.total)) * 100}%` }}
+          />
         ))}
       </div>
-      <ul className="mt-3 space-y-1.5">
+      <ul className="mt-3 divide-y divide-[var(--ink-1)]">
         {parts.map((p) => (
-          <li key={p.key} className="flex items-center justify-between gap-3 text-sm">
-            <span className="flex items-center gap-2 text-[var(--ink-7)]">
-              <span aria-hidden className={`inline-block h-2.5 w-2.5 rounded-full ${p.cls}`} />
-              {p.label}
+          <li key={p.key} className="flex items-start justify-between gap-3 py-2 text-sm">
+            <span className="flex min-w-0 items-start gap-2">
+              <span aria-hidden className={`mt-1 inline-block h-2.5 w-2.5 flex-shrink-0 rounded-full ${p.cls}`} />
+              <span className="min-w-0">
+                <span className={`flex items-center gap-1.5 ${p.key === 'paid' ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-7)]'}`}>
+                  {p.label}
+                  <Glyph name={p.icon} className="h-3.5 w-3.5 flex-shrink-0 text-[var(--ink-5)]" />
+                </span>
+                {p.note && <span className="mt-0.5 block text-xs leading-snug text-[var(--ink-6)]">{p.note}</span>}
+              </span>
             </span>
-            <span className="serial font-semibold text-[var(--ink)]">{ghs(p.amount)}</span>
+            <Amount
+              value={p.amount}
+              className={`serial flex-shrink-0 ${p.key === 'paid' ? 'font-bold text-[var(--ink)]' : 'font-semibold text-[var(--ink-7)]'}`}
+            />
           </li>
         ))}
       </ul>
@@ -573,6 +685,21 @@ function Timeline({ view }: { view: DealView }) {
     else if (e.kind === 'photo_added' && prev?.event.kind === 'photo_added') prev.photos += 1;
     else steps.push({ event: e, notices: [], photos: e.kind === 'photo_added' ? 1 : 0 });
   }
+  // Steps present on first paint are the story so far; steps that arrive
+  // while the page is open draw in, and a screen reader hears them.
+  const seen = useRef<Map<string, number> | null>(null);
+  const nowMs = Date.now();
+  const isNew = (id: string) => {
+    if (!seen.current) return false;
+    const at = seen.current.get(id);
+    return at === undefined || nowMs - at < 900;
+  };
+  const arrived = steps.filter((s) => isNew(s.event.id)).at(-1);
+  useEffect(() => {
+    const first = !seen.current;
+    seen.current ??= new Map();
+    for (const s of steps) if (!seen.current.has(s.event.id)) seen.current.set(s.event.id, first ? 0 : Date.now());
+  });
   const [showAll, setShowAll] = useState(false);
   const KEEP = 4;
   const hidden = showAll ? 0 : Math.max(0, steps.length - KEEP);
@@ -601,22 +728,25 @@ function Timeline({ view }: { view: DealView }) {
           {hidden === 1 ? t('web.deal.showOne', 'Show 1 earlier step') : t('web.deal.showEarlier', 'Show {n} earlier steps', { n: hidden })}
         </button>
       )}
+      <p aria-live="polite" className="sr-only">
+        {arrived && arrived.event.kind !== 'photo_added' ? words(arrived.event).title : ''}
+      </p>
       <ol className="mt-4">
         {shown.map(({ event, notices, photos }, i) => {
           const w = event.kind === 'photo_added' ? { title: photos === 1 ? t('web.deal.evPhoto', 'A photo was taken at pickup') : t('web.deal.evPhotos', '{n} photos were taken at pickup', { n: photos }) } : words(event);
           const last = i === shown.length - 1 && ahead.length === 0;
           return (
-            <li key={event.id} className="relative flex gap-3.5 pb-5">
-              {!last && <span aria-hidden className="absolute left-[11px] top-6 bottom-0 w-px bg-[var(--ink-2)]" />}
+            <li key={event.id} className={`relative flex gap-3.5 pb-5 ${isNew(event.id) ? 'step-new' : ''}`}>
+              {!last && <span aria-hidden className="step-rail absolute left-[11px] top-6 bottom-0 w-0.5 -translate-x-1/4 rounded-full bg-[var(--forest)]/35" />}
               <span
                 aria-hidden
-                className={`relative mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
+                className={`step-dot relative mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
                   event.kind === 'claim_opened' ? 'bg-[var(--stamp)] text-[var(--paper-lift)]' : 'bg-[var(--forest)] text-[var(--paper-lift)]'
                 }`}
               >
                 <Glyph name={event.kind === 'claim_opened' ? 'cross' : 'check'} className="h-3.5 w-3.5" />
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="step-text min-w-0 flex-1">
                 <p className="text-[15px] font-semibold leading-snug text-[var(--ink)]">{w.title}</p>
                 {w.detail && <p className="mt-0.5 text-sm leading-relaxed text-[var(--ink-6)]">{w.detail}</p>}
                 {notices.map((n) => (
@@ -636,8 +766,15 @@ function Timeline({ view }: { view: DealView }) {
         {ahead.map((k, i) => (
           <li key={k} className="relative flex gap-3.5 pb-4 last:pb-0">
             {i < ahead.length - 1 && <span aria-hidden className="absolute left-[11px] top-6 bottom-0 w-px border-l border-dashed border-[var(--ink-3)]" />}
-            <span aria-hidden className="relative mt-0.5 h-6 w-6 flex-shrink-0 rounded-full border-2 border-dashed border-[var(--ink-3)] bg-[var(--paper-lift)]" />
-            <p className="pt-0.5 text-[15px] text-[var(--ink-6)]">
+            {i === 0 ? (
+              // The step everyone is waiting on: a solid ring that breathes.
+              <span aria-hidden className="step-current relative mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 border-[var(--gold)] bg-[var(--paper-lift)]">
+                <span className="h-2 w-2 rounded-full bg-[var(--gold)]" />
+              </span>
+            ) : (
+              <span aria-hidden className="relative mt-0.5 h-6 w-6 flex-shrink-0 rounded-full border-2 border-dashed border-[var(--ink-3)] bg-[var(--paper-lift)]" />
+            )}
+            <p className={`pt-0.5 text-[15px] ${i === 0 ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-6)]'}`}>
               {i === 0 && <span className="smallcaps mr-2 text-[var(--gold-ink)]">{t('web.deal.nextLabel', 'Next')}</span>}
               {AHEAD_WORD(t, k, view)}
             </p>
@@ -906,7 +1043,57 @@ function PeopleCard({ view }: { view: DealView }) {
   );
 }
 
+/** An amount that counts to its new value when it changes while you watch
+ *  (never on first paint, never with reduced motion). */
+function Amount({ value, className }: { value: number; className?: string }) {
+  const [shown, setShown] = useState(value);
+  const prev = useRef(value);
+  useEffect(() => {
+    const from = prev.current;
+    prev.current = value;
+    if (from === value) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setShown(value);
+      return;
+    }
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / 700);
+      setShown(Math.round(from + (value - from) * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <span className={className}>{ghs(shown)}</span>;
+}
+
 /* ── Sheets ─────────────────────────────────────────────────────────────── */
+
+/** After a money moment: a drawn tick, what happens next, and a reference. */
+function SuccessSheet({ title, body, reference, onClose }: { title: string; body: string; reference: string; onClose: () => void }) {
+  const { t } = useT();
+  const id = useId();
+  return (
+    <Modal label={title} labelledBy={id} onClose={onClose}>
+      <div className="certificate mx-auto max-w-md bg-[var(--paper-lift)] px-6 pb-6 pt-8 text-center">
+        <svg viewBox="0 0 56 56" className="check-draw mx-auto h-16 w-16 text-[var(--forest)]" aria-hidden>
+          <circle cx="28" cy="28" r="25" fill="none" stroke="currentColor" strokeWidth="3" pathLength={1} />
+          <path d="M17 29l7.5 7.5L40 21" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} />
+        </svg>
+        <h2 id={id} className="headline mt-4 text-3xl text-[var(--ink)]">
+          {title}
+        </h2>
+        <p className="mx-auto mt-2 max-w-sm text-[15px] leading-relaxed text-[var(--ink-7)]">{body}</p>
+        <p className="serial mt-3 text-xs text-[var(--ink-6)]">{t('web.deal.reference', 'Reference {ref}', { ref: reference })}</p>
+        <button type="button" className={`${btnCls} mt-6 w-full`} onClick={onClose}>
+          {t('web.deal.doneBtn', 'Done')}
+        </button>
+      </div>
+    </Modal>
+  );
+}
 
 function SheetFrame({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const id = useId();
@@ -1123,7 +1310,11 @@ function useDealAction(view: DealView, sample: boolean) {
                 ? t('web.deal.tAccepted', 'Accepted. Your balance is on its way.')
                 : t('web.deal.tRefused', 'Refused. F2M will look at it and let you know.')
               : t('web.deal.tStep', 'Done. Everyone in the sale can see it.');
-      toast(sample ? t('web.deal.tSample', 'Sample only: {msg}', { msg }) : msg);
+      // Money moments get their own success sheet; driver steps are quick, so a toast.
+      if (a.kind === 'driver') {
+        haptic('success');
+        toast(sample ? t('web.deal.tSample', 'Sample only: {msg}', { msg }) : msg);
+      }
       if (!sample) void queryClient.invalidateQueries({ queryKey: ['deal'] });
     },
   });

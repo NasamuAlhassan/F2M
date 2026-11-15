@@ -301,6 +301,19 @@ const GLYPH_PATHS: Record<string, ReactNode> = {
       <path d="M6.5 11.8a5.5 5.5 0 0 0 11 0M12 17.5V20.5M9.5 20.5h5" />
     </>
   ),
+  lock: (
+    <>
+      <rect x="5.5" y="10.5" width="13" height="9.5" rx="2" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
+      <path d="M12 14.2v2.2" strokeWidth="1.6" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
   // Tab bar marks: one per section, read at 24px beside a label.
   basket: (
     <>

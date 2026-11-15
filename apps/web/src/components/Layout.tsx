@@ -153,6 +153,7 @@ function NotificationBell() {
                     {n.contractId && (
                       <Link
                         to={`/deals/${n.contractId}`}
+                        viewTransition
                         className={`${textLinkCls} ${hitAreaCls} text-xs font-semibold text-[var(--gold-deep)]`}
                         onClick={() => setOpen(false)}
                       >
@@ -197,6 +198,23 @@ function useTyping(): boolean {
     };
   }, []);
   return typing;
+}
+
+/** When the phone loses its signal: when it went, so the page can say how old
+ *  what is on screen is. Null while online. */
+function useOfflineSince(): number | null {
+  const [since, setSince] = useState<number | null>(() => (typeof navigator !== 'undefined' && !navigator.onLine ? Date.now() : null));
+  useEffect(() => {
+    const off = () => setSince((s) => s ?? Date.now());
+    const on = () => setSince(null);
+    window.addEventListener('offline', off);
+    window.addEventListener('online', on);
+    return () => {
+      window.removeEventListener('offline', off);
+      window.removeEventListener('online', on);
+    };
+  }, []);
+  return since;
 }
 
 const initials = (name: string): string =>
@@ -283,6 +301,7 @@ export function Layout({ role: routeRole }: { role?: Role }) {
   // section stays in view and in reach (a sideways-scrolling row hid Prices).
   const tabBar = sections.length > 1;
   const typing = useTyping();
+  const offlineSince = useOfflineSince();
   // Toasts sit above the tab bar instead of on it (ui.tsx reads this).
   useEffect(() => {
     if (!tabBar) return;
@@ -297,7 +316,7 @@ export function Layout({ role: routeRole }: { role?: Role }) {
     };
   }, [tabBar]);
   const nav = sections.map((s) => (
-    <NavLink key={s.to} to={s.to} className={navCls}>
+    <NavLink key={s.to} to={s.to} viewTransition className={navCls}>
       {s.label}
     </NavLink>
   ));
@@ -318,7 +337,8 @@ export function Layout({ role: routeRole }: { role?: Role }) {
       <SkipLink />
       {navigating && <span aria-hidden className="nav-progress" />}
       <header
-        className={`sticky top-0 z-20 border-b bg-[var(--paper)]/85 backdrop-blur-md transition-[border-color,box-shadow] duration-[var(--dur-base)] ${
+        // Held still while the page changes (index.css, view transitions).
+        className={`vt-header sticky top-0 z-20 border-b bg-[var(--paper)]/85 backdrop-blur-md transition-[border-color,box-shadow] duration-[var(--dur-base)] ${
           scrolled
             ? 'border-[var(--ink-1)] shadow-[0_1px_0_rgba(40,30,15,0.03),0_8px_24px_-18px_rgba(40,30,15,0.35)]'
             : 'border-transparent'
@@ -423,7 +443,17 @@ export function Layout({ role: routeRole }: { role?: Role }) {
         </div>
       )}
 
-      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 lg:py-8">
+      {offlineSince !== null && (
+        // Kept on screen, not an error wall: what is shown is still true, just not new.
+        <p role="status" className="sticky top-16 z-10 mx-auto mt-2 flex w-fit max-w-[calc(100%-2rem)] items-center gap-2 rounded-full bg-[var(--ink)] px-4 py-2 text-sm text-[var(--paper-lift)] shadow-md lg:top-[76px]">
+          <span aria-hidden className="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-[var(--gold-bright)]" />
+          {t('web.nav.offline', 'Offline. Showing what you saw at {time}.', {
+            time: new Date(offlineSince).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+          })}
+        </p>
+      )}
+
+      <main id="main" tabIndex={-1} className="vt-page mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 lg:py-8">
         <Outlet />
       </main>
 
@@ -451,7 +481,7 @@ export function Layout({ role: routeRole }: { role?: Role }) {
       {tabBar && (
         <nav
           aria-label={t('web.nav.main', 'Main')}
-          className={`fixed inset-x-0 bottom-0 z-30 border-t border-[var(--ink-2)] bg-[var(--paper-lift)]/95 pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-8px_24px_-20px_rgba(40,30,15,0.45)] backdrop-blur-md lg:hidden ${
+          className={`vt-tabbar fixed inset-x-0 bottom-0 z-30 border-t border-[var(--ink-2)] bg-[var(--paper-lift)]/95 pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-8px_24px_-20px_rgba(40,30,15,0.45)] backdrop-blur-md lg:hidden ${
             typing ? 'hidden' : ''
           }`}
         >
@@ -460,6 +490,7 @@ export function Layout({ role: routeRole }: { role?: Role }) {
               <li key={s.to} className="flex-1">
                 <NavLink
                   to={s.to}
+                  viewTransition
                   className={({ isActive }) =>
                     `flex min-h-16 flex-col items-center justify-center gap-0.5 px-1 text-[12px] font-semibold leading-tight transition-colors active:bg-[var(--paper-deep)] ${
                       isActive ? 'text-[var(--forest-night)]' : 'text-[var(--ink-6)]'

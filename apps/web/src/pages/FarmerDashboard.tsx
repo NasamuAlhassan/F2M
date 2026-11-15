@@ -701,7 +701,7 @@ export function FarmerDashboardPage() {
                       <BusyLabel busy={suggest.isPending && suggest.variables === c.id} label={suggested.has(c.id) ? 'Buyer asked to approve' : 'Arrange delivery'} />
                     </button>
                   )}
-                  <Link to={`/deals/${c.id}`} className={pillCls}>
+                  <Link to={`/deals/${c.id}`} viewTransition className={pillCls}>
                     {t('web.farmer.openSale', 'Open')}
                   </Link>
                   <Link to={`/t/${c.lotId}`} className={`${textLinkCls} ${hitAreaCls} text-xs font-semibold text-[var(--gold-deep)]`}>
