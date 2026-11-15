@@ -25,12 +25,14 @@ export type DbEngine = 'postgres' | 'pglite';
 
 function connect(): { db: Db; engine: DbEngine; close: () => Promise<void>; pglite?: PGlite } {
   if (config.DATABASE_URL) {
-    // max_pipeline 1: one query in flight per connection. postgres-js pipelines by
-    // default, and the pooler stalled on it (four parallel registry loads hung the
-    // first deploy). fetch_types off: no extra type-lookup query on connect.
+    // One connection, one query in flight: parallel queries (the four registry
+    // loads) hung the deploy, the extra connections never getting through the
+    // pooler. Supabase advises max 1 for serverless anyway, and PGlite (local,
+    // tests) is a single connection too, so the code already lives with it.
+    // fetch_types off: no extra type-lookup query on connect.
     const client = postgres(config.DATABASE_URL, {
       prepare: false,
-      max: 3,
+      max: 1,
       ...({ max_pipeline: 1 } as object), // a real postgres-js option its types leave out
       fetch_types: false,
       idle_timeout: 20,
