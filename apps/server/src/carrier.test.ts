@@ -1,7 +1,7 @@
 import { carrierCallbackUrl, carrierRequestAllowed, config } from '@ftm/core';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { buildServer } from './app';
+import { buildServer } from './buildServer';
 
 let app: FastifyInstance;
 const original = { simulatorEnabled: config.simulatorEnabled, token: config.CARRIER_WEBHOOK_TOKEN };

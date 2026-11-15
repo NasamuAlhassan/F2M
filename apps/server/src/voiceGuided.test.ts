@@ -23,7 +23,7 @@ import { acceptFor, testBuyer } from '@ftm/core/testing';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildServer } from './app';
+import { buildServer } from './buildServer';
 import { forgetLocalHearings } from './ivr/machine';
 import { handleUssdRequest } from './ussd/index';
 

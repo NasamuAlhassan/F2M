@@ -1,5 +1,5 @@
 import { config, loadRegistries, runMigrations, seed } from '@ftm/core';
-import { buildServer } from './app';
+import { buildServer } from './buildServer';
 import { startSweepJobs } from './jobs/sweep';
 
 /**

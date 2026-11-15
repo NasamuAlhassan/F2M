@@ -15,7 +15,7 @@ import { testBuyer, testBuyerToken, testToken } from '@ftm/core/testing';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { buildServer } from './app';
+import { buildServer } from './buildServer';
 
 /*
  * Phase 1 negotiation over the wire (docs/PHASE1.md): REST for both sides and
