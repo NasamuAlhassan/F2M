@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
   "buildCommand": "npm run vercel-build",
-  "regions": ["dub1"]
+  "outputDirectory": "public",
+  "regions": ["dub1"],
+  "functions": {
+    "api/server.mjs": { "maxDuration": 60 }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/server" }]
 }
